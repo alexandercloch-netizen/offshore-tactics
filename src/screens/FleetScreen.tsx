@@ -62,6 +62,14 @@ export const FleetScreen: React.FC<Props> = ({ navigation }) => {
               <View style={styles.viewer}>
                 <PolarViewer polar={boat.polar} size={220} />
               </View>
+              <Pressable
+                style={styles.lockerBtn}
+                onPress={() => navigation.navigate('SailLocker', { boatId: boat.id })}
+              >
+                <Text style={styles.lockerBtnText}>
+                  Sail Locker{(boat.sails?.length ?? 0) > 0 ? ` · ${boat.sails!.length} aboard` : ''}
+                </Text>
+              </Pressable>
             </View>
           ))
         )}
@@ -102,6 +110,16 @@ const styles = StyleSheet.create({
   remove: { color: colors.signalRed, fontSize: fontSize.sm, fontWeight: fontWeight.bold },
   summary: { color: colors.brassLight, fontSize: fontSize.sm, marginTop: spacing.xs, marginBottom: spacing.md },
   viewer: { alignItems: 'center' },
+  lockerBtn: {
+    marginTop: spacing.md,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.steel,
+    backgroundColor: colors.hull,
+  },
+  lockerBtnText: { color: colors.foam, fontSize: fontSize.sm, fontWeight: fontWeight.medium },
   footer: {
     padding: spacing.lg,
     borderTopWidth: 1,
