@@ -89,7 +89,7 @@ export const ProvisioningScreen: React.FC<Props> = ({ navigation }) => {
       <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
         <View style={styles.ledger}>
           <LedgerRow label="Entry fee" value={cost.entryFee} />
-          <LedgerRow label="Boat charter" value={cost.charter} />
+          <LedgerRow label={cost.charter > 0 ? 'Boat (purchase)' : 'Boat (owned)'} value={cost.charter} />
           <LedgerRow label="Crew wages" value={cost.wages} />
           <LedgerRow label="Provisions" value={cost.provisions} />
           <View style={styles.divider} />

@@ -14,8 +14,9 @@ tactical calls that decide whether you take line honours or limp home.
    accessibility rating and offers a **Corinthian** division (cheaper, more
    forgiving) or a **Pro** division (steeper entry, bigger purse, near-record
    pace required). Premier races **unlock** as you finish earlier ones.
-3. **Choose Your Boat** — charter a boat whose speed, pointing, running and
-   stability suit the course.
+3. **Choose Your Boat** — buy a boat whose speed, pointing, running and
+   stability suit the course. You **own** it for future races (no charge to
+   sail it again); only entry, crew wages and provisions recur.
 4. **Sign Your Crew** — fill the boat's berths. Crew skill, stamina and morale
    feed directly into boat speed and resilience.
 5. **Provision the Boat** — buy food, water, medical, spares and safety gear.
@@ -32,7 +33,10 @@ tactical calls that decide whether you take line honours or limp home.
    high-stakes **man overboard**. Low crew morale slows the boat and makes
    incidents more likely, so look after your people.
 7. **Results** — finishing position, elapsed time and prize money are tallied,
-   funds updated and the result written to your logbook.
+   funds updated and the result written to your logbook. **Finishing recoups
+   most of your running costs** (entry, wages, provisions) on top of any prize,
+   so a well-sailed race is sustainable; retiring forfeits them. A sponsor
+   stipend tops up the chest if it ever runs low, so you can always go racing.
 
 ## Game model
 

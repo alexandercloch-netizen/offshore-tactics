@@ -23,6 +23,7 @@ import {
 import {
   CREW,
   STARTING_FUNDS,
+  applyStipend,
   getBoatById,
   getCrewById,
   getRaceById,
@@ -54,6 +55,7 @@ const DEFAULT_CONDITION: BoatCondition = {
 const INITIAL_STATE: GameState = {
   funds: STARTING_FUNDS,
   selectedDivision: 'corinthian',
+  ownedBoatIds: [],
   selectedCrewIds: [],
   provisions: [],
   strategy: DEFAULT_STRATEGY,
@@ -155,6 +157,10 @@ function reducer(state: GameState, action: Action): GameState {
         ...state,
         funds: state.funds - action.payload.cost,
         strategy: DEFAULT_STRATEGY,
+        ownedBoatIds:
+          state.selectedBoatId && !state.ownedBoatIds.includes(state.selectedBoatId)
+            ? [...state.ownedBoatIds, state.selectedBoatId]
+            : state.ownedBoatIds,
         progress: action.payload.progress,
         condition: action.payload.condition,
         weather: action.payload.weather,
@@ -191,6 +197,8 @@ function reducer(state: GameState, action: Action): GameState {
     case 'PREPARE_NEXT_RACE':
       return {
         ...state,
+        // Sponsor top-up so the player can always afford the next campaign.
+        funds: applyStipend(state.funds),
         selectedRaceId: undefined,
         selectedDivision: 'corinthian',
         selectedBoatId: undefined,
@@ -276,6 +284,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
       }
       if (!mounted) return;
       let merged = loaded ? { ...INITIAL_STATE, ...loaded } : INITIAL_STATE;
+      // Top up a chest that has run dry between sessions.
+      if (!merged.progress) merged = { ...merged, funds: applyStipend(merged.funds) };
       // Drop an in-progress race that references a race no longer in the roster
       // (e.g. after a content update) so the player can't get stranded.
       if (merged.selectedRaceId && !getRaceById(merged.selectedRaceId)) {

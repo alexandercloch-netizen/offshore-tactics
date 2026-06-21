@@ -20,7 +20,17 @@ export {
   pickEventForRace,
 } from './events';
 
-export const STARTING_FUNDS = 50000;
+export const STARTING_FUNDS = 250000;
+
+// Anti-soft-lock sponsor: if the campaign chest falls below the trigger, a
+// sponsor tops it back up to the floor so the player can always go racing.
+export const STIPEND_TRIGGER = 15000;
+export const STIPEND_FLOOR = 75000;
+
+// Funds topped up to the floor when below the trigger; otherwise unchanged.
+export function applyStipend(funds: number): number {
+  return funds < STIPEND_TRIGGER ? Math.max(funds, STIPEND_FLOOR) : funds;
+}
 
 export function getRaceById(id?: string): Race | undefined {
   return RACES.find((r) => r.id === id);
