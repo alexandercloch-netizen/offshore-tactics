@@ -100,7 +100,47 @@ export interface Boat {
   downwind: number; // 0-100 running ability
   stability: number; // 0-100 resistance to heavy-weather damage
   crewCapacity: number; // max crew berths
-  price: number; // charter cost for the campaign
+  price: number; // purchase / commission cost
+}
+
+// ---- Custom boats: real polar diagrams (TWA x TWS speed tables) ----
+
+export type BoatType = 'cruiserRacerIRC' | 'tp52' | 'class40' | 'maxi72';
+
+// Optimum VMG angles & speeds, one entry per TWS column.
+export interface PolarTargets {
+  beatAngle: number[];
+  beatSpeed: number[];
+  runAngle: number[];
+  runSpeed: number[];
+}
+
+// PredictWind-style multiplicative performance scaling (handicap / cruising).
+export interface SpeedAdjustment {
+  upwindPct: number; // 0-100
+  downwindPct: number; // 0-100
+  nightPct: number; // 0-100, multiplies on top
+}
+
+export interface BoatPolar {
+  tws: number[]; // ascending wind-speed columns (kn) — data-driven
+  twa: number[]; // ascending wind-angle rows (deg)
+  speed: number[][]; // speed[twaIndex][twsIndex] = boat speed (kn)
+  targets: PolarTargets;
+  source: 'class' | 'imported';
+  importedFrom?: 'predictwind' | 'expedition' | 'orc' | 'generic';
+}
+
+// A boat the player has built/owns, carrying its own polar.
+export interface FleetBoat extends Boat {
+  custom: true;
+  boatType: BoatType;
+  polar: BoatPolar;
+  speedAdjustment: SpeedAdjustment;
+}
+
+export interface Profile {
+  fleet: FleetBoat[]; // custom boats the player has built (crew & sails come later)
 }
 
 export type CrewRole = 'Skipper' | 'Navigator' | 'Tactician' | 'Trimmer' | 'Bowman';
@@ -261,6 +301,7 @@ export interface GameState {
   windField?: WindField;
   fleet?: Competitor[];
   strategy: PlayerStrategy;
+  profile: Profile; // the player's fleet of custom boats (local-first)
   condition: BoatCondition;
   weather?: WeatherCondition;
   lastResult?: RaceResult;
@@ -307,4 +348,6 @@ export type RootStackParamList = {
   Provisioning: undefined;
   RaceMap: undefined;
   Results: undefined;
+  Fleet: undefined;
+  BoatBuilder: undefined;
 };

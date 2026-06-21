@@ -15,6 +15,7 @@ import {
   RaceResult,
   StepResult,
   Competitor,
+  FleetBoat,
   PlayerStrategy,
   TacticalChoice,
   WeatherCondition,
@@ -37,6 +38,7 @@ import {
   initialCondition,
   initialProgress,
   raceDivision,
+  resolveBoatById,
   stepRace,
 } from '../engine/gameEngine';
 import { createWindField, sampleWind, weatherFromWind } from '../engine/wind';
@@ -59,6 +61,7 @@ const INITIAL_STATE: GameState = {
   selectedCrewIds: [],
   provisions: [],
   strategy: DEFAULT_STRATEGY,
+  profile: { fleet: [] },
   condition: DEFAULT_CONDITION,
   history: [],
   eventLog: [],
@@ -73,6 +76,8 @@ type Action =
   | { type: 'SET_PROVISION'; payload: { provisionId: string; quantity: number } }
   | { type: 'SET_STRATEGY'; payload: Partial<PlayerStrategy> }
   | { type: 'SET_TUTORIAL_SEEN' }
+  | { type: 'ADD_FLEET_BOAT'; payload: { boat: FleetBoat; cost: number } }
+  | { type: 'REMOVE_FLEET_BOAT'; payload: string }
   | {
       type: 'BEGIN_RACE';
       payload: {
@@ -111,7 +116,9 @@ function reducer(state: GameState, action: Action): GameState {
       };
 
     case 'SELECT_BOAT': {
-      const boat = getBoatById(action.payload);
+      const boat =
+        getBoatById(action.payload) ??
+        state.profile.fleet.find((b) => b.id === action.payload);
       // Trim the crew if the new boat has fewer berths.
       const trimmed = boat
         ? state.selectedCrewIds.slice(0, boat.crewCapacity)
@@ -151,6 +158,24 @@ function reducer(state: GameState, action: Action): GameState {
 
     case 'SET_TUTORIAL_SEEN':
       return { ...state, tutorialSeen: true };
+
+    case 'ADD_FLEET_BOAT':
+      return {
+        ...state,
+        funds: state.funds - action.payload.cost,
+        profile: { ...state.profile, fleet: [...state.profile.fleet, action.payload.boat] },
+      };
+
+    case 'REMOVE_FLEET_BOAT':
+      return {
+        ...state,
+        profile: {
+          ...state.profile,
+          fleet: state.profile.fleet.filter((b) => b.id !== action.payload),
+        },
+        selectedBoatId:
+          state.selectedBoatId === action.payload ? undefined : state.selectedBoatId,
+      };
 
     case 'BEGIN_RACE':
       return {
@@ -229,6 +254,8 @@ export interface GameContextValue {
   setProvisionQuantity: (provisionId: string, quantity: number) => void;
   setStrategy: (partial: Partial<PlayerStrategy>) => void;
   markTutorialSeen: () => void;
+  addFleetBoat: (boat: FleetBoat, cost: number) => void;
+  removeFleetBoat: (id: string) => void;
   // race lifecycle
   beginRace: () => void;
   tick: () => StepResult;
@@ -332,7 +359,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   const toggleCrew = useCallback((crewId: string) => {
-    const boat = getBoatById(stateRef.current.selectedBoatId);
+    const boat = resolveBoatById(stateRef.current, stateRef.current.selectedBoatId);
     const capacity = boat ? boat.crewCapacity : CREW.length;
     dispatch({ type: 'TOGGLE_CREW', payload: { crewId, capacity } });
   }, []);
@@ -352,6 +379,14 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
     dispatch({ type: 'SET_TUTORIAL_SEEN' });
   }, []);
 
+  const addFleetBoat = useCallback((boat: FleetBoat, cost: number) => {
+    dispatch({ type: 'ADD_FLEET_BOAT', payload: { boat, cost } });
+  }, []);
+
+  const removeFleetBoat = useCallback((id: string) => {
+    dispatch({ type: 'REMOVE_FLEET_BOAT', payload: id });
+  }, []);
+
   const campaignTotal = useCallback(() => campaignCost(stateRef.current).total, []);
 
   const canAffordCampaign = useCallback(
@@ -362,7 +397,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
   const beginRace = useCallback(() => {
     const current = stateRef.current;
     const race = getRaceById(current.selectedRaceId);
-    const boat = getBoatById(current.selectedBoatId);
+    const boat = resolveBoatById(current, current.selectedBoatId);
     if (!race || !boat) return;
     const crew = current.selectedCrewIds
       .map((id) => getCrewById(id))
@@ -483,6 +518,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
       setProvisionQuantity,
       setStrategy,
       markTutorialSeen,
+      addFleetBoat,
+      removeFleetBoat,
       beginRace,
       tick,
       decide,
@@ -501,6 +538,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
       setProvisionQuantity,
       setStrategy,
       markTutorialSeen,
+      addFleetBoat,
+      removeFleetBoat,
       beginRace,
       tick,
       decide,

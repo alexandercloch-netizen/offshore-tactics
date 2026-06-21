@@ -12,6 +12,8 @@ import CrewSelectScreen from '../screens/CrewSelectScreen';
 import ProvisioningScreen from '../screens/ProvisioningScreen';
 import RaceMapScreen from '../screens/RaceMapScreen';
 import ResultsScreen from '../screens/ResultsScreen';
+import FleetScreen from '../screens/FleetScreen';
+import BoatBuilderScreen from '../screens/BoatBuilderScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -86,6 +88,16 @@ export const AppNavigator: React.FC = () => {
           name="Results"
           component={ResultsScreen}
           options={{ title: 'Race Result', headerBackVisible: false }}
+        />
+        <Stack.Screen
+          name="Fleet"
+          component={FleetScreen}
+          options={{ title: 'My Fleet' }}
+        />
+        <Stack.Screen
+          name="BoatBuilder"
+          component={BoatBuilderScreen}
+          options={{ title: 'Build a Boat' }}
         />
       </Stack.Navigator>
     </NavigationContainer>

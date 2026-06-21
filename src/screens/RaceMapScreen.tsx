@@ -18,13 +18,14 @@ import {
   VmgPreview,
 } from '../types';
 import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
-import { getBoatById, getRaceById } from '../data';
+import { getRaceById } from '../data';
 import { LANDMASSES } from '../data/landmasses';
 import { useGame } from '../store/GameContext';
 import {
   currentSpeed,
   formatDuration,
   raceDivision,
+  resolveBoatById,
   speedMadeGood,
   vmgPreview,
 } from '../engine/gameEngine';
@@ -52,7 +53,7 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
   const [showHelp, setShowHelp] = useState(false);
 
   const race = getRaceById(state.selectedRaceId);
-  const boat = getBoatById(state.selectedBoatId);
+  const boat = resolveBoatById(state, state.selectedBoatId);
 
   // If we landed here without an active race but with a full loadout, start it.
   useEffect(() => {

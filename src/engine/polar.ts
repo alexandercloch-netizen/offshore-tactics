@@ -1,5 +1,21 @@
-import { Boat } from '../types';
+import { Boat, FleetBoat } from '../types';
 import { angularDelta } from './geo';
+import { interpolatePolar, polarBestVmg, polarNoGo } from './polarTable';
+
+// A custom boat carries its own polar table; catalogue boats use the
+// parametric model below.
+function asFleetBoat(boat: Boat): FleetBoat | null {
+  return (boat as FleetBoat).polar ? (boat as FleetBoat) : null;
+}
+
+// Multiplicative performance scaling (PredictWind-style), chosen by point of sail.
+function adjustmentFactor(fleet: FleetBoat, twaDeg: number): number {
+  const adj = fleet.speedAdjustment;
+  if (!adj) return 1;
+  const a = angularDelta(twaDeg, 0);
+  const pct = a < 90 ? adj.upwindPct : adj.downwindPct;
+  return Math.max(0, pct) / 100;
+}
 
 // A boat's polar diagram: speed as a function of true wind angle (TWA, the
 // angle between the boat's heading and where the wind blows FROM) and true wind
@@ -11,6 +27,8 @@ const toRad = (deg: number): number => (deg * Math.PI) / 180;
 // The closest a boat can sail to the wind. Better-pointing boats get a tighter
 // no-go zone (~30°); poor pointers ~42°.
 export function noGoAngle(boat: Boat): number {
+  const fleet = asFleetBoat(boat);
+  if (fleet) return polarNoGo(fleet.polar);
   return 30 + (100 - boat.upwind) * 0.12;
 }
 
@@ -39,9 +57,14 @@ function angleShape(boat: Boat, twa: number): number {
 }
 
 // Boat speed (knots) at a given heading relative to the wind. `twaDeg` may be
-// any signed angle; it is folded into the 0..180 range.
+// any signed angle; it is folded into the 0..180 range. Custom boats read their
+// polar table; catalogue boats use the parametric model.
 export function polarSpeed(boat: Boat, twaDeg: number, twsKn: number): number {
   const angle = angularDelta(twaDeg, 0);
+  const fleet = asFleetBoat(boat);
+  if (fleet) {
+    return interpolatePolar(fleet.polar, angle, twsKn) * adjustmentFactor(fleet, angle);
+  }
   if (angle < noGoAngle(boat)) return 0;
   return boat.baseSpeed * windResponse(boat, twsKn) * angleShape(boat, angle);
 }
@@ -56,6 +79,8 @@ export interface VmgAngles {
 // The angles that maximise velocity-made-good up and down wind, found by
 // scanning the polar.
 export function bestVmgAngles(boat: Boat, twsKn: number): VmgAngles {
+  const fleet = asFleetBoat(boat);
+  if (fleet) return polarBestVmg(fleet.polar, twsKn);
   let upAngle = 45;
   let downAngle = 150;
   let upVmg = -Infinity;
