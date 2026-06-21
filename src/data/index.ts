@@ -8,8 +8,17 @@ export { RACES } from './races';
 export { BOATS } from './boats';
 export { CREW } from './crew';
 export { PROVISIONS } from './provisions';
-export { WEATHER, pickWeather } from './weather';
-export { EVENTS, pickEvent } from './events';
+export { WEATHER, pickWeather, pickWeatherForHazard } from './weather';
+export {
+  EVENTS,
+  GENERIC_EVENTS,
+  MORALE_EVENTS,
+  WEATHER_EVENTS,
+  MOB_EVENTS,
+  HAZARD_EVENTS,
+  pickEvent,
+  pickEventForRace,
+} from './events';
 
 export const STARTING_FUNDS = 50000;
 

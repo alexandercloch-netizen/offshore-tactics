@@ -9,11 +9,18 @@ import {
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { GameEvent, RootStackParamList, TacticalChoice } from '../types';
+import { GameEvent, RootStackParamList, TacticalChoice, VmgPreview } from '../types';
 import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
 import { getBoatById, getRaceById } from '../data';
 import { useGame } from '../store/GameContext';
-import { formatDuration, pointOfSailForLeg } from '../engine/gameEngine';
+import {
+  computeVmg,
+  effectiveSpeed,
+  formatDuration,
+  pointOfSailForLeg,
+  raceDivision,
+  vmgPreview,
+} from '../engine/gameEngine';
 import RouteMap from '../components/RouteMap';
 import WindIndicator from '../components/WindIndicator';
 import StatBar from '../components/StatBar';
@@ -27,6 +34,7 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
   const { width } = useWindowDimensions();
   const { state, beginRace, sailLeg, resolveLeg, retireRace } = useGame();
   const [activeEvent, setActiveEvent] = useState<GameEvent | null>(null);
+  const [activeVmg, setActiveVmg] = useState<VmgPreview | null>(null);
 
   const race = getRaceById(state.selectedRaceId);
   const boat = getBoatById(state.selectedBoatId);
@@ -50,16 +58,18 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
   const handleSail = useCallback(() => {
     const event = sailLeg();
     if (event) {
+      setActiveVmg(vmgPreview(state, event));
       setActiveEvent(event);
       return;
     }
     const outcome = resolveLeg(null);
     finishIfDone(outcome.finished, outcome.retired);
-  }, [sailLeg, resolveLeg, finishIfDone]);
+  }, [sailLeg, resolveLeg, finishIfDone, state]);
 
   const handleChoice = useCallback(
     (choice: TacticalChoice) => {
       setActiveEvent(null);
+      setActiveVmg(null);
       const outcome = resolveLeg(choice);
       finishIfDone(outcome.finished, outcome.retired);
     },
@@ -91,6 +101,11 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
   const { progress, condition, weather } = state;
   const nextPointOfSail = pointOfSailForLeg(progress.currentLeg);
   const recentLog = state.eventLog.slice(-4).reverse();
+  const fleetSize = raceDivision(race, state.selectedDivision).fleetSize;
+  const currentVmg = computeVmg(
+    effectiveSpeed(boat, weather, condition, nextPointOfSail),
+    nextPointOfSail
+  );
 
   return (
     <View style={styles.screen}>
@@ -102,7 +117,7 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
           </View>
           <View style={styles.positionBox}>
             <Text style={styles.positionValue}>{progress.position}</Text>
-            <Text style={styles.positionLabel}>of {race.fleetSize}</Text>
+            <Text style={styles.positionLabel}>of {fleetSize}</Text>
           </View>
         </View>
 
@@ -130,6 +145,7 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
             <View style={styles.windInfo}>
               <Text style={styles.nextLeg}>Next leg</Text>
               <Text style={styles.pointOfSail}>{nextPointOfSail}</Text>
+              <Text style={styles.vmgLine}>VMG {currentVmg.toFixed(1)} kn</Text>
               <Text style={styles.weatherDesc}>{weather.description}</Text>
             </View>
           </View>
@@ -162,6 +178,7 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
       <TacticalDecisionModal
         visible={!!activeEvent}
         event={activeEvent}
+        vmg={activeVmg}
         onSelect={handleChoice}
       />
     </View>
@@ -284,6 +301,12 @@ const styles = StyleSheet.create({
     color: colors.brassLight,
     fontSize: fontSize.lg,
     fontWeight: fontWeight.bold,
+  },
+  vmgLine: {
+    color: colors.signalGreen,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.bold,
+    marginTop: 2,
   },
   weatherDesc: {
     color: colors.mist,

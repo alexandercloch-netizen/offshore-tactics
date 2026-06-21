@@ -2,6 +2,29 @@
 
 export type RaceDifficulty = 'Inshore' | 'Coastal' | 'Offshore' | 'Ocean';
 
+// Which division the player enters. Corinthian = amateur-friendly (cheaper
+// entry, smaller purse, a more forgiving pace target). Pro = the full-bore
+// fleet (steeper entry, bigger purse, you must be near record pace to win).
+export type DivisionKey = 'corinthian' | 'pro';
+
+export interface RaceDivision {
+  entryFee: number;
+  prizeMoney: number; // first-place purse for this division
+  fleetSize: number;
+  paceTarget: number; // multiplier on recordTimeHours used for positioning
+}
+
+// Signature challenge that biases a race's weather and unlocks a special event.
+export type HazardKey =
+  | 'tidal_gate'
+  | 'light_air'
+  | 'med_fickle'
+  | 'gulf_stream'
+  | 'celtic_weather'
+  | 'island_accel'
+  | 'bass_strait'
+  | 'doldrums';
+
 export interface Race {
   id: string;
   name: string;
@@ -10,10 +33,13 @@ export interface Race {
   distanceNm: number; // course length in nautical miles
   difficulty: RaceDifficulty;
   totalLegs: number; // number of tactical legs in the course
-  fleetSize: number; // number of competing boats
-  entryFee: number;
-  prizeMoney: number; // first-place purse
   recordTimeHours: number; // course record, used as a pace benchmark
+  corinthianRating: number; // 1-5, higher = more accessible to amateur crews
+  hazard: HazardKey;
+  signatureHazard: string; // human-readable description of the signature challenge
+  season: string; // when the race is traditionally run
+  unlockAfter?: string; // race id that must be finished to unlock this one
+  divisions: Record<DivisionKey, RaceDivision>;
 }
 
 export interface Boat {
@@ -93,12 +119,23 @@ export interface TacticalChoice {
   risk: number; // 0-1 chance of an adverse twist
 }
 
+export type EventKind = 'tactical' | 'weather' | 'mob' | 'hazard';
+
 export interface GameEvent {
   id: string;
   title: string;
   prompt: string;
+  kind: EventKind;
   pointOfSail?: PointOfSail;
+  hazard?: HazardKey; // present on hazard-specific events
   choices: TacticalChoice[];
+}
+
+// Velocity-made-good preview shown in the tactical decision modal: the current
+// VMG and the projected VMG for each choice.
+export interface VmgPreview {
+  before: number;
+  after: Record<string, number>;
 }
 
 export interface RaceProgress {
@@ -118,6 +155,7 @@ export interface BoatCondition {
 export interface RaceResult {
   raceId: string;
   raceName: string;
+  division?: DivisionKey;
   boatId: string;
   finished: boolean;
   retired: boolean;
@@ -132,6 +170,7 @@ export interface RaceResult {
 export interface GameState {
   funds: number;
   selectedRaceId?: string;
+  selectedDivision: DivisionKey;
   selectedBoatId?: string;
   selectedCrewIds: string[];
   provisions: ProvisionSelection[];

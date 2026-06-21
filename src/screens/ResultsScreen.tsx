@@ -66,7 +66,12 @@ export const ResultsScreen: React.FC<Props> = ({ navigation }) => {
       ]}
     >
       <Text style={[styles.headline, { color: headlineColor }]}>{headline}</Text>
-      <Text style={styles.raceName}>{result.raceName}</Text>
+      <Text style={styles.raceName}>
+        {result.raceName}
+        {result.division
+          ? ` • ${result.division === 'pro' ? 'Pro' : 'Corinthian'} Division`
+          : ''}
+      </Text>
 
       <View style={styles.positionCard}>
         {result.retired ? (

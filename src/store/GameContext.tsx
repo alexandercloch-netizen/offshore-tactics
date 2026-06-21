@@ -9,6 +9,7 @@ import React, {
 } from 'react';
 import {
   BoatCondition,
+  DivisionKey,
   GameEvent,
   GameState,
   LegOutcome,
@@ -23,7 +24,7 @@ import {
   getBoatById,
   getCrewById,
   getRaceById,
-  pickWeather,
+  pickWeatherForHazard,
 } from '../data';
 import {
   advanceLeg,
@@ -32,6 +33,7 @@ import {
   initialCondition,
   initialProgress,
   maybeEvent,
+  raceDivision,
 } from '../engine/gameEngine';
 import { clearState, loadState, saveState } from './storage';
 import { useAuth } from './AuthContext';
@@ -46,6 +48,7 @@ const DEFAULT_CONDITION: BoatCondition = {
 
 const INITIAL_STATE: GameState = {
   funds: STARTING_FUNDS,
+  selectedDivision: 'corinthian',
   selectedCrewIds: [],
   provisions: [],
   condition: DEFAULT_CONDITION,
@@ -55,7 +58,7 @@ const INITIAL_STATE: GameState = {
 
 type Action =
   | { type: 'LOAD_STATE'; payload: GameState }
-  | { type: 'SELECT_RACE'; payload: string }
+  | { type: 'SELECT_RACE'; payload: { raceId: string; division: DivisionKey } }
   | { type: 'SELECT_BOAT'; payload: string }
   | { type: 'TOGGLE_CREW'; payload: { crewId: string; capacity: number } }
   | { type: 'SET_PROVISION'; payload: { provisionId: string; quantity: number } }
@@ -87,7 +90,11 @@ function reducer(state: GameState, action: Action): GameState {
       return action.payload;
 
     case 'SELECT_RACE':
-      return { ...state, selectedRaceId: action.payload };
+      return {
+        ...state,
+        selectedRaceId: action.payload.raceId,
+        selectedDivision: action.payload.division,
+      };
 
     case 'SELECT_BOAT': {
       const boat = getBoatById(action.payload);
@@ -159,6 +166,7 @@ function reducer(state: GameState, action: Action): GameState {
       return {
         ...state,
         selectedRaceId: undefined,
+        selectedDivision: 'corinthian',
         selectedBoatId: undefined,
         selectedCrewIds: [],
         provisions: [],
@@ -179,7 +187,7 @@ export interface GameContextValue {
   state: GameState;
   ready: boolean;
   // selection actions
-  selectRace: (raceId: string) => void;
+  selectRace: (raceId: string, division: DivisionKey) => void;
   selectBoat: (boatId: string) => void;
   toggleCrew: (crewId: string) => void;
   setProvisionQuantity: (provisionId: string, quantity: number) => void;
@@ -237,10 +245,22 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
         loaded = await loadState();
       }
       if (!mounted) return;
-      dispatch({
-        type: 'LOAD_STATE',
-        payload: loaded ? { ...INITIAL_STATE, ...loaded } : INITIAL_STATE,
-      });
+      let merged = loaded ? { ...INITIAL_STATE, ...loaded } : INITIAL_STATE;
+      // Drop an in-progress race that references a race no longer in the roster
+      // (e.g. after a content update) so the player can't get stranded.
+      if (merged.selectedRaceId && !getRaceById(merged.selectedRaceId)) {
+        merged = {
+          ...merged,
+          selectedRaceId: undefined,
+          selectedBoatId: undefined,
+          selectedCrewIds: [],
+          provisions: [],
+          progress: undefined,
+          weather: undefined,
+          condition: DEFAULT_CONDITION,
+        };
+      }
+      dispatch({ type: 'LOAD_STATE', payload: merged });
       setReady(true);
     })();
     return () => {
@@ -263,8 +283,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }, [state, ready, user, configured]);
 
-  const selectRace = useCallback((raceId: string) => {
-    dispatch({ type: 'SELECT_RACE', payload: raceId });
+  const selectRace = useCallback((raceId: string, division: DivisionKey) => {
+    dispatch({ type: 'SELECT_RACE', payload: { raceId, division } });
   }, []);
 
   const selectBoat = useCallback((boatId: string) => {
@@ -302,9 +322,9 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
     dispatch({
       type: 'BEGIN_RACE',
       payload: {
-        progress: initialProgress(race),
+        progress: initialProgress(race, current.selectedDivision),
         condition: initialCondition(crew, current.provisions),
-        weather: pickWeather(),
+        weather: pickWeatherForHazard(race.hazard),
         cost,
       },
     });
@@ -358,8 +378,9 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
     const current = stateRef.current;
     const race = getRaceById(current.selectedRaceId);
     if (!race || !current.progress || !current.weather) return;
+    const fleetSize = raceDivision(race, current.selectedDivision).fleetSize;
     const outcome: LegOutcome = {
-      progress: { ...current.progress, position: race.fleetSize },
+      progress: { ...current.progress, position: fleetSize },
       condition: current.condition,
       weather: current.weather,
       pointOfSail: 'Reach',

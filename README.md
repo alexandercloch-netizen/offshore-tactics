@@ -8,8 +8,12 @@ tactical calls that decide whether you take line honours or limp home.
 ## Gameplay loop
 
 1. **Home** — your harbour. See funds, wins and your logbook of past races.
-2. **Select a Race** — from a short inshore sprint to a transatlantic passage.
-   Each race has an entry fee, a prize purse, a fleet size and a course record.
+2. **Select a Race** — a ladder of real offshore classics (Round the Island,
+   Chicago–Mac, Rolex Middle Sea, Newport Bermuda, Rolex Fastnet, RORC
+   Caribbean 600, Rolex Sydney Hobart, Transpac). Each shows a Corinthian
+   accessibility rating and offers a **Corinthian** division (cheaper, more
+   forgiving) or a **Pro** division (steeper entry, bigger purse, near-record
+   pace required). Premier races **unlock** as you finish earlier ones.
 3. **Choose Your Boat** — charter a boat whose speed, pointing, running and
    stability suit the course.
 4. **Sign Your Crew** — fill the boat's berths. Crew skill, stamina and morale
@@ -18,8 +22,13 @@ tactical calls that decide whether you take line honours or limp home.
    Provisions boost crew condition, hull integrity and reduce incident risk —
    all within your budget.
 6. **Race** — sail the course one leg at a time. Watch the wind, hull integrity
-   and crew condition, and resolve **tactical decisions** (wind shifts, squalls,
-   spinnaker calls, gear failures) that trade time against risk.
+   and crew condition, and resolve **tactical decisions** that trade time
+   against risk. Each decision shows your current **VMG** and the projected VMG
+   for every choice. Events include race-specific **signature hazards** (Gulf
+   Stream eddies, Bass Strait southerly busters, light-air parking lots),
+   **weather-on-the-horizon** calls, crew-morale moments, and the rare,
+   high-stakes **man overboard**. Low crew morale slows the boat and makes
+   incidents more likely, so look after your people.
 7. **Results** — finishing position, elapsed time and prize money are tallied,
    funds updated and the result written to your logbook.
 

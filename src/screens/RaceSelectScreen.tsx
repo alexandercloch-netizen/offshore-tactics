@@ -1,18 +1,13 @@
 import React from 'react';
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Race, RootStackParamList } from '../types';
+import { DivisionKey, Race, RootStackParamList } from '../types';
 import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
-import { RACES } from '../data';
+import { RACES, getRaceById } from '../data';
 import { useGame } from '../store/GameContext';
-import { formatDuration } from '../engine/gameEngine';
+import { formatDuration, isRaceUnlocked } from '../engine/gameEngine';
+import NauticalButton from '../components/NauticalButton';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RaceSelect'>;
 
@@ -23,12 +18,16 @@ const DIFFICULTY_COLOR: Record<Race['difficulty'], string> = {
   Ocean: colors.signalRed,
 };
 
+function stars(rating: number): string {
+  return '★'.repeat(rating) + '☆'.repeat(Math.max(0, 5 - rating));
+}
+
 export const RaceSelectScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const { state, selectRace } = useGame();
 
-  const choose = (race: Race) => {
-    selectRace(race.id);
+  const enter = (race: Race, division: DivisionKey) => {
+    selectRace(race.id, division);
     navigation.navigate('BoatSelect');
   };
 
@@ -44,16 +43,12 @@ export const RaceSelectScreen: React.FC<Props> = ({ navigation }) => {
         Funds available: £{state.funds.toLocaleString()}
       </Text>
       {RACES.map((race) => {
-        const affordable = state.funds >= race.entryFee;
+        const unlocked = isRaceUnlocked(race, state.history);
+        const lockRace = getRaceById(race.unlockAfter);
         return (
-          <Pressable
+          <View
             key={race.id}
-            onPress={() => choose(race)}
-            disabled={!affordable}
-            style={({ pressed }) => [
-              styles.card,
-              { opacity: !affordable ? 0.5 : pressed ? 0.9 : 1 },
-            ]}
+            style={[styles.card, !unlocked && styles.cardLocked]}
           >
             <View style={styles.cardHeader}>
               <Text style={styles.raceName}>{race.name}</Text>
@@ -73,31 +68,78 @@ export const RaceSelectScreen: React.FC<Props> = ({ navigation }) => {
                 </Text>
               </View>
             </View>
-            <Text style={styles.location}>{race.location}</Text>
+            <Text style={styles.location}>
+              {race.location} • {race.season}
+            </Text>
+            <Text style={styles.accessibility}>
+              <Text style={styles.starsText}>{stars(race.corinthianRating)}</Text>
+              {'  '}Corinthian accessibility
+            </Text>
             <Text style={styles.description}>{race.description}</Text>
+            <Text style={styles.hazard}>⚓ {race.signatureHazard}</Text>
+
             <View style={styles.statsGrid}>
               <Stat label="Distance" value={`${race.distanceNm} nm`} />
               <Stat label="Legs" value={`${race.totalLegs}`} />
-              <Stat label="Fleet" value={`${race.fleetSize}`} />
               <Stat label="Record" value={formatDuration(race.recordTimeHours)} />
             </View>
-            <View style={styles.money}>
-              <Text style={styles.entry}>
-                Entry £{race.entryFee.toLocaleString()}
-              </Text>
-              <Text style={styles.prize}>
-                Purse £{race.prizeMoney.toLocaleString()}
-              </Text>
-            </View>
-            {!affordable ? (
-              <Text style={styles.cannotAfford}>
-                Not enough funds for the entry fee
-              </Text>
-            ) : null}
-          </Pressable>
+
+            {unlocked ? (
+              <View style={styles.divisions}>
+                <DivisionRow
+                  race={race}
+                  division="corinthian"
+                  funds={state.funds}
+                  onEnter={() => enter(race, 'corinthian')}
+                />
+                <DivisionRow
+                  race={race}
+                  division="pro"
+                  funds={state.funds}
+                  onEnter={() => enter(race, 'pro')}
+                />
+              </View>
+            ) : (
+              <View style={styles.lockBox}>
+                <Text style={styles.lockText}>
+                  🔒 Locked — finish {lockRace ? lockRace.name : 'an earlier race'} to
+                  unlock
+                </Text>
+              </View>
+            )}
+          </View>
         );
       })}
     </ScrollView>
+  );
+};
+
+const DivisionRow: React.FC<{
+  race: Race;
+  division: DivisionKey;
+  funds: number;
+  onEnter: () => void;
+}> = ({ race, division, funds, onEnter }) => {
+  const info = race.divisions[division];
+  const affordable = funds >= info.entryFee;
+  const label = division === 'corinthian' ? 'Corinthian' : 'Pro';
+  return (
+    <View style={styles.divisionRow}>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.divisionName}>{label} Division</Text>
+        <Text style={styles.divisionMeta}>
+          Entry £{info.entryFee.toLocaleString()} • Purse £
+          {info.prizeMoney.toLocaleString()} • {info.fleetSize} boats
+        </Text>
+      </View>
+      <NauticalButton
+        label="Enter"
+        variant={division === 'pro' ? 'secondary' : 'primary'}
+        onPress={onEnter}
+        disabled={!affordable}
+        style={styles.enterBtn}
+      />
+    </View>
   );
 };
 
@@ -130,6 +172,9 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     marginBottom: spacing.lg,
   },
+  cardLocked: {
+    opacity: 0.6,
+  },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -140,6 +185,7 @@ const styles = StyleSheet.create({
     fontSize: fontSize.lg,
     fontWeight: fontWeight.bold,
     flex: 1,
+    paddingRight: spacing.sm,
   },
   badge: {
     borderWidth: 1,
@@ -158,10 +204,25 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     marginTop: 2,
   },
+  accessibility: {
+    color: colors.mist,
+    fontSize: fontSize.xs,
+    marginTop: spacing.xs,
+  },
+  starsText: {
+    color: colors.brassLight,
+    fontSize: fontSize.sm,
+  },
   description: {
     color: colors.mist,
     fontSize: fontSize.sm,
     lineHeight: 20,
+    marginTop: spacing.sm,
+  },
+  hazard: {
+    color: colors.warning,
+    fontSize: fontSize.xs,
+    lineHeight: 18,
     marginTop: spacing.sm,
   },
   statsGrid: {
@@ -184,28 +245,41 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginTop: 2,
   },
-  money: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  divisions: {
     marginTop: spacing.md,
-    paddingTop: spacing.md,
     borderTopWidth: 1,
     borderTopColor: colors.hull,
+    paddingTop: spacing.sm,
   },
-  entry: {
-    color: colors.mist,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
+  divisionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
   },
-  prize: {
-    color: colors.brassLight,
+  divisionName: {
+    color: colors.foam,
     fontSize: fontSize.sm,
     fontWeight: fontWeight.bold,
   },
-  cannotAfford: {
-    color: colors.signalRed,
+  divisionMeta: {
+    color: colors.mist,
     fontSize: fontSize.xs,
-    marginTop: spacing.sm,
+    marginTop: 2,
+  },
+  enterBtn: {
+    minHeight: 40,
+    paddingHorizontal: spacing.lg,
+  },
+  lockBox: {
+    marginTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.hull,
+    paddingTop: spacing.md,
+  },
+  lockText: {
+    color: colors.slate,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.medium,
   },
 });
 
