@@ -93,14 +93,18 @@ unit-testable:
 npm test          # run the Jest unit suite
 npm run tsc       # type-check
 npm run build:web # produce the static web bundle
+npm run e2e       # Playwright end-to-end playthrough (build:web first)
 ```
 
 The engine and data layer are covered by deterministic **Jest** unit tests
 (`src/__tests__/`) using a seeded RNG — geometry, polars, the wind field, the
 isochrone router (upwind legs tack and end on the mark), divisions, unlocks, a
-full simulated race, decisions and result/prize logic. A **GitHub Actions**
-workflow (`.github/workflows/ci.yml`) gates every push and PR on type-check,
-unit tests, and a web-build smoke test.
+full simulated race, decisions and result/prize logic. A **Playwright**
+end-to-end test (`e2e/`) drives the exported web build through a complete
+campaign — race select, boat, crew, provisioning, the race itself (answering
+tactical decisions) and the results screen. A **GitHub Actions** workflow
+(`.github/workflows/ci.yml`) gates every push and PR on type-check, unit tests,
+a web-build smoke test, and the end-to-end playthrough.
 
 ### Regenerating coastlines
 

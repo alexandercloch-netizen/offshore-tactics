@@ -82,6 +82,7 @@ export const TacticalDecisionModal: React.FC<TacticalDecisionModalProps> = ({
                         label={choice.label}
                         onPress={() => onSelect(choice)}
                         variant="secondary"
+                        testID="decision-choice"
                       />
                       <Text style={styles.choiceDesc}>{choice.description}</Text>
                       <Text style={styles.impact}>{impactLine(choice)}</Text>
