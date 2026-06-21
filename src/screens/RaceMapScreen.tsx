@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   ScrollView,
@@ -9,7 +9,13 @@ import {
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { GameEvent, RootStackParamList, TacticalChoice, VmgPreview } from '../types';
+import {
+  GameEvent,
+  GameState,
+  RootStackParamList,
+  TacticalChoice,
+  VmgPreview,
+} from '../types';
 import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
 import { getBoatById, getRaceById } from '../data';
 import { useGame } from '../store/GameContext';
@@ -17,7 +23,6 @@ import {
   computeVmg,
   effectiveSpeed,
   formatDuration,
-  pointOfSailForLeg,
   raceDivision,
   vmgPreview,
 } from '../engine/gameEngine';
@@ -29,12 +34,15 @@ import TacticalDecisionModal from '../components/TacticalDecisionModal';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RaceMap'>;
 
+const TICK_MS = 150;
+
 export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const { state, beginRace, sailLeg, resolveLeg, retireRace } = useGame();
+  const { state, beginRace, tick, decide, retireRace } = useGame();
   const [activeEvent, setActiveEvent] = useState<GameEvent | null>(null);
   const [activeVmg, setActiveVmg] = useState<VmgPreview | null>(null);
+  const [paused, setPaused] = useState(false);
 
   const race = getRaceById(state.selectedRaceId);
   const boat = getBoatById(state.selectedBoatId);
@@ -46,34 +54,55 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
     }
   }, [state.progress, race, boat, state.selectedCrewIds.length, beginRace]);
 
-  const finishIfDone = useCallback(
-    (finished: boolean, retired: boolean) => {
-      if (finished || retired) {
-        navigation.reset({ index: 0, routes: [{ name: 'Results' }] });
-      }
-    },
-    [navigation]
-  );
+  // Keep imperative helpers fresh for the auto-play interval.
+  const tickRef = useRef(tick);
+  tickRef.current = tick;
+  const stateRef = useRef<GameState>(state);
+  stateRef.current = state;
+  const eventActiveRef = useRef(false);
 
-  const handleSail = useCallback(() => {
-    const event = sailLeg();
-    if (event) {
-      setActiveVmg(vmgPreview(state, event));
-      setActiveEvent(event);
-      return;
-    }
-    const outcome = resolveLeg(null);
-    finishIfDone(outcome.finished, outcome.retired);
-  }, [sailLeg, resolveLeg, finishIfDone, state]);
+  const goToResults = useCallback(() => {
+    navigation.reset({ index: 0, routes: [{ name: 'Results' }] });
+  }, [navigation]);
+
+  const started = !!state.progress;
+
+  // The auto-play loop: tick the simulation forward until a decision or finish.
+  useEffect(() => {
+    if (!started) return undefined;
+    const id = setInterval(() => {
+      if (paused || eventActiveRef.current) return;
+      const outcome = tickRef.current();
+      if (outcome.event) {
+        eventActiveRef.current = true;
+        const tempState: GameState = {
+          ...stateRef.current,
+          progress: outcome.progress,
+          condition: outcome.condition,
+          weather: outcome.weather,
+        };
+        setActiveVmg(vmgPreview(tempState, outcome.event));
+        setActiveEvent(outcome.event);
+      }
+      if (outcome.finished || outcome.retired) {
+        clearInterval(id);
+        goToResults();
+      }
+    }, TICK_MS);
+    return () => clearInterval(id);
+  }, [started, paused, goToResults]);
 
   const handleChoice = useCallback(
     (choice: TacticalChoice) => {
       setActiveEvent(null);
       setActiveVmg(null);
-      const outcome = resolveLeg(choice);
-      finishIfDone(outcome.finished, outcome.retired);
+      eventActiveRef.current = false;
+      const outcome = decide(choice);
+      if (outcome.finished || outcome.retired) {
+        goToResults();
+      }
     },
-    [resolveLeg, finishIfDone]
+    [decide, goToResults]
   );
 
   const confirmRetire = useCallback(() => {
@@ -84,11 +113,11 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
         style: 'destructive',
         onPress: () => {
           retireRace();
-          navigation.reset({ index: 0, routes: [{ name: 'Results' }] });
+          goToResults();
         },
       },
     ]);
-  }, [retireRace, navigation]);
+  }, [retireRace, goToResults]);
 
   if (!race || !boat || !state.progress || !state.weather) {
     return (
@@ -99,13 +128,15 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
   }
 
   const { progress, condition, weather } = state;
-  const nextPointOfSail = pointOfSailForLeg(progress.currentLeg);
-  const recentLog = state.eventLog.slice(-4).reverse();
+  const total = progress.totalDistanceNm;
+  const covered = progress.distanceCoveredNm;
+  const remaining = Math.max(total - covered, 0);
+  const pct = total > 0 ? Math.round((covered / total) * 100) : 0;
   const fleetSize = raceDivision(race, state.selectedDivision).fleetSize;
-  const currentVmg = computeVmg(
-    effectiveSpeed(boat, weather, condition, nextPointOfSail),
-    nextPointOfSail
-  );
+  const speed = effectiveSpeed(boat, weather, condition, progress.pointOfSail);
+  const etaHours = remaining / speed;
+  const currentVmg = computeVmg(speed, progress.pointOfSail);
+  const recentLog = state.eventLog.slice(-4).reverse();
 
   return (
     <View style={styles.screen}>
@@ -122,29 +153,32 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
         </View>
 
         <RouteMap
-          totalLegs={race.totalLegs}
-          currentLeg={progress.currentLeg}
+          waypoints={race.waypoints}
+          fraction={total > 0 ? covered / total : 0}
           width={width - spacing.lg * 2 - spacing.sm * 2}
         />
 
+        <View style={styles.progressTrack}>
+          <View style={[styles.progressFill, { width: `${pct}%` }]} />
+        </View>
+
         <View style={styles.metricsRow}>
-          <Metric
-            label="Leg"
-            value={`${Math.min(progress.currentLeg + 1, race.totalLegs)}/${race.totalLegs}`}
-          />
+          <Metric label="Sailed" value={`${Math.round(covered)} nm`} />
+          <Metric label="To go" value={`${Math.round(remaining)} nm`} />
+          <Metric label="Done" value={`${pct}%`} />
+        </View>
+        <View style={styles.metricsRow}>
           <Metric label="Elapsed" value={formatDuration(progress.elapsedHours)} />
-          <Metric
-            label="Sailed"
-            value={`${Math.round(progress.distanceCoveredNm)} nm`}
-          />
+          <Metric label="Speed" value={`${speed.toFixed(1)} kn`} />
+          <Metric label="ETA" value={remaining <= 0 ? '—' : formatDuration(etaHours)} />
         </View>
 
         <View style={styles.panel}>
           <View style={styles.windRow}>
             <WindIndicator weather={weather} size={110} />
             <View style={styles.windInfo}>
-              <Text style={styles.nextLeg}>Next leg</Text>
-              <Text style={styles.pointOfSail}>{nextPointOfSail}</Text>
+              <Text style={styles.nextLeg}>Point of sail</Text>
+              <Text style={styles.pointOfSail}>{progress.pointOfSail}</Text>
               <Text style={styles.vmgLine}>VMG {currentVmg.toFixed(1)} kn</Text>
               <Text style={styles.weatherDesc}>{weather.description}</Text>
             </View>
@@ -171,7 +205,11 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
-        <NauticalButton label="Sail Next Leg" onPress={handleSail} />
+        <NauticalButton
+          label={paused ? 'Resume' : 'Pause'}
+          variant={paused ? 'primary' : 'secondary'}
+          onPress={() => setPaused((p) => !p)}
+        />
         <NauticalButton label="Retire" variant="ghost" onPress={confirmRetire} />
       </View>
 
@@ -242,10 +280,23 @@ const styles = StyleSheet.create({
     color: colors.mist,
     fontSize: fontSize.xs,
   },
+  progressTrack: {
+    height: 8,
+    borderRadius: radius.pill,
+    backgroundColor: colors.navy,
+    borderWidth: 1,
+    borderColor: colors.hull,
+    overflow: 'hidden',
+    marginTop: spacing.md,
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: colors.brassLight,
+  },
   metricsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginVertical: spacing.md,
+    marginTop: spacing.md,
   },
   metric: {
     flex: 1,
@@ -273,7 +324,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.hull,
     padding: spacing.lg,
-    marginBottom: spacing.md,
+    marginTop: spacing.md,
   },
   panelTitle: {
     color: colors.foam,

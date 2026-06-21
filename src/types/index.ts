@@ -25,14 +25,23 @@ export type HazardKey =
   | 'bass_strait'
   | 'doldrums';
 
+export type WaypointType = 'start' | 'turn' | 'island' | 'mark' | 'finish';
+
+export interface Waypoint {
+  name: string;
+  lat: number;
+  lon: number;
+  type: WaypointType;
+}
+
 export interface Race {
   id: string;
   name: string;
   location: string;
   description: string;
-  distanceNm: number; // course length in nautical miles
+  distanceNm: number; // course length in nautical miles (gameplay-tuned)
   difficulty: RaceDifficulty;
-  totalLegs: number; // number of tactical legs in the course
+  waypoints: Waypoint[]; // real course geometry for the map & bearings
   recordTimeHours: number; // course record, used as a pace benchmark
   corinthianRating: number; // 1-5, higher = more accessible to amateur crews
   hazard: HazardKey;
@@ -139,11 +148,14 @@ export interface VmgPreview {
 }
 
 export interface RaceProgress {
-  currentLeg: number; // legs completed
-  totalLegs: number;
-  elapsedHours: number;
   distanceCoveredNm: number;
+  totalDistanceNm: number;
+  elapsedHours: number;
   position: number; // current standing in the fleet
+  pointOfSail: PointOfSail; // derived from current course bearing vs wind
+  // Internal scheduling, hidden from the UI:
+  nextDecisionAtNm: number; // distance at which the next decision fires
+  decisionsTaken: number;
 }
 
 export interface BoatCondition {
@@ -182,14 +194,13 @@ export interface GameState {
   eventLog: string[];
 }
 
-// Outcome returned by the engine after sailing a leg
-export interface LegOutcome {
+// Outcome returned by the engine after a simulation step.
+export interface StepResult {
   progress: RaceProgress;
   condition: BoatCondition;
   weather: WeatherCondition;
-  pointOfSail: PointOfSail;
-  legHours: number;
-  log: string;
+  event: GameEvent | null; // a decision that interrupts the auto-play, if any
+  log?: string;
   finished: boolean;
   retired: boolean;
 }

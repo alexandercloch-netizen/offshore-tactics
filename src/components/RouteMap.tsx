@@ -6,55 +6,82 @@ import Svg, {
   LinearGradient,
   Path,
   Stop,
+  Text as SvgText,
 } from 'react-native-svg';
 import { colors, radius, spacing } from '../theme';
+import { Waypoint } from '../types';
+import { pointAtFraction } from '../engine/geo';
 
 interface RouteMapProps {
-  totalLegs: number;
-  currentLeg: number; // legs completed
+  waypoints: Waypoint[];
+  fraction: number; // 0..1 distance covered along the course
   width?: number;
   height?: number;
 }
 
-// Generates evenly spaced waypoints along a gentle S-curve so the course
-// reads like a chart rather than a straight line.
-function buildWaypoints(
-  totalLegs: number,
-  width: number,
-  height: number
-): Array<{ x: number; y: number }> {
-  const points: Array<{ x: number; y: number }> = [];
-  const marginX = 28;
-  const usableW = width - marginX * 2;
-  const midY = height / 2;
-  const amplitude = height / 2 - 24;
-  const count = totalLegs; // marks (start is implicit at index 0)
-  for (let i = 0; i <= count; i += 1) {
-    const t = count === 0 ? 0 : i / count;
-    const x = marginX + usableW * t;
-    const y = midY - Math.sin(t * Math.PI * 1.5) * amplitude * 0.6;
-    points.push({ x, y });
-  }
-  return points;
+interface XY {
+  x: number;
+  y: number;
 }
 
-function toPath(points: Array<{ x: number; y: number }>): string {
-  if (points.length === 0) return '';
+// Equirectangular projection with longitude scaled by cos(mean latitude),
+// then fit to the viewport with padding.
+function buildProjector(waypoints: Waypoint[], width: number, height: number) {
+  const lats = waypoints.map((w) => w.lat);
+  const lons = waypoints.map((w) => w.lon);
+  const meanLat = (Math.min(...lats) + Math.max(...lats)) / 2;
+  const k = Math.cos((meanLat * Math.PI) / 180) || 1;
+
+  const rawX = (lon: number) => lon * k;
+  const rawY = (lat: number) => -lat;
+
+  const xs = lons.map(rawX);
+  const ys = lats.map(rawY);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+
+  const pad = 26;
+  const spanX = maxX - minX || 1;
+  const spanY = maxY - minY || 1;
+  const scale = Math.min((width - pad * 2) / spanX, (height - pad * 2) / spanY);
+  const offsetX = (width - spanX * scale) / 2;
+  const offsetY = (height - spanY * scale) / 2;
+
+  return (lat: number, lon: number): XY => ({
+    x: offsetX + (rawX(lon) - minX) * scale,
+    y: offsetY + (rawY(lat) - minY) * scale,
+  });
+}
+
+function pathFrom(points: XY[]): string {
   return points
     .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
     .join(' ');
 }
 
 export const RouteMap: React.FC<RouteMapProps> = ({
-  totalLegs,
-  currentLeg,
+  waypoints,
+  fraction,
   width = 320,
-  height = 160,
+  height = 200,
 }) => {
-  const points = buildWaypoints(totalLegs, width, height);
-  const fullPath = toPath(points);
-  const sailedPath = toPath(points.slice(0, currentLeg + 1));
-  const boat = points[Math.min(currentLeg, points.length - 1)];
+  if (!waypoints || waypoints.length < 2) {
+    return <View style={[styles.container, { width, height }]} />;
+  }
+
+  const project = buildProjector(waypoints, width, height);
+  const points = waypoints.map((w) => project(w.lat, w.lon));
+  const fullPath = pathFrom(points);
+
+  const clamped = Math.max(0, Math.min(1, fraction));
+  const boatTrack = pointAtFraction(waypoints, clamped);
+  const boat = project(boatTrack.lat, boatTrack.lon);
+
+  // Sailed path: waypoints up to the boat's current segment, then the boat.
+  const sailedPoints = points.slice(0, boatTrack.segmentIndex + 1).concat(boat);
+  const sailedPath = pathFrom(sailedPoints);
 
   return (
     <View style={styles.container}>
@@ -65,55 +92,55 @@ export const RouteMap: React.FC<RouteMapProps> = ({
             <Stop offset="1" stopColor={colors.abyss} />
           </LinearGradient>
         </Defs>
-        {/* Full planned course */}
-        <Path
-          d={fullPath}
-          stroke={colors.slate}
-          strokeWidth={3}
-          strokeDasharray="6 6"
-          fill="none"
-        />
-        {/* Distance sailed so far */}
-        <Path
-          d={sailedPath}
-          stroke={colors.brassLight}
-          strokeWidth={4}
-          fill="none"
-        />
-        {/* Waypoint markers */}
-        {points.map((p, i) => {
-          const passed = i <= currentLeg;
-          const isStart = i === 0;
-          const isFinish = i === points.length - 1;
+        <Path d={fullPath} stroke={colors.slate} strokeWidth={2.5} strokeDasharray="5 5" fill="none" />
+        <Path d={sailedPath} stroke={colors.brassLight} strokeWidth={3.5} fill="none" />
+
+        {waypoints.map((wp, i) => {
+          const p = points[i];
+          const isStart = wp.type === 'start';
+          const isFinish = wp.type === 'finish';
+          const passed = i <= boatTrack.segmentIndex;
+          const r = isStart || isFinish ? 6 : wp.type === 'island' ? 5 : 4;
+          const fill = isFinish
+            ? colors.signalRed
+            : isStart
+              ? colors.signalGreen
+              : passed
+                ? colors.brassLight
+                : colors.hull;
           return (
-            <Circle
-              key={i}
-              cx={p.x}
-              cy={p.y}
-              r={isStart || isFinish ? 7 : 5}
-              fill={
-                isFinish
-                  ? colors.signalRed
-                  : passed
-                    ? colors.brassLight
-                    : colors.hull
-              }
-              stroke={colors.foam}
-              strokeWidth={isStart || isFinish ? 2 : 1}
-            />
+            <React.Fragment key={`${wp.name}-${i}`}>
+              <Circle
+                cx={p.x}
+                cy={p.y}
+                r={r}
+                fill={fill}
+                stroke={colors.foam}
+                strokeWidth={isStart || isFinish ? 1.5 : 1}
+              />
+              {isStart || isFinish ? (
+                <SvgText
+                  x={p.x}
+                  y={p.y - 9}
+                  fill={colors.mist}
+                  fontSize="9"
+                  textAnchor="middle"
+                >
+                  {isStart ? 'START' : 'FINISH'}
+                </SvgText>
+              ) : null}
+            </React.Fragment>
           );
         })}
-        {/* Boat marker */}
-        {boat ? (
-          <Circle
-            cx={boat.x}
-            cy={boat.y}
-            r={6}
-            fill={colors.signalGreen}
-            stroke={colors.white}
-            strokeWidth={2}
-          />
-        ) : null}
+
+        <Circle
+          cx={boat.x}
+          cy={boat.y}
+          r={5}
+          fill={colors.white}
+          stroke={colors.signalGreen}
+          strokeWidth={3}
+        />
       </Svg>
     </View>
   );

@@ -5,7 +5,6 @@ import {
   DivisionKey,
   GameEvent,
   GameState,
-  LegOutcome,
   PointOfSail,
   Provision,
   ProvisionSelection,
@@ -13,6 +12,7 @@ import {
   RaceDivision,
   RaceProgress,
   RaceResult,
+  StepResult,
   TacticalChoice,
   VmgPreview,
   WeatherCondition,
@@ -25,6 +25,8 @@ import {
   pickEventForRace,
   pickWeatherForHazard,
 } from '../data';
+import { rnd, rndRange } from './rng';
+import { pointAtFraction, pointOfSailFor } from './geo';
 
 export const clamp = (value: number, min = 0, max = 100): number =>
   Math.max(min, Math.min(max, value));
@@ -36,15 +38,35 @@ const average = (values: number[], fallback: number): number =>
     ? fallback
     : values.reduce((sum, v) => sum + v, 0) / values.length;
 
-const POINTS_OF_SAIL: PointOfSail[] = ['Upwind', 'Reach', 'Downwind'];
+// How far each auto-play tick advances the boat (fraction of the course).
+const STEP_FRACTION = 0.01;
+// Bounds on the spacing between decisions, as a fraction of the course.
+const DECISION_MIN = 0.07;
+const DECISION_MAX = 0.16;
+const FIRST_DECISION_MIN = 0.04;
+const FIRST_DECISION_MAX = 0.1;
+const MAX_DECISIONS = 14;
+// Nominal stretch (fraction of course) used to project VMG for a choice.
+const DECISION_STRETCH = 1 / 12;
 
-// Each leg cycles through a point of sail so the boat's strengths matter.
-export function pointOfSailForLeg(legIndex: number): PointOfSail {
-  return POINTS_OF_SAIL[legIndex % POINTS_OF_SAIL.length];
+export function defaultStepNm(race: Race): number {
+  return Math.max(race.distanceNm * STEP_FRACTION, 0.5);
 }
 
 export function raceDivision(race: Race, division: DivisionKey): RaceDivision {
   return race.divisions[division];
+}
+
+// Point of sail from the current position along the real course vs the wind.
+export function currentPointOfSail(
+  race: Race,
+  weather: WeatherCondition,
+  distanceCoveredNm: number
+): PointOfSail {
+  if (!race.waypoints || race.waypoints.length < 2) return 'Reach';
+  const fraction = clamp(distanceCoveredNm / race.distanceNm, 0, 1) || 0;
+  const tp = pointAtFraction(race.waypoints, fraction);
+  return pointOfSailFor(tp.bearing, weather.windDirection);
 }
 
 // ---- Provisioning helpers ----
@@ -125,14 +147,22 @@ export function initialCondition(
   };
 }
 
-export function initialProgress(race: Race, division: DivisionKey): RaceProgress {
+export function initialProgress(
+  race: Race,
+  division: DivisionKey,
+  weather: WeatherCondition
+): RaceProgress {
   const fleetSize = raceDivision(race, division).fleetSize;
+  const firstDecision =
+    rndRange(FIRST_DECISION_MIN, FIRST_DECISION_MAX) * race.distanceNm;
   return {
-    currentLeg: 0,
-    totalLegs: race.totalLegs,
-    elapsedHours: 0,
     distanceCoveredNm: 0,
+    totalDistanceNm: race.distanceNm,
+    elapsedHours: 0,
     position: Math.ceil(fleetSize / 2),
+    pointOfSail: currentPointOfSail(race, weather, 0),
+    nextDecisionAtNm: firstDecision,
+    decisionsTaken: 0,
   };
 }
 
@@ -164,8 +194,7 @@ export function effectiveSpeed(
   return Math.max(speed, 0.5);
 }
 
-// Fraction of boat speed that counts as progress toward the mark for each
-// point of sail (a simple VMG approximation).
+// Fraction of boat speed that counts as progress toward the mark.
 const VMG_FACTOR: Record<PointOfSail, number> = {
   Upwind: 0.72,
   Reach: 0.96,
@@ -176,25 +205,22 @@ export function computeVmg(speed: number, pointOfSail: PointOfSail): number {
   return speed * VMG_FACTOR[pointOfSail];
 }
 
-// Current VMG plus the projected VMG for each choice of an event, so the player
-// can see the impact of a decision before committing.
 export function vmgPreview(state: GameState, event: GameEvent): VmgPreview {
   const race = getRaceById(state.selectedRaceId);
   const boat = getBoatById(state.selectedBoatId);
   if (!race || !boat || !state.progress || !state.weather) {
     return { before: 0, after: {} };
   }
-  const pointOfSail = pointOfSailForLeg(state.progress.currentLeg);
-  const speed = effectiveSpeed(boat, state.weather, state.condition, pointOfSail);
-  const legDistance = race.distanceNm / race.totalLegs;
-  const baseHours = Math.max(legDistance / speed, 0.2);
-  const before = computeVmg(speed, pointOfSail);
+  const pos = state.progress.pointOfSail;
+  const speed = effectiveSpeed(boat, state.weather, state.condition, pos);
+  const stretchNm = race.distanceNm * DECISION_STRETCH;
+  const baseHours = Math.max(stretchNm / speed, 0.2);
+  const before = computeVmg(speed, pos);
 
   const after: Record<string, number> = {};
   event.choices.forEach((choice) => {
     const projHours = Math.max(baseHours + choice.timeDelta, 0.2);
-    const projSpeed = legDistance / projHours;
-    after[choice.id] = computeVmg(projSpeed, pointOfSail);
+    after[choice.id] = computeVmg(stretchNm / projHours, pos);
   });
   return { before: round1(before), after };
 }
@@ -210,135 +236,161 @@ function estimatePosition(
   const target = race.recordTimeHours * division.paceTarget;
   const expectedHours = target * Math.max(fraction, 0.0001);
   const paceRatio = progress.elapsedHours / Math.max(expectedHours, 0.01);
-  // paceRatio of 1.0 means division pace -> leading the fleet.
   const position = Math.round(1 + (paceRatio - 1) * division.fleetSize);
   return Math.min(Math.max(position, 1), division.fleetSize);
 }
 
-// ---- Events ----
+// ---- Simulation ----
 
-export function maybeEvent(state: GameState): GameEvent | null {
-  if (!state.progress) return null;
-  const race = getRaceById(state.selectedRaceId);
-  const safety = sumProvisionEffect(state.provisions, 'safetyBoost');
-  // Low morale makes incidents more likely; provisioning makes them less so.
-  const moraleRisk = state.condition.crewMorale < 40 ? 10 : 0;
-  const chance = clamp(62 - safety * 0.8 + moraleRisk, 25, 85) / 100;
-  if (Math.random() >= chance) return null;
-  return pickEventForRace(race?.hazard);
+function segmentIndexAt(race: Race, distanceCoveredNm: number): number {
+  const fraction = clamp(distanceCoveredNm / race.distanceNm, 0, 1) || 0;
+  return pointAtFraction(race.waypoints, fraction).segmentIndex;
 }
 
-// ---- Advancing a leg ----
-
-export function advanceLeg(
-  state: GameState,
-  choice: TacticalChoice | null
-): LegOutcome {
+// Advances the boat by up to one tick of distance, stopping early to fire a
+// scheduled decision. Weather evolves; the crew and hull wear with the miles.
+export function stepRace(state: GameState, stepNm: number): StepResult {
   const race = getRaceById(state.selectedRaceId);
   const boat = getBoatById(state.selectedBoatId);
   if (!race || !boat || !state.progress || !state.weather) {
-    throw new Error('Cannot advance a leg before the race has been set up.');
+    throw new Error('Cannot step a race before it has been set up.');
   }
 
   const division = raceDivision(race, state.selectedDivision);
-  const weather = state.weather;
   const prev = state.progress;
-  const pointOfSail = pointOfSailForLeg(prev.currentLeg);
-  const legDistance = race.distanceNm / race.totalLegs;
+  let weather = state.weather;
+  const total = race.distanceNm;
 
-  const speed = effectiveSpeed(boat, weather, state.condition, pointOfSail);
-  let legHours = legDistance / speed;
-
-  // Baseline wear from sailing a leg, scaled by weather risk.
-  let stamina = state.condition.crewStamina - (3 + weather.riskModifier * 14);
-  let morale = state.condition.crewMorale - weather.riskModifier * 6;
-  let hull = state.condition.hullIntegrity - weather.riskModifier * 8;
-
-  // Apply the player's tactical choice.
-  if (choice) {
-    legHours += choice.timeDelta;
-    stamina += choice.staminaDelta;
-    morale += choice.moraleDelta;
-    hull += choice.hullDelta;
-
-    // The gamble: a failed risk roll adds time and damage. A demoralized crew
-    // is more likely to make a hash of it.
-    const moralePenalty = state.condition.crewMorale < 40 ? 0.1 : 0;
-    if (Math.random() < choice.risk + moralePenalty) {
-      legHours += 0.6 + weather.riskModifier;
-      hull -= 8;
-      morale -= 5;
-    } else if (choice.risk > 0.15) {
-      // A clean run on a bold call lifts the crew.
-      morale += 2;
-    }
+  // Decide how far to advance, capping at the next decision and the finish.
+  let target = Math.min(prev.distanceCoveredNm + stepNm, total);
+  let willDecide = false;
+  if (
+    prev.decisionsTaken < MAX_DECISIONS &&
+    prev.nextDecisionAtNm > prev.distanceCoveredNm &&
+    prev.nextDecisionAtNm <= target
+  ) {
+    target = prev.nextDecisionAtNm;
+    willDecide = true;
   }
+  const dDist = Math.max(target - prev.distanceCoveredNm, 0);
 
-  legHours = Math.max(round1(legHours), 0.2);
+  const pointOfSail = currentPointOfSail(
+    race,
+    weather,
+    (prev.distanceCoveredNm + target) / 2
+  );
+  const speed = effectiveSpeed(boat, weather, state.condition, pointOfSail);
+  const dtHours = dDist / speed;
+  const df = total > 0 ? dDist / total : 0;
 
   const condition: BoatCondition = {
-    hullIntegrity: clamp(hull),
-    crewStamina: clamp(stamina),
-    crewMorale: clamp(morale),
+    crewStamina: clamp(
+      state.condition.crewStamina - df * (40 + weather.riskModifier * 120)
+    ),
+    crewMorale: clamp(
+      state.condition.crewMorale - df * (10 + weather.riskModifier * 60)
+    ),
+    hullIntegrity: clamp(
+      state.condition.hullIntegrity - df * (8 + weather.riskModifier * 120)
+    ),
   };
 
-  const nextLeg = prev.currentLeg + 1;
-  const distanceCovered = Math.min(
-    prev.distanceCoveredNm + legDistance,
-    race.distanceNm
-  );
-  const elapsedHours = round1(prev.elapsedHours + legHours);
+  const segBefore = segmentIndexAt(race, prev.distanceCoveredNm);
+  const distanceCoveredNm = target;
+  const elapsedHours = prev.elapsedHours + dtHours;
+  const segAfter = segmentIndexAt(race, distanceCoveredNm);
+
+  // Occasionally evolve the weather between decisions.
+  if (!willDecide && rnd() < 0.15) {
+    weather = pickWeatherForHazard(race.hazard);
+  }
 
   const progress: RaceProgress = {
-    currentLeg: nextLeg,
-    totalLegs: race.totalLegs,
+    distanceCoveredNm,
+    totalDistanceNm: total,
     elapsedHours,
-    distanceCoveredNm: distanceCovered,
-    position: 1,
+    position: prev.position,
+    pointOfSail: currentPointOfSail(race, weather, distanceCoveredNm),
+    nextDecisionAtNm: prev.nextDecisionAtNm,
+    decisionsTaken: prev.decisionsTaken,
   };
   progress.position = estimatePosition(race, division, progress);
 
   const retired = condition.hullIntegrity <= 0 || condition.crewStamina <= 0;
-  const finished = nextLeg >= race.totalLegs && !retired;
+  const finished = !retired && distanceCoveredNm >= total;
 
-  const nextWeather = pickWeatherForHazard(race.hazard);
+  let event: GameEvent | null = null;
+  if (willDecide && !finished && !retired) {
+    // A decision fires: re-roll the weather and schedule the next one.
+    weather = pickWeatherForHazard(race.hazard);
+    progress.pointOfSail = currentPointOfSail(race, weather, distanceCoveredNm);
+    progress.decisionsTaken = prev.decisionsTaken + 1;
+    progress.nextDecisionAtNm =
+      distanceCoveredNm + rndRange(DECISION_MIN, DECISION_MAX) * total;
+    event = pickEventForRace(race.hazard);
+  }
 
-  const log = buildLegLog(
-    nextLeg,
-    pointOfSail,
-    weather,
-    condition,
-    choice,
-    retired
-  );
+  let log: string | undefined;
+  if (retired) {
+    log = `Forced to retire in ${weather.label.toLowerCase()} after the boat took too much punishment.`;
+  } else if (finished) {
+    log = `Crossed the finish line at ${race.name}.`;
+  } else if (segAfter > segBefore && race.waypoints[segAfter]) {
+    log = `Passed ${race.waypoints[segAfter].name} — ${weather.label}, ${progress.pointOfSail.toLowerCase()}.`;
+  }
+
+  return { progress, condition, weather, event, log, finished, retired };
+}
+
+// Applies the player's choice to the current decision (no distance is sailed),
+// then resolves the gamble and any resulting retirement.
+export function applyDecision(
+  state: GameState,
+  choice: TacticalChoice
+): StepResult {
+  const race = getRaceById(state.selectedRaceId);
+  if (!race || !state.progress || !state.weather) {
+    throw new Error('Cannot apply a decision outside a race.');
+  }
+
+  let stamina = state.condition.crewStamina + choice.staminaDelta;
+  let morale = state.condition.crewMorale + choice.moraleDelta;
+  let hull = state.condition.hullIntegrity + choice.hullDelta;
+  let extraHours = choice.timeDelta;
+
+  // A demoralized crew is more likely to bungle a bold call.
+  const moralePenalty = state.condition.crewMorale < 40 ? 0.1 : 0;
+  if (rnd() < choice.risk + moralePenalty) {
+    extraHours += 0.6 + state.weather.riskModifier;
+    hull -= 8;
+    morale -= 5;
+  } else if (choice.risk > 0.15) {
+    morale += 2;
+  }
+
+  const condition: BoatCondition = {
+    crewStamina: clamp(stamina),
+    crewMorale: clamp(morale),
+    hullIntegrity: clamp(hull),
+  };
+
+  const progress: RaceProgress = {
+    ...state.progress,
+    elapsedHours: state.progress.elapsedHours + Math.max(extraHours, 0),
+  };
+
+  const retired = condition.hullIntegrity <= 0 || condition.crewStamina <= 0;
+  const log = `${choice.label}.`;
 
   return {
     progress,
     condition,
-    weather: nextWeather,
-    pointOfSail,
-    legHours,
+    weather: state.weather,
+    event: null,
     log,
-    finished,
+    finished: false,
     retired,
   };
-}
-
-function buildLegLog(
-  leg: number,
-  pointOfSail: PointOfSail,
-  weather: WeatherCondition,
-  condition: BoatCondition,
-  choice: TacticalChoice | null,
-  retired: boolean
-): string {
-  if (retired) {
-    return `Leg ${leg}: Disaster strikes in ${weather.label.toLowerCase()} — the boat is forced to retire.`;
-  }
-  const action = choice ? ` ${choice.label}.` : '';
-  return `Leg ${leg} (${pointOfSail}, ${weather.label}):${action} Hull ${Math.round(
-    condition.hullIntegrity
-  )}%, crew ${Math.round(condition.crewStamina)}% fit.`;
 }
 
 // ---- Results ----
@@ -364,7 +416,7 @@ const DIVISION_LABEL: Record<DivisionKey, string> = {
   pro: 'Pro',
 };
 
-export function buildResult(state: GameState, outcome: LegOutcome): RaceResult {
+export function buildResult(state: GameState, outcome: StepResult): RaceResult {
   const race = getRaceById(state.selectedRaceId);
   if (!race) {
     throw new Error('Cannot build a result without a selected race.');
