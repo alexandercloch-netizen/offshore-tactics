@@ -20,6 +20,7 @@ interface RouteMapProps {
   route?: GeoPoint[]; // remaining weather-routed path
   trail?: GeoPoint[]; // track sailed so far
   boat?: GeoPoint; // current boat position
+  competitors?: GeoPoint[]; // AI fleet positions
   nextMarkIndex?: number; // for shading rounded marks
   land?: LandPolygon[];
   width?: number;
@@ -80,6 +81,7 @@ export const RouteMap: React.FC<RouteMapProps> = ({
   route,
   trail,
   boat,
+  competitors,
   nextMarkIndex = 0,
   land,
   width = 320,
@@ -94,6 +96,7 @@ export const RouteMap: React.FC<RouteMapProps> = ({
   const routePts = (route ?? []).map((p) => project(p.lat, p.lon));
   const trailPts = (trail ?? []).map((p) => project(p.lat, p.lon));
   const boatXY = boat ? project(boat.lat, boat.lon) : null;
+  const competitorXY = (competitors ?? []).map((c) => project(c.lat, c.lon));
 
   return (
     <View style={styles.container}>
@@ -168,6 +171,10 @@ export const RouteMap: React.FC<RouteMapProps> = ({
             </React.Fragment>
           );
         })}
+
+        {competitorXY.map((c, i) => (
+          <Circle key={`ai-${i}`} cx={c.x} cy={c.y} r={2.5} fill={colors.mist} opacity={0.75} />
+        ))}
 
         {boatXY ? (
           <Circle cx={boatXY.x} cy={boatXY.y} r={5} fill={colors.white} stroke={colors.signalGreen} strokeWidth={3} />

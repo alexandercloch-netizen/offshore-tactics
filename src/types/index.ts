@@ -208,6 +208,16 @@ export interface RaceProgress {
   decisionsTaken: number;
 }
 
+// An AI competitor sailing the same course & wind field as the player.
+export interface Competitor {
+  id: string;
+  name: string;
+  speedMul: number; // skill multiplier on made-good speed
+  distanceNm: number; // geometric distance covered along the course
+  finishedHours: number | null; // elapsed time at finish, or null if still racing
+  retired: boolean;
+}
+
 export interface BoatCondition {
   hullIntegrity: number; // 0-100
   crewStamina: number; // 0-100 (fleet average)
@@ -238,6 +248,7 @@ export interface GameState {
   provisions: ProvisionSelection[];
   progress?: RaceProgress;
   windField?: WindField;
+  fleet?: Competitor[];
   condition: BoatCondition;
   weather?: WeatherCondition;
   lastResult?: RaceResult;
@@ -250,6 +261,7 @@ export interface StepResult {
   progress: RaceProgress;
   condition: BoatCondition;
   weather: WeatherCondition;
+  fleet: Competitor[];
   event: GameEvent | null; // a decision that interrupts the auto-play, if any
   log?: string;
   finished: boolean;

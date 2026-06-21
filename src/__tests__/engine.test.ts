@@ -12,6 +12,7 @@ import {
   vmgPreview,
 } from '../engine/gameEngine';
 import { createWindField, sampleWind, weatherFromWind } from '../engine/wind';
+import { createFleet } from '../engine/fleet';
 import { mulberry32, resetRng, setRng } from '../engine/rng';
 import { BOATS, RACES, getBoatById, getRaceById } from '../data';
 import {
@@ -47,6 +48,7 @@ function baseState(overrides: Partial<GameState> = {}): GameState {
     condition: healthy,
     weather,
     windField,
+    fleet: createFleet(race, raceDivision(race, division)),
     progress: initialProgress(race, boat, division, windField),
     history: [],
     eventLog: [],
@@ -168,10 +170,11 @@ describe('stepRace (weather-routed model)', () => {
         progress: out.progress,
         condition: out.condition,
         weather: out.weather,
+        fleet: out.fleet,
       };
       if (out.event) {
         const decision = applyDecision(state, out.event.choices[0]);
-        state = { ...state, progress: decision.progress, condition: decision.condition };
+        state = { ...state, progress: decision.progress, condition: decision.condition, fleet: decision.fleet };
         if (decision.retired) {
           terminal = decision;
           break;
@@ -235,6 +238,7 @@ describe('buildResult', () => {
       progress: { ...p, position },
       condition: healthy,
       weather: weatherFromWind({ fromDeg: 200, speedKn: 14 }),
+      fleet: [],
       event: null,
       finished,
       retired,

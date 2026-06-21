@@ -63,6 +63,12 @@ unit-testable:
     shift, a mark rounding, or periodically), so the displayed track bends and
     the boat tacks through the race. The **point of sail** is the boat's real
     heading vs the local wind.
+- **A real AI fleet** (`src/engine/fleet.ts`) sails the same course and wind
+  field. Competitors advance on a fast velocity-made-good model (so the fleet
+  spreads out under the same weather) with seeded per-boat skill — tighter and
+  faster in the pro division. Your **standing is your real rank** in the fleet,
+  it updates live on the chart, and a costly tactical decision lets the fleet
+  sail past you. Manage the boat well or you'll drop down the order.
 - **Speed** comes from the boat's base speed, its rating for the current point of
   sail, the weather's modifier, and crew stamina/morale plus hull integrity.
 - **Wear** scales with the fraction of the course sailed and the weather risk;
@@ -124,8 +130,9 @@ src/
     polar.ts                    Boat polar (speed vs wind angle/strength)
     wind.ts                     Spatial + temporal wind field
     router.ts                   Isochrone weather routing
+    fleet.ts                    AI competitor fleet & live standings
     rng.ts                      Seedable RNG for deterministic tests
-  __tests__/                    Jest unit tests (engine, polar, wind, router, geo, rng)
+  __tests__/                    Jest unit tests (engine, polar, wind, router, fleet, geo, rng)
   services/
     cloudSave.ts                Per-user cloud save (Supabase)
     leaderboard.ts              Submit/fetch global leaderboard

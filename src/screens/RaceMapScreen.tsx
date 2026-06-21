@@ -27,6 +27,7 @@ import {
   speedMadeGood,
   vmgPreview,
 } from '../engine/gameEngine';
+import { competitorPoints } from '../engine/fleet';
 import RouteMap from '../components/RouteMap';
 import WindIndicator from '../components/WindIndicator';
 import StatBar from '../components/StatBar';
@@ -158,6 +159,7 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
           route={progress.route}
           trail={progress.trail}
           boat={{ lat: progress.lat, lon: progress.lon }}
+          competitors={state.fleet ? competitorPoints(state.fleet, race) : []}
           nextMarkIndex={progress.nextMarkIndex}
           land={LANDMASSES[race.id]}
           width={width - spacing.lg * 2 - spacing.sm * 2}

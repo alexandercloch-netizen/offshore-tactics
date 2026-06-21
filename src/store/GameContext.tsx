@@ -14,6 +14,7 @@ import {
   RaceProgress,
   RaceResult,
   StepResult,
+  Competitor,
   TacticalChoice,
   WeatherCondition,
   WindField,
@@ -36,6 +37,7 @@ import {
   stepRace,
 } from '../engine/gameEngine';
 import { createWindField, sampleWind, weatherFromWind } from '../engine/wind';
+import { createFleet } from '../engine/fleet';
 import { clearState, loadState, saveState } from './storage';
 import { useAuth } from './AuthContext';
 import { loadCloudSave, saveCloud } from '../services/cloudSave';
@@ -70,6 +72,7 @@ type Action =
         condition: BoatCondition;
         weather: WeatherCondition;
         windField: WindField;
+        fleet: Competitor[];
         cost: number;
       };
     }
@@ -79,6 +82,7 @@ type Action =
         progress: RaceProgress;
         condition: BoatCondition;
         weather: WeatherCondition;
+        fleet: Competitor[];
         log?: string;
       };
     }
@@ -142,6 +146,7 @@ function reducer(state: GameState, action: Action): GameState {
         condition: action.payload.condition,
         weather: action.payload.weather,
         windField: action.payload.windField,
+        fleet: action.payload.fleet,
         lastResult: undefined,
         eventLog: [],
       };
@@ -152,6 +157,7 @@ function reducer(state: GameState, action: Action): GameState {
         progress: action.payload.progress,
         condition: action.payload.condition,
         weather: action.payload.weather,
+        fleet: action.payload.fleet,
         eventLog: action.payload.log
           ? [...state.eventLog, action.payload.log]
           : state.eventLog,
@@ -166,6 +172,7 @@ function reducer(state: GameState, action: Action): GameState {
         progress: undefined,
         weather: undefined,
         windField: undefined,
+        fleet: undefined,
       };
 
     case 'PREPARE_NEXT_RACE':
@@ -179,6 +186,7 @@ function reducer(state: GameState, action: Action): GameState {
         progress: undefined,
         weather: undefined,
         windField: undefined,
+        fleet: undefined,
         condition: DEFAULT_CONDITION,
       };
 
@@ -330,6 +338,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
     const windField = createWindField(race);
     const start = race.waypoints[0];
     const weather = weatherFromWind(sampleWind(windField, start.lat, start.lon, 0));
+    const fleet = createFleet(race, raceDivision(race, current.selectedDivision));
     dispatch({
       type: 'BEGIN_RACE',
       payload: {
@@ -337,6 +346,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
         condition: initialCondition(crew, current.provisions),
         weather,
         windField,
+        fleet,
         cost,
       },
     });
@@ -369,6 +379,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
           progress: outcome.progress,
           condition: outcome.condition,
           weather: outcome.weather,
+          fleet: outcome.fleet,
           log: outcome.log,
         },
       });
@@ -409,6 +420,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
       progress: { ...current.progress, position: fleetSize },
       condition: current.condition,
       weather: current.weather,
+      fleet: current.fleet ?? [],
       event: null,
       log: `Retired from ${race.name}.`,
       finished: false,

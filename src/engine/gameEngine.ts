@@ -37,6 +37,7 @@ import {
 import { polarSpeed } from './polar';
 import { createWindField, sampleWind, weatherFromWind } from './wind';
 import { planRoute } from './router';
+import { advanceFleet, finalPosition, livePosition } from './fleet';
 
 export const clamp = (value: number, min = 0, max = 100): number =>
   Math.max(min, Math.min(max, value));
@@ -264,23 +265,6 @@ export function vmgPreview(state: GameState, event: GameEvent): VmgPreview {
   return { before: Math.round(smg * 10) / 10, after };
 }
 
-// ---- Position model ----
-
-function estimatePosition(
-  boat: Boat,
-  division: RaceDivision,
-  progress: RaceProgress
-): number {
-  const fraction = progress.distanceCoveredNm / Math.max(progress.totalDistanceNm, 1);
-  if (fraction <= 0) return Math.ceil(division.fleetSize / 2);
-  // Reference pace self-calibrated to the boat, eased by the division target.
-  const refSpeed = (boat.baseSpeed * 0.66) / division.paceTarget;
-  const expectedHours = (progress.totalDistanceNm / refSpeed) * fraction;
-  const paceRatio = progress.elapsedHours / Math.max(expectedHours, 0.01);
-  const position = Math.round(1 + (paceRatio - 1) * division.fleetSize);
-  return Math.min(Math.max(position, 1), division.fleetSize);
-}
-
 // ---- Simulation ----
 
 interface Advance {
@@ -333,7 +317,6 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
 
   const marks = race.waypoints;
   const field = state.windField;
-  const division = raceDivision(race, state.selectedDivision);
   const prev = state.progress;
   const total = prev.totalDistanceNm;
 
@@ -409,7 +392,12 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
     nextDecisionAtNm: prev.nextDecisionAtNm,
     decisionsTaken: prev.decisionsTaken,
   };
-  progress.position = estimatePosition(boat, division, progress);
+
+  // Advance the AI fleet through the same elapsed time and wind, then rank.
+  const fleet = advanceFleet(state.fleet ?? [], race, boat, field, prev.elapsedHours, dtHours);
+  progress.position = finished
+    ? finalPosition(fleet, elapsedHours)
+    : livePosition(fleet, distanceCoveredNm);
 
   // Decision scheduling, by geometric progress.
   let event: GameEvent | null = null;
@@ -434,14 +422,15 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
     log = `Rounded ${marks[nextMarkIndex - 1].name} — ${weather.label}, ${progress.pointOfSail.toLowerCase()}.`;
   }
 
-  return { progress, condition, weather, event, log, finished, retired };
+  return { progress, condition, weather, fleet, event, log, finished, retired };
 }
 
 // Apply the player's choice to the active decision (no distance is sailed),
 // then resolve the gamble and any resulting retirement.
 export function applyDecision(state: GameState, choice: TacticalChoice): StepResult {
   const race = getRaceById(state.selectedRaceId);
-  if (!race || !state.progress || !state.weather) {
+  const boat = getBoatById(state.selectedBoatId);
+  if (!race || !boat || !state.progress || !state.weather) {
     throw new Error('Cannot apply a decision outside a race.');
   }
 
@@ -466,16 +455,25 @@ export function applyDecision(state: GameState, choice: TacticalChoice): StepRes
     hullIntegrity: clamp(hull),
   };
 
+  const lostHours = Math.max(extraHours, 0);
   const progress: RaceProgress = {
     ...state.progress,
-    elapsedHours: state.progress.elapsedHours + Math.max(extraHours, 0),
+    elapsedHours: state.progress.elapsedHours + lostHours,
   };
+
+  // While the player handles the decision, the fleet sails on — a costly call
+  // can drop you down the standings.
+  const fleet = state.windField
+    ? advanceFleet(state.fleet ?? [], race, boat, state.windField, state.progress.elapsedHours, lostHours)
+    : (state.fleet ?? []);
+  progress.position = livePosition(fleet, progress.distanceCoveredNm);
 
   const retired = condition.hullIntegrity <= 0 || condition.crewStamina <= 0;
   return {
     progress,
     condition,
     weather: state.weather,
+    fleet,
     event: null,
     log: `${choice.label}.`,
     finished: false,
