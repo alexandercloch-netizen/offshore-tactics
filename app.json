@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "Offshore Tactics",
+    "slug": "offshore-tactics",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "scheme": "offshore-tactics",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#06121F"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.offshoretactics.app"
+    },
+    "android": {
+      "package": "com.offshoretactics.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#06121F"
+      }
+    },
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}
