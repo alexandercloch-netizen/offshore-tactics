@@ -4,6 +4,8 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
 import { colors, fontWeight } from '../theme';
 import HomeScreen from '../screens/HomeScreen';
+import AuthScreen from '../screens/AuthScreen';
+import LeaderboardScreen from '../screens/LeaderboardScreen';
 import RaceSelectScreen from '../screens/RaceSelectScreen';
 import BoatSelectScreen from '../screens/BoatSelectScreen';
 import CrewSelectScreen from '../screens/CrewSelectScreen';
@@ -44,6 +46,16 @@ export const AppNavigator: React.FC = () => {
           name="Home"
           component={HomeScreen}
           options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="Auth"
+          component={AuthScreen}
+          options={{ title: 'Account', presentation: 'modal' }}
+        />
+        <Stack.Screen
+          name="Leaderboard"
+          component={LeaderboardScreen}
+          options={{ title: 'Leaderboard' }}
         />
         <Stack.Screen
           name="RaceSelect"

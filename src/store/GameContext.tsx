@@ -34,6 +34,9 @@ import {
   maybeEvent,
 } from '../engine/gameEngine';
 import { clearState, loadState, saveState } from './storage';
+import { useAuth } from './AuthContext';
+import { loadCloudSave, saveCloud } from '../services/cloudSave';
+import { submitToLeaderboard } from '../services/leaderboard';
 
 const DEFAULT_CONDITION: BoatCondition = {
   hullIntegrity: 100,
@@ -200,30 +203,65 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
   const [state, dispatch] = useReducer(reducer, INITIAL_STATE);
   const [ready, setReady] = React.useState(false);
 
-  // Keep the freshest state available to imperative engine calls.
+  const { user, displayName, configured, loading: authLoading } = useAuth();
+
+  // Keep the freshest state and identity available to imperative calls.
   const stateRef = useRef(state);
   stateRef.current = state;
+  const userRef = useRef(user);
+  userRef.current = user;
+  const displayNameRef = useRef(displayName);
+  displayNameRef.current = displayName;
 
-  // Load persisted state on mount.
+  // Tracks which save "scope" (a user id, or 'local') is currently loaded so
+  // we reload when the signed-in user changes.
+  const loadedScopeRef = useRef<string | null>(null);
+  const cloudSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Load the right save once auth has resolved, and again whenever the user
+  // signs in or out. Cloud save wins for signed-in users; otherwise local.
   useEffect(() => {
+    if (authLoading) return;
+    const scope = user && configured ? user.id : 'local';
+    if (loadedScopeRef.current === scope) return;
+    loadedScopeRef.current = scope;
+
     let mounted = true;
-    loadState().then((saved) => {
-      if (mounted && saved) {
-        dispatch({ type: 'LOAD_STATE', payload: { ...INITIAL_STATE, ...saved } });
+    setReady(false);
+    (async () => {
+      let loaded: GameState | null = null;
+      if (user && configured) {
+        loaded = await loadCloudSave(user.id);
       }
-      if (mounted) setReady(true);
-    });
+      if (!loaded) {
+        loaded = await loadState();
+      }
+      if (!mounted) return;
+      dispatch({
+        type: 'LOAD_STATE',
+        payload: loaded ? { ...INITIAL_STATE, ...loaded } : INITIAL_STATE,
+      });
+      setReady(true);
+    })();
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [user, configured, authLoading]);
 
-  // Persist after every change once loaded.
+  // Persist after every change: always to local cache, and (debounced) to the
+  // cloud when signed in.
   useEffect(() => {
-    if (ready) {
-      saveState(state);
+    if (!ready) return;
+    saveState(state);
+    if (user && configured) {
+      if (cloudSaveTimer.current) clearTimeout(cloudSaveTimer.current);
+      const userId = user.id;
+      const snapshot = state;
+      cloudSaveTimer.current = setTimeout(() => {
+        saveCloud(userId, snapshot);
+      }, 1200);
     }
-  }, [state, ready]);
+  }, [state, ready, user, configured]);
 
   const selectRace = useCallback((raceId: string) => {
     dispatch({ type: 'SELECT_RACE', payload: raceId });
@@ -276,24 +314,45 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
     return maybeEvent(stateRef.current);
   }, []);
 
-  const resolveLeg = useCallback((choice: TacticalChoice | null): LegOutcome => {
-    const current = stateRef.current;
-    const outcome = advanceLeg(current, choice);
-    dispatch({
-      type: 'APPLY_LEG',
-      payload: {
-        progress: outcome.progress,
-        condition: outcome.condition,
-        weather: outcome.weather,
-        log: outcome.log,
-      },
+  // Push a completed race to the global leaderboard when signed in.
+  const publishResult = useCallback((result: RaceResult) => {
+    const currentUser = userRef.current;
+    if (!currentUser || !configured) return;
+    submitToLeaderboard({
+      user_id: currentUser.id,
+      display_name: displayNameRef.current ?? 'Sailor',
+      race_id: result.raceId,
+      race_name: result.raceName,
+      position: result.position,
+      fleet_size: result.fleetSize,
+      elapsed_hours: result.elapsedHours,
+      prize_money: result.prizeMoney,
+      retired: result.retired,
     });
-    if (outcome.finished || outcome.retired) {
-      const result = buildResult(current, outcome);
-      dispatch({ type: 'FINISH_RACE', payload: { result } });
-    }
-    return outcome;
-  }, []);
+  }, [configured]);
+
+  const resolveLeg = useCallback(
+    (choice: TacticalChoice | null): LegOutcome => {
+      const current = stateRef.current;
+      const outcome = advanceLeg(current, choice);
+      dispatch({
+        type: 'APPLY_LEG',
+        payload: {
+          progress: outcome.progress,
+          condition: outcome.condition,
+          weather: outcome.weather,
+          log: outcome.log,
+        },
+      });
+      if (outcome.finished || outcome.retired) {
+        const result = buildResult(current, outcome);
+        dispatch({ type: 'FINISH_RACE', payload: { result } });
+        publishResult(result);
+      }
+      return outcome;
+    },
+    [publishResult]
+  );
 
   const retireRace = useCallback(() => {
     const current = stateRef.current;
@@ -311,7 +370,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
     };
     const result = buildResult(current, outcome);
     dispatch({ type: 'FINISH_RACE', payload: { result } });
-  }, []);
+    publishResult(result);
+  }, [publishResult]);
 
   const prepareNextRace = useCallback(() => {
     dispatch({ type: 'PREPARE_NEXT_RACE' });

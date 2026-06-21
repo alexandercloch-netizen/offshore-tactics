@@ -155,9 +155,26 @@ export interface LegOutcome {
   retired: boolean;
 }
 
+// Global leaderboard row (mirrors the Supabase `leaderboard` table)
+export interface LeaderboardEntry {
+  id?: string;
+  user_id: string;
+  display_name: string;
+  race_id: string;
+  race_name: string;
+  position: number;
+  fleet_size: number;
+  elapsed_hours: number;
+  prize_money: number;
+  retired: boolean;
+  created_at?: string;
+}
+
 // React Navigation route map
 export type RootStackParamList = {
   Home: undefined;
+  Auth: undefined;
+  Leaderboard: undefined;
   RaceSelect: undefined;
   BoatSelect: undefined;
   CrewSelect: undefined;

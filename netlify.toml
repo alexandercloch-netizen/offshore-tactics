@@ -1,0 +1,18 @@
+# Netlify configuration for the Offshore Tactics web build (Expo + react-native-web).
+#
+# Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in
+# Netlify → Site settings → Environment variables so they are inlined at build time.
+# Without them the app still builds and runs in local-only (offline) mode.
+
+[build]
+  command = "npm run build:web"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# Single-page app fallback so deep links / refreshes resolve to the bundle.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

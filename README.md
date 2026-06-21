@@ -44,22 +44,31 @@ device storage via `@react-native-async-storage/async-storage`.
 
 ```
 App.tsx                         App entry: providers + navigation
+netlify.toml                    Netlify build config (web export)
+.env.example                    Supabase env var template
+supabase/schema.sql             Tables + row-level security policies
 src/
   types/index.ts                Shared domain & navigation types
   theme/index.ts                Nautical color palette, spacing, type scale
+  lib/supabase.ts               Supabase client (offline-safe)
   data/                         Static game content
     races.ts boats.ts crew.ts provisions.ts events.ts weather.ts
     index.ts                    Re-exports + lookup helpers
   engine/gameEngine.ts          Core simulation (speed, legs, results)
+  services/
+    cloudSave.ts                Per-user cloud save (Supabase)
+    leaderboard.ts              Submit/fetch global leaderboard
   store/
     storage.ts                  AsyncStorage persistence
-    GameContext.tsx             Reducer-based game state + actions
+    AuthContext.tsx             Supabase auth session + sign in/up/out
+    GameContext.tsx             Reducer state, cloud sync, leaderboard
   navigation/AppNavigator.tsx   Native stack navigator
   components/
     NauticalButton.tsx StatBar.tsx WindIndicator.tsx
     RouteMap.tsx TacticalDecisionModal.tsx
   screens/
-    HomeScreen.tsx RaceSelectScreen.tsx BoatSelectScreen.tsx
+    HomeScreen.tsx AuthScreen.tsx LeaderboardScreen.tsx
+    RaceSelectScreen.tsx BoatSelectScreen.tsx
     CrewSelectScreen.tsx ProvisioningScreen.tsx
     RaceMapScreen.tsx ResultsScreen.tsx
 ```
@@ -81,10 +90,75 @@ npm run web        # run in the browser
 npm run tsc        # type-check the project
 ```
 
+## Backend & deployment (Supabase + Netlify)
+
+Cloud features (sign-in, per-user cloud save, global leaderboard) are powered by
+**Supabase** and the web build is hosted on **Netlify**. Everything degrades
+gracefully: if the Supabase env vars are absent the app still builds and runs in
+local-only (offline) mode, so the site never fails to deploy.
+
+### 1. Set up Supabase
+
+1. Create a project at [supabase.com](https://supabase.com).
+2. In **SQL Editor**, run the contents of [`supabase/schema.sql`](supabase/schema.sql).
+   This creates the `saves` and `leaderboard` tables with row-level security.
+3. Under **Authentication → Providers**, ensure **Email** is enabled. For the
+   smoothest demo you can disable "Confirm email" (Authentication → Settings);
+   otherwise users must confirm via email before their first sign-in.
+4. From **Project Settings → API**, copy the **Project URL** and the **anon
+   public** key.
+
+### 2. Configure environment variables
+
+Both are `EXPO_PUBLIC_*` so they're inlined into the client bundle at build time.
+The anon key is safe to expose — RLS protects the data.
+
+```
+EXPO_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-public-key
+```
+
+- **Local:** copy `.env.example` to `.env` and fill these in.
+- **Netlify:** add both under **Site settings → Environment variables**.
+
+### 3. Deploy to Netlify
+
+The repo includes [`netlify.toml`](netlify.toml):
+
+```toml
+[build]
+  command = "npm run build:web"   # expo export --platform web
+  publish = "dist"
+```
+
+Then:
+
+1. Push this repo to GitHub.
+2. In Netlify, **Add new site → Import an existing project**, pick the repo.
+3. Netlify reads `netlify.toml`, so the build command and publish dir are set
+   automatically. Add the two `EXPO_PUBLIC_*` env vars before the first build.
+4. Deploy. Netlify runs `npm run build:web`, which produces the static `dist/`
+   bundle and serves it.
+
+To build locally and preview the production bundle:
+
+```bash
+npm run build:web
+npx serve dist        # or any static file server
+```
+
+### 4. Supabase auth redirect (web)
+
+Add your Netlify site URL (and `http://localhost:8081` for local web) to
+**Authentication → URL Configuration → Redirect URLs** in Supabase so email
+links resolve back to the app.
+
 ## Tech stack
 
-- Expo SDK 51 / React Native 0.74
+- Expo SDK 51 / React Native 0.74 (web via react-native-web)
 - TypeScript (strict)
 - React Navigation (native stack)
+- Supabase (auth, Postgres cloud save, leaderboard) with row-level security
 - react-native-svg (wind compass & route map)
-- AsyncStorage (persistence)
+- AsyncStorage (local persistence + offline fallback)
+- Hosted on Netlify

@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RootStackParamList } from '../types';
 import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
 import { useGame } from '../store/GameContext';
+import { useAuth } from '../store/AuthContext';
 import { formatDuration } from '../engine/gameEngine';
 import NauticalButton from '../components/NauticalButton';
 
@@ -19,6 +20,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 export const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const { state, prepareNextRace, resetCampaign } = useGame();
+  const { configured, user, displayName, signOut } = useAuth();
   const raceInProgress = !!state.progress;
   const best = state.history.find((r) => r.finished && r.position === 1);
   const wins = state.history.filter((r) => r.finished && r.position === 1).length;
@@ -51,6 +53,26 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
         { paddingTop: insets.top + spacing.xxl, paddingBottom: insets.bottom + spacing.xl },
       ]}
     >
+      {configured ? (
+        <View style={styles.accountBar}>
+          <Text style={styles.accountText}>
+            {user ? `Signed in as ${displayName}` : 'Playing as guest'}
+          </Text>
+          {user ? (
+            <Text style={styles.accountAction} onPress={() => signOut()}>
+              Sign out
+            </Text>
+          ) : (
+            <Text
+              style={styles.accountAction}
+              onPress={() => navigation.navigate('Auth')}
+            >
+              Sign in
+            </Text>
+          )}
+        </View>
+      ) : null}
+
       <View style={styles.hero}>
         <Text style={styles.kicker}>A Sailing Strategy Game</Text>
         <Text style={styles.title}>OFFSHORE</Text>
@@ -99,6 +121,13 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
           variant={raceInProgress ? 'secondary' : 'primary'}
           onPress={startNewCampaign}
         />
+        {configured ? (
+          <NauticalButton
+            label="Leaderboard"
+            variant="secondary"
+            onPress={() => navigation.navigate('Leaderboard')}
+          />
+        ) : null}
         {state.history.length > 0 ? (
           <NauticalButton
             label="Reset Campaign"
@@ -139,6 +168,27 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: spacing.xl,
+  },
+  accountBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.hull,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  accountText: {
+    color: colors.mist,
+    fontSize: fontSize.sm,
+  },
+  accountAction: {
+    color: colors.brassLight,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.bold,
   },
   hero: {
     marginBottom: spacing.xl,
