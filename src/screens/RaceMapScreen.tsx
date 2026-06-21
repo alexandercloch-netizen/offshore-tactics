@@ -32,6 +32,7 @@ import { competitorPoints } from '../engine/fleet';
 import { pressureHint } from '../engine/wind';
 import { EffortMode, RoutingBias } from '../types';
 import RouteMap from '../components/RouteMap';
+import TutorialOverlay from '../components/TutorialOverlay';
 import WindIndicator from '../components/WindIndicator';
 import StatBar from '../components/StatBar';
 import NauticalButton from '../components/NauticalButton';
@@ -44,10 +45,11 @@ const TICK_MS = 150;
 export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const { state, beginRace, tick, decide, retireRace, setStrategy } = useGame();
+  const { state, beginRace, tick, decide, retireRace, setStrategy, markTutorialSeen } = useGame();
   const [activeEvent, setActiveEvent] = useState<GameEvent | null>(null);
   const [activeVmg, setActiveVmg] = useState<VmgPreview | null>(null);
   const [paused, setPaused] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
   const race = getRaceById(state.selectedRaceId);
   const boat = getBoatById(state.selectedBoatId);
@@ -65,6 +67,8 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
   const stateRef = useRef<GameState>(state);
   stateRef.current = state;
   const eventActiveRef = useRef(false);
+  const helpRef = useRef(false);
+  helpRef.current = showHelp;
 
   const goToResults = useCallback(() => {
     navigation.reset({ index: 0, routes: [{ name: 'Results' }] });
@@ -72,11 +76,21 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
 
   const started = !!state.progress;
 
+  // Show the how-to-play overlay automatically on the player's first race.
+  useEffect(() => {
+    if (started && !state.tutorialSeen) setShowHelp(true);
+  }, [started, state.tutorialSeen]);
+
+  const closeHelp = useCallback(() => {
+    setShowHelp(false);
+    if (!stateRef.current.tutorialSeen) markTutorialSeen();
+  }, [markTutorialSeen]);
+
   // The auto-play loop: tick the simulation forward until a decision or finish.
   useEffect(() => {
     if (!started) return undefined;
     const id = setInterval(() => {
-      if (paused || eventActiveRef.current) return;
+      if (paused || eventActiveRef.current || helpRef.current) return;
       const outcome = tickRef.current();
       if (outcome.event) {
         eventActiveRef.current = true;
@@ -258,8 +272,17 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
           variant={paused ? 'primary' : 'secondary'}
           onPress={() => setPaused((p) => !p)}
         />
-        <NauticalButton label="Retire" variant="ghost" onPress={confirmRetire} />
+        <View style={styles.footerRow}>
+          <View style={{ flex: 1 }}>
+            <NauticalButton label="How to Race" variant="ghost" onPress={() => setShowHelp(true)} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <NauticalButton label="Retire" variant="ghost" onPress={confirmRetire} />
+          </View>
+        </View>
       </View>
+
+      <TutorialOverlay visible={showHelp} onClose={closeHelp} />
 
       <TacticalDecisionModal
         visible={!!activeEvent}
@@ -492,6 +515,10 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.hull,
     backgroundColor: colors.deepSea,
+  },
+  footerRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
   },
 });
 

@@ -265,6 +265,7 @@ export interface GameState {
   lastResult?: RaceResult;
   history: RaceResult[];
   eventLog: string[];
+  tutorialSeen?: boolean; // whether the player has seen the race how-to-play
 }
 
 // Outcome returned by the engine after a simulation step.

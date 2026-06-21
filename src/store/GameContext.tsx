@@ -60,6 +60,7 @@ const INITIAL_STATE: GameState = {
   condition: DEFAULT_CONDITION,
   history: [],
   eventLog: [],
+  tutorialSeen: false,
 };
 
 type Action =
@@ -69,6 +70,7 @@ type Action =
   | { type: 'TOGGLE_CREW'; payload: { crewId: string; capacity: number } }
   | { type: 'SET_PROVISION'; payload: { provisionId: string; quantity: number } }
   | { type: 'SET_STRATEGY'; payload: Partial<PlayerStrategy> }
+  | { type: 'SET_TUTORIAL_SEEN' }
   | {
       type: 'BEGIN_RACE';
       payload: {
@@ -145,6 +147,9 @@ function reducer(state: GameState, action: Action): GameState {
     case 'SET_STRATEGY':
       return { ...state, strategy: { ...state.strategy, ...action.payload } };
 
+    case 'SET_TUTORIAL_SEEN':
+      return { ...state, tutorialSeen: true };
+
     case 'BEGIN_RACE':
       return {
         ...state,
@@ -215,6 +220,7 @@ export interface GameContextValue {
   toggleCrew: (crewId: string) => void;
   setProvisionQuantity: (provisionId: string, quantity: number) => void;
   setStrategy: (partial: Partial<PlayerStrategy>) => void;
+  markTutorialSeen: () => void;
   // race lifecycle
   beginRace: () => void;
   tick: () => StepResult;
@@ -330,6 +336,10 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const setStrategy = useCallback((partial: Partial<PlayerStrategy>) => {
     dispatch({ type: 'SET_STRATEGY', payload: partial });
+  }, []);
+
+  const markTutorialSeen = useCallback(() => {
+    dispatch({ type: 'SET_TUTORIAL_SEEN' });
   }, []);
 
   const campaignTotal = useCallback(() => campaignCost(stateRef.current).total, []);
@@ -462,6 +472,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
       toggleCrew,
       setProvisionQuantity,
       setStrategy,
+      markTutorialSeen,
       beginRace,
       tick,
       decide,
@@ -479,6 +490,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
       toggleCrew,
       setProvisionQuantity,
       setStrategy,
+      markTutorialSeen,
       beginRace,
       tick,
       decide,
