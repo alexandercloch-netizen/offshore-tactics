@@ -16,6 +16,7 @@ import {
   StepResult,
   TacticalChoice,
   WeatherCondition,
+  WindField,
 } from '../types';
 import {
   CREW,
@@ -23,7 +24,6 @@ import {
   getBoatById,
   getCrewById,
   getRaceById,
-  pickWeatherForHazard,
 } from '../data';
 import {
   applyDecision,
@@ -35,6 +35,7 @@ import {
   raceDivision,
   stepRace,
 } from '../engine/gameEngine';
+import { createWindField, sampleWind, weatherFromWind } from '../engine/wind';
 import { clearState, loadState, saveState } from './storage';
 import { useAuth } from './AuthContext';
 import { loadCloudSave, saveCloud } from '../services/cloudSave';
@@ -68,6 +69,7 @@ type Action =
         progress: RaceProgress;
         condition: BoatCondition;
         weather: WeatherCondition;
+        windField: WindField;
         cost: number;
       };
     }
@@ -139,6 +141,7 @@ function reducer(state: GameState, action: Action): GameState {
         progress: action.payload.progress,
         condition: action.payload.condition,
         weather: action.payload.weather,
+        windField: action.payload.windField,
         lastResult: undefined,
         eventLog: [],
       };
@@ -162,6 +165,7 @@ function reducer(state: GameState, action: Action): GameState {
         history: [action.payload.result, ...state.history].slice(0, 50),
         progress: undefined,
         weather: undefined,
+        windField: undefined,
       };
 
     case 'PREPARE_NEXT_RACE':
@@ -174,6 +178,7 @@ function reducer(state: GameState, action: Action): GameState {
         provisions: [],
         progress: undefined,
         weather: undefined,
+        windField: undefined,
         condition: DEFAULT_CONDITION,
       };
 
@@ -316,18 +321,22 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
   const beginRace = useCallback(() => {
     const current = stateRef.current;
     const race = getRaceById(current.selectedRaceId);
-    if (!race) return;
+    const boat = getBoatById(current.selectedBoatId);
+    if (!race || !boat) return;
     const crew = current.selectedCrewIds
       .map((id) => getCrewById(id))
       .filter((c): c is NonNullable<typeof c> => Boolean(c));
     const cost = campaignCost(current).total;
-    const weather = pickWeatherForHazard(race.hazard);
+    const windField = createWindField(race);
+    const start = race.waypoints[0];
+    const weather = weatherFromWind(sampleWind(windField, start.lat, start.lon, 0));
     dispatch({
       type: 'BEGIN_RACE',
       payload: {
-        progress: initialProgress(race, current.selectedDivision, weather),
+        progress: initialProgress(race, boat, current.selectedDivision, windField),
         condition: initialCondition(crew, current.provisions),
         weather,
+        windField,
         cost,
       },
     });

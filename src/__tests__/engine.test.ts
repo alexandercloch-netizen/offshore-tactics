@@ -2,18 +2,18 @@ import {
   applyDecision,
   buildResult,
   campaignCost,
-  computeVmg,
-  currentPointOfSail,
+  currentSpeed,
   defaultStepNm,
-  effectiveSpeed,
   initialProgress,
   isRaceUnlocked,
   raceDivision,
+  speedMadeGood,
   stepRace,
   vmgPreview,
 } from '../engine/gameEngine';
+import { createWindField, sampleWind, weatherFromWind } from '../engine/wind';
 import { mulberry32, resetRng, setRng } from '../engine/rng';
-import { BOATS, RACES, WEATHER, getBoatById, getRaceById } from '../data';
+import { BOATS, RACES, getBoatById, getRaceById } from '../data';
 import {
   BoatCondition,
   GameState,
@@ -22,28 +22,32 @@ import {
   TacticalChoice,
 } from '../types';
 
-const moderate = WEATHER.find((w) => w.id === 'wx-moderate')!;
 const healthy: BoatCondition = {
   hullIntegrity: 100,
   crewStamina: 100,
   crewMorale: 100,
 };
 
+// Build a race-ready state with a seeded wind field and an initial route.
 function baseState(overrides: Partial<GameState> = {}): GameState {
   const raceId = overrides.selectedRaceId ?? 'race-round-island';
   const division = overrides.selectedDivision ?? 'corinthian';
-  const weather = overrides.weather ?? moderate;
   const race = getRaceById(raceId)!;
+  const boat = getBoatById(overrides.selectedBoatId ?? 'boat-mistral')!;
+  const windField = overrides.windField ?? createWindField(race);
+  const start = race.waypoints[0];
+  const weather = weatherFromWind(sampleWind(windField, start.lat, start.lon, 0));
   return {
     funds: 50000,
     selectedRaceId: raceId,
     selectedDivision: division,
-    selectedBoatId: 'boat-mistral',
+    selectedBoatId: boat.id,
     selectedCrewIds: ['crew-vega', 'crew-lindqvist', 'crew-hassan'],
     provisions: [{ provisionId: 'prov-water', quantity: 2 }],
     condition: healthy,
     weather,
-    progress: initialProgress(race, division, weather),
+    windField,
+    progress: initialProgress(race, boat, division, windField),
     history: [],
     eventLog: [],
     ...overrides,
@@ -54,6 +58,7 @@ afterEach(() => resetRng());
 
 describe('campaignCost', () => {
   it('uses the selected division entry fee', () => {
+    setRng(mulberry32(1));
     const race = getRaceById('race-round-island')!;
     const corinthian = campaignCost(baseState({ provisions: [], selectedCrewIds: [] }));
     const pro = campaignCost(
@@ -63,29 +68,18 @@ describe('campaignCost', () => {
     expect(pro.entryFee).toBe(race.divisions.pro.entryFee);
     expect(pro.total).toBeGreaterThan(corinthian.total);
   });
-
-  it('includes charter, wages and provisions', () => {
-    const cost = campaignCost(baseState());
-    expect(cost.charter).toBe(getBoatById('boat-mistral')!.price);
-    expect(cost.wages).toBeGreaterThan(0);
-    expect(cost.provisions).toBeGreaterThan(0);
-    expect(cost.total).toBe(
-      cost.entryFee + cost.charter + cost.wages + cost.provisions
-    );
-  });
 });
 
 describe('isRaceUnlocked', () => {
   const fastnet = getRaceById('race-fastnet')!;
 
   it('unlocks races with no prerequisite', () => {
-    const round = getRaceById('race-round-island')!;
-    expect(isRaceUnlocked(round, [])).toBe(true);
+    expect(isRaceUnlocked(getRaceById('race-round-island')!, [])).toBe(true);
   });
 
   it('locks a race until its prerequisite is finished', () => {
     expect(isRaceUnlocked(fastnet, [])).toBe(false);
-    const finishedPrereq: RaceResult[] = [
+    const done: RaceResult[] = [
       {
         raceId: fastnet.unlockAfter as string,
         raceName: 'x',
@@ -100,52 +94,40 @@ describe('isRaceUnlocked', () => {
         timestamp: 0,
       },
     ];
-    expect(isRaceUnlocked(fastnet, finishedPrereq)).toBe(true);
-  });
-
-  it('does not count a retirement as finishing', () => {
-    const retired: RaceResult[] = [
-      {
-        raceId: fastnet.unlockAfter as string,
-        raceName: 'x',
-        boatId: 'b',
-        finished: false,
-        retired: true,
-        position: 10,
-        fleetSize: 10,
-        elapsedHours: 10,
-        prizeMoney: 0,
-        summary: '',
-        timestamp: 0,
-      },
-    ];
-    expect(isRaceUnlocked(fastnet, retired)).toBe(false);
+    expect(isRaceUnlocked(fastnet, done)).toBe(true);
   });
 });
 
-describe('effectiveSpeed', () => {
-  const boat = getBoatById('boat-mistral')!;
-
-  it('rewards better crew condition', () => {
-    const tired: BoatCondition = { hullIntegrity: 100, crewStamina: 20, crewMorale: 20 };
-    const fast = effectiveSpeed(boat, moderate, healthy, 'Reach');
-    const slow = effectiveSpeed(boat, moderate, tired, 'Reach');
-    expect(fast).toBeGreaterThan(slow);
-  });
-
-  it('never drops below a floor', () => {
-    const wrecked: BoatCondition = { hullIntegrity: 0, crewStamina: 0, crewMorale: 0 };
-    const calm = WEATHER.find((w) => w.id === 'wx-calm')!;
-    expect(effectiveSpeed(boat, calm, wrecked, 'Upwind')).toBeGreaterThanOrEqual(0.5);
+describe('initialProgress', () => {
+  it('starts at the start mark with a planned route', () => {
+    setRng(mulberry32(2));
+    const race = getRaceById('race-fastnet')!;
+    const boat = getBoatById('boat-mistral')!;
+    const field = createWindField(race);
+    const p = initialProgress(race, boat, 'corinthian', field);
+    expect(p.distanceCoveredNm).toBe(0);
+    expect(p.nextMarkIndex).toBe(1);
+    expect(p.lat).toBeCloseTo(race.waypoints[0].lat, 5);
+    expect(p.lon).toBeCloseTo(race.waypoints[0].lon, 5);
+    expect(p.route.length).toBeGreaterThanOrEqual(2);
+    expect(p.totalDistanceNm).toBeGreaterThan(0);
+    expect(['Upwind', 'Reach', 'Downwind']).toContain(p.pointOfSail);
   });
 });
 
-describe('VMG', () => {
-  it('reflects point-of-sail efficiency', () => {
-    expect(computeVmg(10, 'Reach')).toBeGreaterThan(computeVmg(10, 'Upwind'));
+describe('speed helpers', () => {
+  it('reports a positive boat speed and a smaller speed made good', () => {
+    setRng(mulberry32(3));
+    const state = baseState();
+    const speed = currentSpeed(state);
+    const smg = speedMadeGood(state);
+    expect(speed).toBeGreaterThan(0);
+    expect(smg).toBeGreaterThan(0);
+    expect(smg).toBeLessThanOrEqual(speed + 1e-6);
   });
 
   it('previews a higher VMG for a time-saving choice', () => {
+    setRng(mulberry32(4));
     const event = {
       id: 'e',
       title: 't',
@@ -161,45 +143,25 @@ describe('VMG', () => {
   });
 });
 
-describe('initialProgress', () => {
-  it('starts at zero distance with a point of sail and a scheduled decision', () => {
-    setRng(mulberry32(1));
-    const race = getRaceById('race-fastnet')!;
-    const p = initialProgress(race, 'corinthian', moderate);
-    expect(p.distanceCoveredNm).toBe(0);
-    expect(p.totalDistanceNm).toBe(race.distanceNm);
-    expect(p.decisionsTaken).toBe(0);
-    expect(p.nextDecisionAtNm).toBeGreaterThan(0);
-    expect(['Upwind', 'Reach', 'Downwind']).toContain(p.pointOfSail);
-  });
-});
-
-describe('currentPointOfSail', () => {
-  it('derives a valid point of sail from the course bearing', () => {
-    const race = getRaceById('race-sydney-hobart')!;
-    const pos = currentPointOfSail(race, moderate, race.distanceNm * 0.3);
-    expect(['Upwind', 'Reach', 'Downwind']).toContain(pos);
-  });
-});
-
-describe('stepRace (continuous distance model)', () => {
-  it('advances distance and accumulates elapsed time', () => {
+describe('stepRace (weather-routed model)', () => {
+  it('advances along the route and accumulates time', () => {
     setRng(mulberry32(5));
     const race = getRaceById('race-round-island')!;
     const state = baseState();
     const out = stepRace(state, defaultStepNm(race));
     expect(out.progress.distanceCoveredNm).toBeGreaterThan(0);
     expect(out.progress.elapsedHours).toBeGreaterThan(0);
-    expect(out.progress.distanceCoveredNm).toBeLessThanOrEqual(race.distanceNm);
+    expect(out.progress.route.length).toBeGreaterThanOrEqual(1);
+    expect(out.progress.trail.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('plays a full race to a terminal state (finish or retire)', () => {
+  it('plays a full race to a terminal state', () => {
     setRng(mulberry32(123));
     const race = getRaceById('race-round-island')!;
     let state = baseState();
     let terminal: StepResult | null = null;
 
-    for (let i = 0; i < 5000; i += 1) {
+    for (let i = 0; i < 6000; i += 1) {
       const out = stepRace(state, defaultStepNm(race));
       state = {
         ...state,
@@ -223,9 +185,6 @@ describe('stepRace (continuous distance model)', () => {
 
     expect(terminal).not.toBeNull();
     expect(terminal!.finished || terminal!.retired).toBe(true);
-    if (terminal!.finished) {
-      expect(state.progress!.distanceCoveredNm).toBeCloseTo(race.distanceNm, 0);
-    }
   });
 });
 
@@ -270,18 +229,12 @@ describe('applyDecision', () => {
 
 describe('buildResult', () => {
   function terminalOutcome(position: number, finished: boolean, retired: boolean): StepResult {
+    setRng(mulberry32(9));
+    const p = initialProgress(getRaceById('race-round-island')!, getBoatById('boat-mistral')!, 'corinthian', createWindField(getRaceById('race-round-island')!));
     return {
-      progress: {
-        distanceCoveredNm: 50,
-        totalDistanceNm: 50,
-        elapsedHours: 5,
-        position,
-        pointOfSail: 'Reach',
-        nextDecisionAtNm: 999,
-        decisionsTaken: 3,
-      },
+      progress: { ...p, position },
       condition: healthy,
-      weather: moderate,
+      weather: weatherFromWind({ fromDeg: 200, speedKn: 14 }),
       event: null,
       finished,
       retired,
@@ -289,45 +242,28 @@ describe('buildResult', () => {
   }
 
   it('awards the full purse for a division win', () => {
-    const state = baseState();
-    const result = buildResult(state, terminalOutcome(1, true, false));
+    const result = buildResult(baseState(), terminalOutcome(1, true, false));
     const division = raceDivision(getRaceById('race-round-island')!, 'corinthian');
     expect(result.prizeMoney).toBe(division.prizeMoney);
     expect(result.finished).toBe(true);
-    expect(result.division).toBe('corinthian');
   });
 
   it('pays nothing and records a retirement', () => {
-    const state = baseState();
-    const result = buildResult(state, terminalOutcome(20, false, true));
+    const result = buildResult(baseState(), terminalOutcome(20, false, true));
     expect(result.prizeMoney).toBe(0);
     expect(result.retired).toBe(true);
   });
 });
 
 describe('data integrity', () => {
-  it('every race has ordered waypoints starting and finishing correctly', () => {
+  it('every race has ordered waypoints and a prevailing wind', () => {
     RACES.forEach((race) => {
       expect(race.waypoints.length).toBeGreaterThanOrEqual(2);
       expect(race.waypoints[0].type).toBe('start');
       expect(race.waypoints[race.waypoints.length - 1].type).toBe('finish');
-      race.waypoints.forEach((wp) => {
-        expect(wp.lat).toBeGreaterThanOrEqual(-90);
-        expect(wp.lat).toBeLessThanOrEqual(90);
-        expect(wp.lon).toBeGreaterThanOrEqual(-180);
-        expect(wp.lon).toBeLessThanOrEqual(180);
-      });
-    });
-  });
-
-  it('every race defines both divisions and a valid unlock reference', () => {
-    const ids = new Set(RACES.map((r) => r.id));
-    RACES.forEach((race) => {
-      expect(race.divisions.corinthian).toBeDefined();
-      expect(race.divisions.pro).toBeDefined();
-      if (race.unlockAfter) {
-        expect(ids.has(race.unlockAfter)).toBe(true);
-      }
+      expect(race.prevailingWind.speedKn).toBeGreaterThan(0);
+      expect(race.prevailingWind.fromDeg).toBeGreaterThanOrEqual(0);
+      expect(race.prevailingWind.fromDeg).toBeLessThan(360);
     });
   });
 

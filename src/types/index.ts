@@ -34,6 +34,44 @@ export interface Waypoint {
   type: WaypointType;
 }
 
+export interface GeoPoint {
+  lat: number;
+  lon: number;
+}
+
+// A wind sample at a point/time: the direction it blows FROM and its speed.
+export interface WindSample {
+  fromDeg: number; // degrees the wind is coming FROM (0 = N)
+  speedKn: number;
+}
+
+// A drifting puff (deltaKn > 0) or hole (deltaKn < 0) in the wind field.
+export interface WindFeature {
+  lat: number;
+  lon: number;
+  radiusNm: number;
+  deltaKn: number;
+  driftDir: number; // bearing the feature drifts toward
+  driftKn: number; // drift speed in knots
+}
+
+// Analytic spatial + temporal wind field for a race. Drives both the boat's
+// speed (via the polar) and the isochrone router; it evolves with elapsed hours
+// and varies across the course, so the optimal route changes through the race.
+export interface WindField {
+  baseDir: number; // prevailing direction FROM
+  baseSpeed: number;
+  shiftAmpDeg: number; // oscillating shift amplitude
+  shiftPeriodH: number;
+  shiftPhase: number;
+  rotateDegPerH: number; // systematic veer/back (e.g. a front passing through)
+  gradientAxisDeg: number; // bearing along which wind speed increases
+  gradientPerNm: number; // knots gained per nm along that axis
+  refLat: number; // gradient reference point (course centre)
+  refLon: number;
+  feature: WindFeature;
+}
+
 export interface Race {
   id: string;
   name: string;
@@ -42,6 +80,7 @@ export interface Race {
   distanceNm: number; // course length in nautical miles (gameplay-tuned)
   difficulty: RaceDifficulty;
   waypoints: Waypoint[]; // real course geometry for the map & bearings
+  prevailingWind: WindSample; // seasonal prevailing wind that anchors the field
   recordTimeHours: number; // course record, used as a pace benchmark
   corinthianRating: number; // 1-5, higher = more accessible to amateur crews
   hazard: HazardKey;
@@ -148,11 +187,22 @@ export interface VmgPreview {
 }
 
 export interface RaceProgress {
-  distanceCoveredNm: number;
-  totalDistanceNm: number;
+  distanceCoveredNm: number; // geometric advance toward the finish
+  totalDistanceNm: number; // geometric course length (mark to mark)
   elapsedHours: number;
   position: number; // current standing in the fleet
-  pointOfSail: PointOfSail; // derived from current course bearing vs wind
+  pointOfSail: PointOfSail; // derived from boat heading vs local wind
+  // Live position & weather-routed track:
+  lat: number;
+  lon: number;
+  heading: number; // current heading (bearing of the active route segment)
+  nextMarkIndex: number; // index of the next mandatory mark to round
+  route: GeoPoint[]; // remaining weather-routed path (route[0] = current pos)
+  trail: GeoPoint[]; // track actually sailed so far
+  routeWindDir: number; // wind direction the current route was planned for
+  routePlannedAtNm: number; // distance covered when the route was last planned
+  windDir: number; // local wind direction FROM at the boat
+  windSpeedKn: number; // local wind speed at the boat
   // Internal scheduling, hidden from the UI:
   nextDecisionAtNm: number; // distance at which the next decision fires
   decisionsTaken: number;
@@ -187,6 +237,7 @@ export interface GameState {
   selectedCrewIds: string[];
   provisions: ProvisionSelection[];
   progress?: RaceProgress;
+  windField?: WindField;
   condition: BoatCondition;
   weather?: WeatherCondition;
   lastResult?: RaceResult;

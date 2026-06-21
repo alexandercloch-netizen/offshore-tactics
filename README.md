@@ -44,11 +44,25 @@ unit-testable:
   the course each tick, accumulating elapsed time from speed. The UI auto-plays
   these ticks; decisions are scheduled at random distances and pause the race.
 - **Real geography.** Each race carries real `waypoints` (`src/engine/geo.ts`
-  does haversine distance, bearings and along-track interpolation). The current
-  **point of sail** is derived from the course bearing vs the wind direction.
-  The chart also draws real **land masses** (`src/data/landmasses.ts`): Natural
-  Earth 1:10m coastlines clipped to each course, with lakes carved out so e.g.
-  Lake Michigan stays water on the Chicago–Mac map.
+  does haversine distance, bearings and along-track interpolation). The chart
+  also draws real **land masses** (`src/data/landmasses.ts`): Natural Earth
+  1:10m coastlines clipped to each course, with lakes carved out so e.g. Lake
+  Michigan stays water on the Chicago–Mac map.
+- **Weather routing (the route follows the wind).** The mandatory marks are
+  fixed by the rules, but the path between them is computed from the wind, the
+  way real navigators route a boat:
+  - **Polars** (`src/engine/polar.ts`): boat speed as a function of true wind
+    angle and speed, with a no-go zone — so you cannot sail straight upwind.
+  - **Wind field** (`src/engine/wind.ts`): a seeded, analytic spatial +
+    temporal field per race (prevailing wind + shifts, a systematic veer, a
+    speed gradient and a drifting puff/hole), flavoured by the race's hazard.
+  - **Isochrone router** (`src/engine/router.ts`): a time-optimal solver that
+    tacks upwind and gybes downwind to the laylines, routing the active leg and
+    rhumb-lining the marks beyond it.
+  - **Dynamic re-routing**: as the field evolves the engine re-plans (on a wind
+    shift, a mark rounding, or periodically), so the displayed track bends and
+    the boat tacks through the race. The **point of sail** is the boat's real
+    heading vs the local wind.
 - **Speed** comes from the boat's base speed, its rating for the current point of
   sail, the weather's modifier, and crew stamina/morale plus hull integrity.
 - **Wear** scales with the fraction of the course sailed and the weather risk;
@@ -68,8 +82,9 @@ npm run build:web # produce the static web bundle
 ```
 
 The engine and data layer are covered by deterministic **Jest** unit tests
-(`src/__tests__/`) using a seeded RNG — geometry, speed/VMG, divisions, unlocks,
-a full simulated race, decisions and result/prize logic. A **GitHub Actions**
+(`src/__tests__/`) using a seeded RNG — geometry, polars, the wind field, the
+isochrone router (upwind legs tack and end on the mark), divisions, unlocks, a
+full simulated race, decisions and result/prize logic. A **GitHub Actions**
 workflow (`.github/workflows/ci.yml`) gates every push and PR on type-check,
 unit tests, and a web-build smoke test.
 
@@ -104,10 +119,13 @@ src/
     races.ts boats.ts crew.ts provisions.ts events.ts weather.ts
     index.ts                    Re-exports + lookup helpers
   engine/
-    gameEngine.ts               Core simulation (distance model, results)
-    geo.ts                      Haversine, bearings, along-track interpolation
+    gameEngine.ts               Core simulation (routed model, results)
+    geo.ts                      Haversine, bearings, projection helpers
+    polar.ts                    Boat polar (speed vs wind angle/strength)
+    wind.ts                     Spatial + temporal wind field
+    router.ts                   Isochrone weather routing
     rng.ts                      Seedable RNG for deterministic tests
-  __tests__/                    Jest unit tests (engine, geo, rng)
+  __tests__/                    Jest unit tests (engine, polar, wind, router, geo, rng)
   services/
     cloudSave.ts                Per-user cloud save (Supabase)
     leaderboard.ts              Submit/fetch global leaderboard

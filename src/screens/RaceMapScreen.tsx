@@ -21,10 +21,10 @@ import { getBoatById, getRaceById } from '../data';
 import { LANDMASSES } from '../data/landmasses';
 import { useGame } from '../store/GameContext';
 import {
-  computeVmg,
-  effectiveSpeed,
+  currentSpeed,
   formatDuration,
   raceDivision,
+  speedMadeGood,
   vmgPreview,
 } from '../engine/gameEngine';
 import RouteMap from '../components/RouteMap';
@@ -134,9 +134,9 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
   const remaining = Math.max(total - covered, 0);
   const pct = total > 0 ? Math.round((covered / total) * 100) : 0;
   const fleetSize = raceDivision(race, state.selectedDivision).fleetSize;
-  const speed = effectiveSpeed(boat, weather, condition, progress.pointOfSail);
-  const etaHours = remaining / speed;
-  const currentVmg = computeVmg(speed, progress.pointOfSail);
+  const speed = currentSpeed(state);
+  const currentVmg = speedMadeGood(state);
+  const etaHours = remaining / Math.max(currentVmg, 0.2);
   const recentLog = state.eventLog.slice(-4).reverse();
 
   return (
@@ -155,7 +155,10 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
 
         <RouteMap
           waypoints={race.waypoints}
-          fraction={total > 0 ? covered / total : 0}
+          route={progress.route}
+          trail={progress.trail}
+          boat={{ lat: progress.lat, lon: progress.lon }}
+          nextMarkIndex={progress.nextMarkIndex}
           land={LANDMASSES[race.id]}
           width={width - spacing.lg * 2 - spacing.sm * 2}
         />

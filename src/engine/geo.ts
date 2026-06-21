@@ -96,6 +96,21 @@ export function pointAtFraction(
   };
 }
 
+// Forward step: the point reached by sailing `distNm` from (lat, lon) on the
+// given compass bearing. Equirectangular approximation — fine for short steps.
+export function movePoint(
+  lat: number,
+  lon: number,
+  bearingDeg: number,
+  distNm: number
+): { lat: number; lon: number } {
+  const brg = toRad(bearingDeg);
+  const dLat = (distNm * Math.cos(brg)) / 60;
+  const cosLat = Math.cos(toRad(lat)) || 1e-6;
+  const dLon = (distNm * Math.sin(brg)) / (60 * cosLat);
+  return { lat: lat + dLat, lon: lon + dLon };
+}
+
 // Smallest absolute angle (0..180) between two compass bearings.
 export function angularDelta(a: number, b: number): number {
   const diff = Math.abs(((a - b + 540) % 360) - 180);

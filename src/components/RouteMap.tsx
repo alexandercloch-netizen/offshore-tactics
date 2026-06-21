@@ -12,14 +12,16 @@ import Svg, {
   Text as SvgText,
 } from 'react-native-svg';
 import { colors, radius, spacing } from '../theme';
-import { Waypoint } from '../types';
+import { GeoPoint, Waypoint } from '../types';
 import { LandPolygon } from '../data/landmasses';
-import { pointAtFraction } from '../engine/geo';
 
 interface RouteMapProps {
-  waypoints: Waypoint[];
-  fraction: number; // 0..1 distance covered along the course
-  land?: LandPolygon[]; // chart land masses ([lon, lat] rings)
+  waypoints: Waypoint[]; // fixed marks (also set the projection bounds)
+  route?: GeoPoint[]; // remaining weather-routed path
+  trail?: GeoPoint[]; // track sailed so far
+  boat?: GeoPoint; // current boat position
+  nextMarkIndex?: number; // for shading rounded marks
+  land?: LandPolygon[];
   width?: number;
   height?: number;
 }
@@ -75,7 +77,10 @@ function landPath(polygon: LandPolygon, project: (lat: number, lon: number) => X
 
 export const RouteMap: React.FC<RouteMapProps> = ({
   waypoints,
-  fraction,
+  route,
+  trail,
+  boat,
+  nextMarkIndex = 0,
   land,
   width = 320,
   height = 200,
@@ -85,28 +90,22 @@ export const RouteMap: React.FC<RouteMapProps> = ({
   }
 
   const project = buildProjector(waypoints, width, height);
-  const points = waypoints.map((w) => project(w.lat, w.lon));
-  const fullPath = pathFrom(points);
-
-  const clamped = Math.max(0, Math.min(1, fraction));
-  const boatTrack = pointAtFraction(waypoints, clamped);
-  const boat = project(boatTrack.lat, boatTrack.lon);
-
-  // Sailed path: waypoints up to the boat's current segment, then the boat.
-  const sailedPoints = points.slice(0, boatTrack.segmentIndex + 1).concat(boat);
-  const sailedPath = pathFrom(sailedPoints);
+  const markPoints = waypoints.map((w) => project(w.lat, w.lon));
+  const routePts = (route ?? []).map((p) => project(p.lat, p.lon));
+  const trailPts = (trail ?? []).map((p) => project(p.lat, p.lon));
+  const boatXY = boat ? project(boat.lat, boat.lon) : null;
 
   return (
     <View style={styles.container}>
       <Svg width={width} height={height}>
         <Defs>
-          <LinearGradient id="sea" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor={colors.navy} />
-            <Stop offset="1" stopColor={colors.abyss} />
-          </LinearGradient>
           <LinearGradient id="land" x1="0" y1="0" x2="0" y2="1">
             <Stop offset="0" stopColor={colors.landHigh} />
             <Stop offset="1" stopColor={colors.land} />
+          </LinearGradient>
+          <LinearGradient id="sea" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor={colors.navy} />
+            <Stop offset="1" stopColor={colors.abyss} />
           </LinearGradient>
           <ClipPath id="frame">
             <Rect x={0} y={0} width={width} height={height} />
@@ -115,29 +114,34 @@ export const RouteMap: React.FC<RouteMapProps> = ({
 
         <Rect x={0} y={0} width={width} height={height} fill="url(#sea)" rx={radius.sm} />
 
-        {land && land.length > 0 ? (
-          <G clipPath="url(#frame)">
-            {land.map((polygon, i) => (
-              <Path
-                key={`land-${i}`}
-                d={landPath(polygon, project)}
-                fill="url(#land)"
-                stroke={colors.coastline}
-                strokeWidth={0.8}
-                fillRule="evenodd"
-              />
-            ))}
-          </G>
-        ) : null}
+        <G clipPath="url(#frame)">
+          {(land ?? []).map((polygon, i) => (
+            <Path
+              key={`land-${i}`}
+              d={landPath(polygon, project)}
+              fill="url(#land)"
+              stroke={colors.coastline}
+              strokeWidth={0.8}
+              fillRule="evenodd"
+            />
+          ))}
 
-        <Path d={fullPath} stroke={colors.slate} strokeWidth={2.5} strokeDasharray="5 5" fill="none" />
-        <Path d={sailedPath} stroke={colors.brassLight} strokeWidth={3.5} fill="none" />
+          {/* Planned weather-routed path still to sail (dashed). */}
+          {routePts.length > 1 ? (
+            <Path d={pathFrom(routePts)} stroke={colors.mist} strokeWidth={2} strokeDasharray="4 5" fill="none" opacity={0.85} />
+          ) : null}
+
+          {/* Track actually sailed, including the tacks (solid). */}
+          {trailPts.length > 1 ? (
+            <Path d={pathFrom(trailPts)} stroke={colors.brassLight} strokeWidth={3} fill="none" />
+          ) : null}
+        </G>
 
         {waypoints.map((wp, i) => {
-          const p = points[i];
+          const p = markPoints[i];
           const isStart = wp.type === 'start';
           const isFinish = wp.type === 'finish';
-          const passed = i <= boatTrack.segmentIndex;
+          const passed = i > 0 && i < nextMarkIndex;
           const r = isStart || isFinish ? 6 : wp.type === 'island' ? 5 : 4;
           const fill = isFinish
             ? colors.signalRed
@@ -157,13 +161,7 @@ export const RouteMap: React.FC<RouteMapProps> = ({
                 strokeWidth={isStart || isFinish ? 1.5 : 1}
               />
               {isStart || isFinish ? (
-                <SvgText
-                  x={p.x}
-                  y={p.y - 9}
-                  fill={colors.mist}
-                  fontSize="9"
-                  textAnchor="middle"
-                >
+                <SvgText x={p.x} y={p.y - 9} fill={colors.mist} fontSize="9" textAnchor="middle">
                   {isStart ? 'START' : 'FINISH'}
                 </SvgText>
               ) : null}
@@ -171,14 +169,9 @@ export const RouteMap: React.FC<RouteMapProps> = ({
           );
         })}
 
-        <Circle
-          cx={boat.x}
-          cy={boat.y}
-          r={5}
-          fill={colors.white}
-          stroke={colors.signalGreen}
-          strokeWidth={3}
-        />
+        {boatXY ? (
+          <Circle cx={boatXY.x} cy={boatXY.y} r={5} fill={colors.white} stroke={colors.signalGreen} strokeWidth={3} />
+        ) : null}
       </Svg>
     </View>
   );
