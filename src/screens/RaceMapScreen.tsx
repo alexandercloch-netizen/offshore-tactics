@@ -18,6 +18,7 @@ import {
 } from '../types';
 import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
 import { getBoatById, getRaceById } from '../data';
+import { LANDMASSES } from '../data/landmasses';
 import { useGame } from '../store/GameContext';
 import {
   computeVmg,
@@ -155,6 +156,7 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
         <RouteMap
           waypoints={race.waypoints}
           fraction={total > 0 ? covered / total : 0}
+          land={LANDMASSES[race.id]}
           width={width - spacing.lg * 2 - spacing.sm * 2}
         />
 

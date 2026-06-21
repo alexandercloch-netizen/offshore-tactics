@@ -46,6 +46,9 @@ unit-testable:
 - **Real geography.** Each race carries real `waypoints` (`src/engine/geo.ts`
   does haversine distance, bearings and along-track interpolation). The current
   **point of sail** is derived from the course bearing vs the wind direction.
+  The chart also draws real **land masses** (`src/data/landmasses.ts`): Natural
+  Earth 1:10m coastlines clipped to each course, with lakes carved out so e.g.
+  Lake Michigan stays water on the Chicago–Mac map.
 - **Speed** comes from the boat's base speed, its rating for the current point of
   sail, the weather's modifier, and crew stamina/morale plus hull integrity.
 - **Wear** scales with the fraction of the course sailed and the weather risk;
@@ -69,6 +72,19 @@ The engine and data layer are covered by deterministic **Jest** unit tests
 a full simulated race, decisions and result/prize logic. A **GitHub Actions**
 workflow (`.github/workflows/ci.yml`) gates every push and PR on type-check,
 unit tests, and a web-build smoke test.
+
+### Regenerating coastlines
+
+`src/data/landmasses.ts` is generated and committed, so the app and CI need no
+network access. To rebuild it (e.g. after changing a course), download the
+public-domain Natural Earth 1:10m sources into `/tmp`
+(`ne_10m_land.json`, `ne_10m_minor_islands.json`, `ne_10m_lakes.json` from
+[martynafford/natural-earth-geojson](https://github.com/martynafford/natural-earth-geojson))
+and run:
+
+```bash
+node scripts/build-coastlines.mjs   # needs the polygon-clipping dev dependency
+```
 
 State is managed with a reducer in `src/store/GameContext.tsx` and persisted to
 device storage via `@react-native-async-storage/async-storage`.

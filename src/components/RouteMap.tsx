@@ -2,19 +2,24 @@ import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import Svg, {
   Circle,
+  ClipPath,
   Defs,
+  G,
   LinearGradient,
   Path,
+  Rect,
   Stop,
   Text as SvgText,
 } from 'react-native-svg';
 import { colors, radius, spacing } from '../theme';
 import { Waypoint } from '../types';
+import { LandPolygon } from '../data/landmasses';
 import { pointAtFraction } from '../engine/geo';
 
 interface RouteMapProps {
   waypoints: Waypoint[];
   fraction: number; // 0..1 distance covered along the course
+  land?: LandPolygon[]; // chart land masses ([lon, lat] rings)
   width?: number;
   height?: number;
 }
@@ -61,9 +66,17 @@ function pathFrom(points: XY[]): string {
     .join(' ');
 }
 
+// Build an even-odd fill path for one land polygon (outer ring + lake holes).
+function landPath(polygon: LandPolygon, project: (lat: number, lon: number) => XY): string {
+  return polygon
+    .map((ring) => pathFrom(ring.map(([lon, lat]) => project(lat, lon))) + ' Z')
+    .join(' ');
+}
+
 export const RouteMap: React.FC<RouteMapProps> = ({
   waypoints,
   fraction,
+  land,
   width = 320,
   height = 200,
 }) => {
@@ -91,7 +104,32 @@ export const RouteMap: React.FC<RouteMapProps> = ({
             <Stop offset="0" stopColor={colors.navy} />
             <Stop offset="1" stopColor={colors.abyss} />
           </LinearGradient>
+          <LinearGradient id="land" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor={colors.landHigh} />
+            <Stop offset="1" stopColor={colors.land} />
+          </LinearGradient>
+          <ClipPath id="frame">
+            <Rect x={0} y={0} width={width} height={height} />
+          </ClipPath>
         </Defs>
+
+        <Rect x={0} y={0} width={width} height={height} fill="url(#sea)" rx={radius.sm} />
+
+        {land && land.length > 0 ? (
+          <G clipPath="url(#frame)">
+            {land.map((polygon, i) => (
+              <Path
+                key={`land-${i}`}
+                d={landPath(polygon, project)}
+                fill="url(#land)"
+                stroke={colors.coastline}
+                strokeWidth={0.8}
+                fillRule="evenodd"
+              />
+            ))}
+          </G>
+        ) : null}
+
         <Path d={fullPath} stroke={colors.slate} strokeWidth={2.5} strokeDasharray="5 5" fill="none" />
         <Path d={sailedPath} stroke={colors.brassLight} strokeWidth={3.5} fill="none" />
 

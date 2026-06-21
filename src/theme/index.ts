@@ -20,6 +20,10 @@ export const colors = {
   overlay: 'rgba(3, 10, 18, 0.85)',
   card: '#0E2236',
   cardBorder: 'rgba(201, 162, 39, 0.30)',
+  // Chart land masses
+  land: '#2C3A2E',
+  landHigh: '#3A4B39',
+  coastline: '#6E8062',
 };
 
 export const spacing = {
