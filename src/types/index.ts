@@ -254,6 +254,7 @@ export interface GameState {
   selectedRaceId?: string;
   selectedDivision: DivisionKey;
   selectedBoatId?: string;
+  ownedBoatIds: string[]; // boats already bought — no charter charged again
   selectedCrewIds: string[];
   provisions: ProvisionSelection[];
   progress?: RaceProgress;

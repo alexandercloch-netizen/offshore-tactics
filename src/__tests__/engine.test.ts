@@ -15,7 +15,15 @@ import {
 import { createWindField, sampleWind, weatherFromWind } from '../engine/wind';
 import { createFleet } from '../engine/fleet';
 import { mulberry32, resetRng, setRng } from '../engine/rng';
-import { BOATS, RACES, getBoatById, getRaceById } from '../data';
+import {
+  BOATS,
+  RACES,
+  STIPEND_FLOOR,
+  STIPEND_TRIGGER,
+  applyStipend,
+  getBoatById,
+  getRaceById,
+} from '../data';
 import {
   BoatCondition,
   GameState,
@@ -40,10 +48,11 @@ function baseState(overrides: Partial<GameState> = {}): GameState {
   const start = race.waypoints[0];
   const weather = weatherFromWind(sampleWind(windField, start.lat, start.lon, 0));
   return {
-    funds: 50000,
+    funds: 250000,
     selectedRaceId: raceId,
     selectedDivision: division,
     selectedBoatId: boat.id,
+    ownedBoatIds: [],
     selectedCrewIds: ['crew-vega', 'crew-lindqvist', 'crew-hassan'],
     provisions: [{ provisionId: 'prov-water', quantity: 2 }],
     condition: healthy,
@@ -71,6 +80,73 @@ describe('campaignCost', () => {
     expect(corinthian.entryFee).toBe(race.divisions.corinthian.entryFee);
     expect(pro.entryFee).toBe(race.divisions.pro.entryFee);
     expect(pro.total).toBeGreaterThan(corinthian.total);
+  });
+
+  it('charges boat charter only the first time, then it is owned', () => {
+    setRng(mulberry32(1));
+    const boat = getBoatById('boat-mistral')!;
+    const firstTime = campaignCost(baseState({ ownedBoatIds: [] }));
+    const owned = campaignCost(baseState({ ownedBoatIds: [boat.id] }));
+    expect(firstTime.charter).toBe(boat.price);
+    expect(owned.charter).toBe(0);
+    expect(owned.total).toBe(firstTime.total - boat.price);
+  });
+});
+
+describe('economy sustainability', () => {
+  it('recoups operating costs on a finish but not the boat purchase', () => {
+    setRng(mulberry32(1));
+    const state = baseState({ ownedBoatIds: ['boat-mistral'] }); // boat already owned
+    const cost = campaignCost(state);
+    const operating = cost.entryFee + cost.wages + cost.provisions;
+    const p = initialProgress(
+      getRaceById(state.selectedRaceId!)!,
+      getBoatById(state.selectedBoatId!)!,
+      'corinthian',
+      state.windField!
+    );
+    const finish: StepResult = {
+      progress: { ...p, position: 6 },
+      condition: healthy,
+      weather: state.weather!,
+      fleet: [],
+      event: null,
+      finished: true,
+      retired: false,
+    };
+    const result = buildResult(state, finish);
+    // A finish returns at least ~90% of the running costs (plus any prize).
+    expect(result.prizeMoney).toBeGreaterThanOrEqual(Math.round(operating * 0.9));
+  });
+
+  it('pays nothing when you retire', () => {
+    setRng(mulberry32(1));
+    const state = baseState({ ownedBoatIds: ['boat-mistral'] });
+    const p = initialProgress(
+      getRaceById(state.selectedRaceId!)!,
+      getBoatById(state.selectedBoatId!)!,
+      'corinthian',
+      state.windField!
+    );
+    const dnf: StepResult = {
+      progress: { ...p, position: 30 },
+      condition: healthy,
+      weather: state.weather!,
+      fleet: [],
+      event: null,
+      finished: false,
+      retired: true,
+    };
+    expect(buildResult(state, dnf).prizeMoney).toBe(0);
+  });
+});
+
+describe('applyStipend', () => {
+  it('tops a dry chest up to the floor but leaves a healthy one alone', () => {
+    expect(applyStipend(0)).toBe(STIPEND_FLOOR);
+    expect(applyStipend(STIPEND_TRIGGER - 1)).toBe(STIPEND_FLOOR);
+    expect(applyStipend(STIPEND_TRIGGER + 1)).toBe(STIPEND_TRIGGER + 1);
+    expect(applyStipend(500000)).toBe(500000);
   });
 });
 
@@ -268,10 +344,11 @@ describe('buildResult', () => {
     };
   }
 
-  it('awards the full purse for a division win', () => {
+  it('awards the full purse (plus operating recoup) for a division win', () => {
     const result = buildResult(baseState(), terminalOutcome(1, true, false));
     const division = raceDivision(getRaceById('race-round-island')!, 'corinthian');
-    expect(result.prizeMoney).toBe(division.prizeMoney);
+    // Winnings include the full purse and the finisher recoup on top.
+    expect(result.prizeMoney).toBeGreaterThan(division.prizeMoney);
     expect(result.finished).toBe(true);
   });
 

@@ -121,7 +121,9 @@ export function campaignCost(state: GameState): CampaignCost {
   const race = getRaceById(state.selectedRaceId);
   const boat = getBoatById(state.selectedBoatId);
   const entryFee = race ? raceDivision(race, state.selectedDivision).entryFee : 0;
-  const charter = boat ? boat.price : 0;
+  // Boats are bought once and then owned; no charter the next time you race one.
+  const owned = boat ? state.ownedBoatIds?.includes(boat.id) : false;
+  const charter = boat && !owned ? boat.price : 0;
   const wages = crewWageTotal(state.selectedCrewIds);
   const provisions = provisionCost(state.provisions);
   return {
@@ -511,12 +513,15 @@ export function applyDecision(state: GameState, choice: TacticalChoice): StepRes
 
 function prizeForPosition(division: RaceDivision, position: number): number {
   if (position === 1) return division.prizeMoney;
-  if (position === 2) return Math.round(division.prizeMoney * 0.55);
-  if (position === 3) return Math.round(division.prizeMoney * 0.3);
-  if (position <= Math.ceil(division.fleetSize / 2)) {
-    return Math.round(division.prizeMoney * 0.1);
+  if (position === 2) return Math.round(division.prizeMoney * 0.6);
+  if (position === 3) return Math.round(division.prizeMoney * 0.4);
+  if (position <= Math.ceil(division.fleetSize / 3)) {
+    return Math.round(division.prizeMoney * 0.2);
   }
-  return 0;
+  if (position <= Math.ceil(division.fleetSize / 2)) {
+    return Math.round(division.prizeMoney * 0.12);
+  }
+  return Math.round(division.prizeMoney * 0.05); // every finisher earns something
 }
 
 function ordinal(n: number): string {
@@ -541,7 +546,13 @@ export function buildResult(state: GameState, outcome: StepResult): RaceResult {
   const finished = outcome.finished;
   const retired = outcome.retired;
   const position = retired ? division.fleetSize : outcome.progress.position;
-  const prizeMoney = finished ? prizeForPosition(division, position) : 0;
+  // Finishing recoups most of your running costs (entry, wages, provisions —
+  // not the one-off boat purchase); retiring forfeits them. Position prizes are
+  // upside on top, so a well-sailed race is sustainable rather than a sure loss.
+  const cost = campaignCost(state);
+  const operating = cost.entryFee + cost.wages + cost.provisions;
+  const sponsor = finished ? Math.round(operating * 0.9) : 0;
+  const prizeMoney = finished ? sponsor + prizeForPosition(division, position) : 0;
 
   let summary: string;
   if (retired) {
