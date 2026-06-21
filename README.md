@@ -69,6 +69,14 @@ unit-testable:
   faster in the pro division. Your **standing is your real rank** in the fleet,
   it updates live on the chart, and a costly tactical decision lets the fleet
   sail past you. Manage the boat well or you'll drop down the order.
+- **Interactive tactics.** Two dials you control live during the race:
+  - **Effort** — *Conserve / Cruise / Push*. Push sails ~8% faster but wears the
+    crew and hull harder and raises incident risk; Conserve nurses the boat home.
+  - **Routing bias** — *Bank Left / Optimal / Bank Right*. Banking commits the
+    route to a side of the course via a strategic waypoint. The autopilot only
+    routes on the wind as it is *now*, so reading the **pressure hint** ("more
+    breeze to the NW") and banking into a developing shift or puff can beat the
+    optimizer — or cost you if you call it wrong.
 - **Speed** comes from the boat's base speed, its rating for the current point of
   sail, the weather's modifier, and crew stamina/morale plus hull integrity.
 - **Wear** scales with the fraction of the course sailed and the weather risk;

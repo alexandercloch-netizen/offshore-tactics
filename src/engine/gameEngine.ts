@@ -6,12 +6,15 @@ import {
   GameEvent,
   GameState,
   GeoPoint,
+  EffortMode,
+  PlayerStrategy,
   Provision,
   ProvisionSelection,
   Race,
   RaceDivision,
   RaceProgress,
   RaceResult,
+  RoutingBias,
   StepResult,
   TacticalChoice,
   VmgPreview,
@@ -62,6 +65,15 @@ const DECISION_STRETCH = 1 / 12;
 // Re-route when the local wind has shifted this much from the planned route.
 const REROUTE_SHIFT_DEG = 12;
 const TRAIL_CAP = 400;
+
+export const DEFAULT_STRATEGY: PlayerStrategy = { bias: 0, effort: 'cruise' };
+// Effort dial: speed multiplier and wear multiplier per mode.
+const EFFORT_SPEED: Record<EffortMode, number> = { conserve: 0.93, cruise: 1, push: 1.08 };
+const EFFORT_WEAR: Record<EffortMode, number> = { conserve: 0.7, cruise: 1, push: 1.6 };
+
+function strategyOf(state: GameState): PlayerStrategy {
+  return state.strategy ?? DEFAULT_STRATEGY;
+}
 
 export function defaultStepNm(race: Race): number {
   return Math.max(race.distanceNm * STEP_FRACTION, 0.5);
@@ -174,14 +186,15 @@ export function initialProgress(
   race: Race,
   boat: Boat,
   division: DivisionKey,
-  field: WindField
+  field: WindField,
+  bias: RoutingBias = 0
 ): RaceProgress {
   const fleetSize = raceDivision(race, division).fleetSize;
   const start = race.waypoints[0];
   const pos: GeoPoint = { lat: start.lat, lon: start.lon };
   const total = courseLengthNm(race.waypoints);
   const wind = sampleWind(field, pos.lat, pos.lon, 0);
-  const route = planRoute(boat, field, pos, race.waypoints, 1, 0);
+  const route = planRoute(boat, field, pos, race.waypoints, 1, 0, bias);
   const heading = route.length > 1 ? brg(route[0], route[1]) : 0;
   const firstDecision =
     rndRange(FIRST_DECISION_MIN, FIRST_DECISION_MAX) * race.distanceNm;
@@ -199,6 +212,7 @@ export function initialProgress(
     trail: [pos],
     routeWindDir: wind.fromDeg,
     routePlannedAtNm: 0,
+    routeBias: bias,
     windDir: wind.fromDeg,
     windSpeedKn: wind.speedKn,
     nextDecisionAtNm: firstDecision,
@@ -220,21 +234,25 @@ export function boatSpeedFor(
   boat: Boat,
   condition: BoatCondition,
   heading: number,
-  wind: WindSample
+  wind: WindSample,
+  effortMul = 1
 ): number {
   const twa = angularDelta(heading, wind.fromDeg);
-  return Math.max(polarSpeed(boat, twa, wind.speedKn) * conditionFactor(condition), 0.4);
+  return Math.max(polarSpeed(boat, twa, wind.speedKn) * conditionFactor(condition) * effortMul, 0.4);
 }
 
-// Boat speed right now, from the live progress + condition.
+// Boat speed right now, from the live progress + condition + effort dial.
 export function currentSpeed(state: GameState): number {
   const boat = getBoatById(state.selectedBoatId);
   if (!boat || !state.progress) return 0;
   const p = state.progress;
-  return boatSpeedFor(boat, state.condition, p.heading, {
-    fromDeg: p.windDir,
-    speedKn: p.windSpeedKn,
-  });
+  return boatSpeedFor(
+    boat,
+    state.condition,
+    p.heading,
+    { fromDeg: p.windDir, speedKn: p.windSpeedKn },
+    EFFORT_SPEED[strategyOf(state).effort]
+  );
 }
 
 // Speed actually made good toward the next mark (the component of boat speed
@@ -319,9 +337,11 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
   const field = state.windField;
   const prev = state.progress;
   const total = prev.totalDistanceNm;
+  const strategy = strategyOf(state);
+  const wearMul = EFFORT_WEAR[strategy.effort];
 
   const wind = sampleWind(field, prev.lat, prev.lon, prev.elapsedHours);
-  const speed = boatSpeedFor(boat, state.condition, prev.heading, wind);
+  const speed = boatSpeedFor(boat, state.condition, prev.heading, wind, EFFORT_SPEED[strategy.effort]);
   const dtHours = stepNm / speed;
 
   const adv = advanceAlongRoute(prev.route, stepNm);
@@ -345,9 +365,9 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
 
   const weather = weatherFromWind(wind);
   const condition: BoatCondition = {
-    crewStamina: clamp(state.condition.crewStamina - df * (40 + weather.riskModifier * 120)),
+    crewStamina: clamp(state.condition.crewStamina - df * (40 + weather.riskModifier * 120) * wearMul),
     crewMorale: clamp(state.condition.crewMorale - df * (10 + weather.riskModifier * 60)),
-    hullIntegrity: clamp(state.condition.hullIntegrity - df * (8 + weather.riskModifier * 120)),
+    hullIntegrity: clamp(state.condition.hullIntegrity - df * (8 + weather.riskModifier * 120) * wearMul),
   };
 
   const retired = condition.hullIntegrity <= 0 || condition.crewStamina <= 0;
@@ -359,17 +379,21 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
   let route = adv.route;
   let routeWindDir = prev.routeWindDir;
   let routePlannedAtNm = prev.routePlannedAtNm;
+  let routeBias = prev.routeBias;
   const movedSincePlan = distanceCoveredNm - prev.routePlannedAtNm;
   const shifted = angularDelta(wind.fromDeg, prev.routeWindDir) > REROUTE_SHIFT_DEG;
+  const biasChanged = strategy.bias !== prev.routeBias;
   const wantReroute =
     rounded ||
     route.length < 2 ||
+    biasChanged ||
     (shifted && movedSincePlan > total * 0.03) ||
     movedSincePlan > total * 0.1;
   if (!finished && !retired && nextMarkIndex < marks.length && wantReroute) {
-    route = planRoute(boat, field, adv.pos, marks, nextMarkIndex, elapsedHours);
+    route = planRoute(boat, field, adv.pos, marks, nextMarkIndex, elapsedHours, strategy.bias);
     routeWindDir = wind.fromDeg;
     routePlannedAtNm = distanceCoveredNm;
+    routeBias = strategy.bias;
   }
   const heading = route.length > 1 ? brg(route[0], route[1]) : adv.heading;
 
@@ -387,6 +411,7 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
     trail: appendTrail(prev.trail, adv.pos),
     routeWindDir,
     routePlannedAtNm,
+    routeBias,
     windDir: wind.fromDeg,
     windSpeedKn: wind.speedKn,
     nextDecisionAtNm: prev.nextDecisionAtNm,
@@ -439,9 +464,10 @@ export function applyDecision(state: GameState, choice: TacticalChoice): StepRes
   let hull = state.condition.hullIntegrity + choice.hullDelta;
   let extraHours = choice.timeDelta;
 
-  // A demoralized crew is more likely to bungle a bold call.
+  // A demoralized crew — or a boat being pushed hard — is more likely to bungle.
   const moralePenalty = state.condition.crewMorale < 40 ? 0.1 : 0;
-  if (rnd() < choice.risk + moralePenalty) {
+  const pushPenalty = strategyOf(state).effort === 'push' ? 0.05 : 0;
+  if (rnd() < choice.risk + moralePenalty + pushPenalty) {
     extraHours += 0.6 + state.weather.riskModifier;
     hull -= 8;
     morale -= 5;

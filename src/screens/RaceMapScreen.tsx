@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -28,6 +29,8 @@ import {
   vmgPreview,
 } from '../engine/gameEngine';
 import { competitorPoints } from '../engine/fleet';
+import { pressureHint } from '../engine/wind';
+import { EffortMode, RoutingBias } from '../types';
 import RouteMap from '../components/RouteMap';
 import WindIndicator from '../components/WindIndicator';
 import StatBar from '../components/StatBar';
@@ -41,7 +44,7 @@ const TICK_MS = 150;
 export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const { state, beginRace, tick, decide, retireRace } = useGame();
+  const { state, beginRace, tick, decide, retireRace, setStrategy } = useGame();
   const [activeEvent, setActiveEvent] = useState<GameEvent | null>(null);
   const [activeVmg, setActiveVmg] = useState<VmgPreview | null>(null);
   const [paused, setPaused] = useState(false);
@@ -139,6 +142,11 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
   const currentVmg = speedMadeGood(state);
   const etaHours = remaining / Math.max(currentVmg, 0.2);
   const recentLog = state.eventLog.slice(-4).reverse();
+  const strategy = state.strategy;
+  const hint =
+    state.windField !== undefined
+      ? pressureHint(state.windField, progress.lat, progress.lon, progress.elapsedHours)
+      : null;
 
   return (
     <View style={styles.screen}>
@@ -193,6 +201,39 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
         </View>
 
         <View style={styles.panel}>
+          <View style={styles.tacticsHeader}>
+            <Text style={styles.panelTitle}>Tactics</Text>
+            {hint ? (
+              <Text style={styles.hint}>
+                {hint.strong ? 'More breeze' : 'Slightly more breeze'} to the {hint.compass}
+              </Text>
+            ) : null}
+          </View>
+
+          <Text style={styles.tacticsLabel}>Effort</Text>
+          <Segmented<EffortMode>
+            value={strategy.effort}
+            options={[
+              { value: 'conserve', label: 'Conserve' },
+              { value: 'cruise', label: 'Cruise' },
+              { value: 'push', label: 'Push' },
+            ]}
+            onSelect={(effort) => setStrategy({ effort })}
+          />
+
+          <Text style={[styles.tacticsLabel, { marginTop: spacing.sm }]}>Routing</Text>
+          <Segmented<RoutingBias>
+            value={strategy.bias}
+            options={[
+              { value: -1, label: 'Bank Left' },
+              { value: 0, label: 'Optimal' },
+              { value: 1, label: 'Bank Right' },
+            ]}
+            onSelect={(bias) => setStrategy({ bias })}
+          />
+        </View>
+
+        <View style={styles.panel}>
           <Text style={styles.panelTitle}>Boat & Crew</Text>
           <StatBar label="Hull Integrity" value={condition.hullIntegrity} />
           <StatBar label="Crew Stamina" value={condition.crewStamina} />
@@ -236,6 +277,31 @@ const Metric: React.FC<{ label: string; value: string }> = ({ label, value }) =>
     <Text style={styles.metricLabel}>{label}</Text>
   </View>
 );
+
+interface SegmentedProps<T> {
+  value: T;
+  options: { value: T; label: string }[];
+  onSelect: (value: T) => void;
+}
+
+function Segmented<T extends string | number>({ value, options, onSelect }: SegmentedProps<T>) {
+  return (
+    <View style={styles.segmented}>
+      {options.map((opt) => {
+        const active = opt.value === value;
+        return (
+          <Pressable
+            key={String(opt.value)}
+            onPress={() => onSelect(opt.value)}
+            style={[styles.segment, active && styles.segmentActive]}
+          >
+            <Text style={[styles.segmentLabel, active && styles.segmentLabelActive]}>{opt.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
 
 const styles = StyleSheet.create({
   screen: {
@@ -376,6 +442,49 @@ const styles = StyleSheet.create({
     color: colors.mist,
     fontSize: fontSize.sm,
     lineHeight: 20,
+  },
+  tacticsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  hint: {
+    color: colors.signalGreen,
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.bold,
+  },
+  tacticsLabel: {
+    color: colors.slate,
+    fontSize: fontSize.xs,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: spacing.xs,
+  },
+  segmented: {
+    flexDirection: 'row',
+    backgroundColor: colors.navy,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.hull,
+    overflow: 'hidden',
+  },
+  segment: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+  },
+  segmentActive: {
+    backgroundColor: colors.hull,
+  },
+  segmentLabel: {
+    color: colors.mist,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.medium,
+  },
+  segmentLabelActive: {
+    color: colors.brassLight,
+    fontWeight: fontWeight.bold,
   },
   footer: {
     padding: spacing.lg,

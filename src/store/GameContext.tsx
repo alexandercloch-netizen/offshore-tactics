@@ -15,6 +15,7 @@ import {
   RaceResult,
   StepResult,
   Competitor,
+  PlayerStrategy,
   TacticalChoice,
   WeatherCondition,
   WindField,
@@ -27,6 +28,7 @@ import {
   getRaceById,
 } from '../data';
 import {
+  DEFAULT_STRATEGY,
   applyDecision,
   buildResult,
   campaignCost,
@@ -54,6 +56,7 @@ const INITIAL_STATE: GameState = {
   selectedDivision: 'corinthian',
   selectedCrewIds: [],
   provisions: [],
+  strategy: DEFAULT_STRATEGY,
   condition: DEFAULT_CONDITION,
   history: [],
   eventLog: [],
@@ -65,6 +68,7 @@ type Action =
   | { type: 'SELECT_BOAT'; payload: string }
   | { type: 'TOGGLE_CREW'; payload: { crewId: string; capacity: number } }
   | { type: 'SET_PROVISION'; payload: { provisionId: string; quantity: number } }
+  | { type: 'SET_STRATEGY'; payload: Partial<PlayerStrategy> }
   | {
       type: 'BEGIN_RACE';
       payload: {
@@ -138,10 +142,14 @@ function reducer(state: GameState, action: Action): GameState {
       };
     }
 
+    case 'SET_STRATEGY':
+      return { ...state, strategy: { ...state.strategy, ...action.payload } };
+
     case 'BEGIN_RACE':
       return {
         ...state,
         funds: state.funds - action.payload.cost,
+        strategy: DEFAULT_STRATEGY,
         progress: action.payload.progress,
         condition: action.payload.condition,
         weather: action.payload.weather,
@@ -206,6 +214,7 @@ export interface GameContextValue {
   selectBoat: (boatId: string) => void;
   toggleCrew: (crewId: string) => void;
   setProvisionQuantity: (provisionId: string, quantity: number) => void;
+  setStrategy: (partial: Partial<PlayerStrategy>) => void;
   // race lifecycle
   beginRace: () => void;
   tick: () => StepResult;
@@ -318,6 +327,10 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
     },
     []
   );
+
+  const setStrategy = useCallback((partial: Partial<PlayerStrategy>) => {
+    dispatch({ type: 'SET_STRATEGY', payload: partial });
+  }, []);
 
   const campaignTotal = useCallback(() => campaignCost(stateRef.current).total, []);
 
@@ -448,6 +461,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
       selectBoat,
       toggleCrew,
       setProvisionQuantity,
+      setStrategy,
       beginRace,
       tick,
       decide,
@@ -464,6 +478,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
       selectBoat,
       toggleCrew,
       setProvisionQuantity,
+      setStrategy,
       beginRace,
       tick,
       decide,

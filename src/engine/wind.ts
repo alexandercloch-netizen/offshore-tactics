@@ -100,6 +100,41 @@ export function sampleWind(field: WindField, lat: number, lon: number, hours: nu
   return { fromDeg: norm360(dir), speedKn: Math.max(2, Math.min(50, speed)) };
 }
 
+const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+
+export interface PressureHint {
+  bearing: number; // direction toward stronger wind
+  compass: string;
+  strong: boolean; // whether the gradient is pronounced enough to chase
+}
+
+// Where is the breeze building? Combines the field's speed gradient with the
+// pull toward a nearby puff (or away from a hole), to hint which side to bank.
+export function pressureHint(field: WindField, lat: number, lon: number, hours: number): PressureHint {
+  // Gradient contribution (a unit vector along the +speed axis).
+  const ga = toRad(field.gradientAxisDeg);
+  let east = Math.sin(ga) * Math.sign(field.gradientPerNm) * Math.abs(field.gradientPerNm) * 100;
+  let north = Math.cos(ga) * Math.sign(field.gradientPerNm) * Math.abs(field.gradientPerNm) * 100;
+
+  // Feature contribution: toward a puff, away from a hole.
+  const featPos = movePoint(field.feature.lat, field.feature.lon, field.feature.driftDir, field.feature.driftKn * hours);
+  const dNorth = (featPos.lat - lat) * 60;
+  const dEast = (featPos.lon - lon) * 60 * Math.cos(toRad(lat));
+  const dist = Math.hypot(dNorth, dEast) || 1;
+  const pull = (field.feature.deltaKn / Math.max(dist, 10)) * 30;
+  north += (dNorth / dist) * pull;
+  east += (dEast / dist) * pull;
+
+  const magnitude = Math.hypot(north, east);
+  const bearing = (Math.atan2(east, north) * 180) / Math.PI;
+  const norm = ((bearing % 360) + 360) % 360;
+  return {
+    bearing: norm,
+    compass: COMPASS[Math.round(norm / 45) % 8],
+    strong: magnitude > 1.2,
+  };
+}
+
 // Map a wind sample onto the nearest descriptive WeatherCondition (for the
 // compass, wear and decision risk), keeping the field's exact local direction.
 export function weatherFromWind(sample: WindSample): WeatherCondition {

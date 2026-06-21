@@ -75,4 +75,26 @@ describe('planRoute', () => {
     const finish = marks[marks.length - 1];
     expect(haversineNm(end.lat, end.lon, finish.lat, finish.lon)).toBeLessThan(1);
   });
+
+  it('banks left vs right to opposite sides of the rhumb line', () => {
+    const race = getRaceById('race-newport-bermuda')!;
+    const marks = race.waypoints;
+    const from: GeoPoint = { lat: marks[0].lat, lon: marks[0].lon };
+    const field = steady(225, 15);
+
+    const left = planRoute(boat, field, from, marks, 1, 0, -1);
+    const right = planRoute(boat, field, from, marks, 1, 0, 1);
+
+    // Sample the routes a third of the way along and check they diverge.
+    const lMid = left[Math.floor(left.length / 3)];
+    const rMid = right[Math.floor(right.length / 3)];
+    expect(haversineNm(lMid.lat, lMid.lon, rMid.lat, rMid.lon)).toBeGreaterThan(5);
+
+    // Both still finish at the last mark.
+    const finish = marks[marks.length - 1];
+    for (const route of [left, right]) {
+      const end = route[route.length - 1];
+      expect(haversineNm(end.lat, end.lon, finish.lat, finish.lon)).toBeLessThan(1);
+    }
+  });
 });

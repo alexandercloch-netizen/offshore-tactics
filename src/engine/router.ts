@@ -1,4 +1,4 @@
-import { Boat, GeoPoint, Waypoint, WindField } from '../types';
+import { Boat, GeoPoint, RoutingBias, Waypoint, WindField } from '../types';
 import { angularDelta, bearing, haversineNm, movePoint } from './geo';
 import { polarSpeed } from './polar';
 import { sampleWind } from './wind';
@@ -71,12 +71,13 @@ export function isochroneLeg(
   const dt = Math.max(0.05, Math.min(4, direct / boat.baseSpeed / 22));
   let frontier: RNode[] = [{ lat: from.lat, lon: from.lon, parent: null }];
 
+  // The autopilot routes on the wind as it is *now* (a snapshot), not how it
+  // will evolve — leaving room for the player to out-think it with the bias dial.
   for (let step = 0; step < MAX_STEPS; step += 1) {
-    const t = startHours + step * dt;
     const next: RNode[] = [];
 
     for (const node of frontier) {
-      const wind = sampleWind(field, node.lat, node.lon, t);
+      const wind = sampleWind(field, node.lat, node.lon, startHours);
       const brgDest = bearing(node.lat, node.lon, to.lat, to.lon);
       for (let h = -HEADING_SPREAD; h <= HEADING_SPREAD; h += HEADING_STEP) {
         const heading = (brgDest + h + 360) % 360;
@@ -94,7 +95,7 @@ export function isochroneLeg(
     // Can any frontier node fetch the mark within the next step?
     for (const node of frontier) {
       const d = haversineNm(node.lat, node.lon, to.lat, to.lon);
-      const wind = sampleWind(field, node.lat, node.lon, t + dt);
+      const wind = sampleWind(field, node.lat, node.lon, startHours);
       const brg = bearing(node.lat, node.lon, to.lat, to.lon);
       const sp = polarSpeed(boat, angularDelta(brg, wind.fromDeg), wind.speedKn);
       if (sp > 0.2 && d <= sp * dt * 1.1) {
@@ -119,19 +120,39 @@ export function isochroneLeg(
 // Plan the remaining route: isochrone-route the active leg (current position to
 // the next mark), then run rhumb lines through the remaining mandatory marks
 // (those refine when the boat reaches them). Marks stay fixed by the rules.
+//
+// `bias` lets the player commit to a side of the course: the active leg is then
+// routed via a strategic waypoint offset perpendicular to the rhumb line, so
+// the boat banks left (-1) or right (+1) and lives with the wind it finds there.
 export function planRoute(
   boat: Boat,
   field: WindField,
   from: GeoPoint,
   marks: Waypoint[],
   nextMarkIndex: number,
-  startHours: number
+  startHours: number,
+  bias: RoutingBias = 0
 ): GeoPoint[] {
   if (nextMarkIndex >= marks.length) return [from];
   const next = marks[nextMarkIndex];
-  const leg = isochroneLeg(boat, field, from, { lat: next.lat, lon: next.lon }, startHours);
+  const dest = { lat: next.lat, lon: next.lon };
   const rest: GeoPoint[] = marks
     .slice(nextMarkIndex + 1)
     .map((m) => ({ lat: m.lat, lon: m.lon }));
-  return [...leg, ...rest];
+
+  if (bias === 0) {
+    return [...isochroneLeg(boat, field, from, dest, startHours), ...rest];
+  }
+
+  const legDist = haversineNm(from.lat, from.lon, dest.lat, dest.lon);
+  const offsetNm = Math.max(5, Math.min(legDist * 0.18, 60));
+  const courseBearing = bearing(from.lat, from.lon, dest.lat, dest.lon);
+  // A point ~45% up the leg, shoved out to the chosen side.
+  const midLat = from.lat + (dest.lat - from.lat) * 0.45;
+  const midLon = from.lon + (dest.lon - from.lon) * 0.45;
+  const strategic = movePoint(midLat, midLon, courseBearing + bias * 90, offsetNm);
+
+  const toStrategic = isochroneLeg(boat, field, from, strategic, startHours);
+  const toMark = isochroneLeg(boat, field, strategic, dest, startHours);
+  return [...toStrategic, ...toMark.slice(1), ...rest];
 }

@@ -1,4 +1,5 @@
 import {
+  DEFAULT_STRATEGY,
   applyDecision,
   buildResult,
   campaignCost,
@@ -49,6 +50,7 @@ function baseState(overrides: Partial<GameState> = {}): GameState {
     weather,
     windField,
     fleet: createFleet(race, raceDivision(race, division)),
+    strategy: DEFAULT_STRATEGY,
     progress: initialProgress(race, boat, division, windField),
     history: [],
     eventLog: [],
@@ -142,6 +144,27 @@ describe('speed helpers', () => {
     };
     const preview = vmgPreview(baseState(), event);
     expect(preview.after.fast).toBeGreaterThan(preview.after.slow);
+  });
+});
+
+describe('effort dial', () => {
+  it('sails faster on Push and slower on Conserve', () => {
+    setRng(mulberry32(8));
+    const cruise = currentSpeed(baseState({ strategy: { bias: 0, effort: 'cruise' } }));
+    setRng(mulberry32(8));
+    const push = currentSpeed(baseState({ strategy: { bias: 0, effort: 'push' } }));
+    setRng(mulberry32(8));
+    const conserve = currentSpeed(baseState({ strategy: { bias: 0, effort: 'conserve' } }));
+    expect(push).toBeGreaterThan(cruise);
+    expect(conserve).toBeLessThan(cruise);
+  });
+
+  it('wears the boat harder when pushing', () => {
+    setRng(mulberry32(8));
+    const pushOut = stepRace(baseState({ strategy: { bias: 0, effort: 'push' } }), 20);
+    setRng(mulberry32(8));
+    const conserveOut = stepRace(baseState({ strategy: { bias: 0, effort: 'conserve' } }), 20);
+    expect(pushOut.condition.hullIntegrity).toBeLessThan(conserveOut.condition.hullIntegrity);
   });
 });
 

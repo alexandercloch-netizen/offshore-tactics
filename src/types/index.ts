@@ -145,6 +145,15 @@ export type WindStrength =
 
 export type PointOfSail = 'Upwind' | 'Reach' | 'Downwind';
 
+// Player-controlled tactics, adjustable mid-race.
+export type RoutingBias = -1 | 0 | 1; // favour left of course / optimal / right
+export type EffortMode = 'conserve' | 'cruise' | 'push';
+
+export interface PlayerStrategy {
+  bias: RoutingBias;
+  effort: EffortMode;
+}
+
 export interface WeatherCondition {
   id: string;
   label: string;
@@ -201,6 +210,7 @@ export interface RaceProgress {
   trail: GeoPoint[]; // track actually sailed so far
   routeWindDir: number; // wind direction the current route was planned for
   routePlannedAtNm: number; // distance covered when the route was last planned
+  routeBias: RoutingBias; // the routing bias the current route was planned with
   windDir: number; // local wind direction FROM at the boat
   windSpeedKn: number; // local wind speed at the boat
   // Internal scheduling, hidden from the UI:
@@ -249,6 +259,7 @@ export interface GameState {
   progress?: RaceProgress;
   windField?: WindField;
   fleet?: Competitor[];
+  strategy: PlayerStrategy;
   condition: BoatCondition;
   weather?: WeatherCondition;
   lastResult?: RaceResult;
