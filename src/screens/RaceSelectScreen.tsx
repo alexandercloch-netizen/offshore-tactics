@@ -80,7 +80,7 @@ export const RaceSelectScreen: React.FC<Props> = ({ navigation }) => {
 
             <View style={styles.statsGrid}>
               <Stat label="Distance" value={`${race.distanceNm} nm`} />
-              <Stat label="Legs" value={`${race.totalLegs}`} />
+              <Stat label="Marks" value={`${race.waypoints.length}`} />
               <Stat label="Record" value={formatDuration(race.recordTimeHours)} />
             </View>
 

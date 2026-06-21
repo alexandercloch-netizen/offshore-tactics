@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -9,19 +10,29 @@ import {
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { GameEvent, RootStackParamList, TacticalChoice, VmgPreview } from '../types';
+import {
+  GameEvent,
+  GameState,
+  RootStackParamList,
+  TacticalChoice,
+  VmgPreview,
+} from '../types';
 import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
 import { getBoatById, getRaceById } from '../data';
+import { LANDMASSES } from '../data/landmasses';
 import { useGame } from '../store/GameContext';
 import {
-  computeVmg,
-  effectiveSpeed,
+  currentSpeed,
   formatDuration,
-  pointOfSailForLeg,
   raceDivision,
+  speedMadeGood,
   vmgPreview,
 } from '../engine/gameEngine';
+import { competitorPoints } from '../engine/fleet';
+import { pressureHint } from '../engine/wind';
+import { EffortMode, RoutingBias } from '../types';
 import RouteMap from '../components/RouteMap';
+import TutorialOverlay from '../components/TutorialOverlay';
 import WindIndicator from '../components/WindIndicator';
 import StatBar from '../components/StatBar';
 import NauticalButton from '../components/NauticalButton';
@@ -29,12 +40,16 @@ import TacticalDecisionModal from '../components/TacticalDecisionModal';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RaceMap'>;
 
+const TICK_MS = 150;
+
 export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const { state, beginRace, sailLeg, resolveLeg, retireRace } = useGame();
+  const { state, beginRace, tick, decide, retireRace, setStrategy, markTutorialSeen } = useGame();
   const [activeEvent, setActiveEvent] = useState<GameEvent | null>(null);
   const [activeVmg, setActiveVmg] = useState<VmgPreview | null>(null);
+  const [paused, setPaused] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
   const race = getRaceById(state.selectedRaceId);
   const boat = getBoatById(state.selectedBoatId);
@@ -46,34 +61,67 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
     }
   }, [state.progress, race, boat, state.selectedCrewIds.length, beginRace]);
 
-  const finishIfDone = useCallback(
-    (finished: boolean, retired: boolean) => {
-      if (finished || retired) {
-        navigation.reset({ index: 0, routes: [{ name: 'Results' }] });
-      }
-    },
-    [navigation]
-  );
+  // Keep imperative helpers fresh for the auto-play interval.
+  const tickRef = useRef(tick);
+  tickRef.current = tick;
+  const stateRef = useRef<GameState>(state);
+  stateRef.current = state;
+  const eventActiveRef = useRef(false);
+  const helpRef = useRef(false);
+  helpRef.current = showHelp;
 
-  const handleSail = useCallback(() => {
-    const event = sailLeg();
-    if (event) {
-      setActiveVmg(vmgPreview(state, event));
-      setActiveEvent(event);
-      return;
-    }
-    const outcome = resolveLeg(null);
-    finishIfDone(outcome.finished, outcome.retired);
-  }, [sailLeg, resolveLeg, finishIfDone, state]);
+  const goToResults = useCallback(() => {
+    navigation.reset({ index: 0, routes: [{ name: 'Results' }] });
+  }, [navigation]);
+
+  const started = !!state.progress;
+
+  // Show the how-to-play overlay automatically on the player's first race.
+  useEffect(() => {
+    if (started && !state.tutorialSeen) setShowHelp(true);
+  }, [started, state.tutorialSeen]);
+
+  const closeHelp = useCallback(() => {
+    setShowHelp(false);
+    if (!stateRef.current.tutorialSeen) markTutorialSeen();
+  }, [markTutorialSeen]);
+
+  // The auto-play loop: tick the simulation forward until a decision or finish.
+  useEffect(() => {
+    if (!started) return undefined;
+    const id = setInterval(() => {
+      if (paused || eventActiveRef.current || helpRef.current) return;
+      const outcome = tickRef.current();
+      if (outcome.event) {
+        eventActiveRef.current = true;
+        const tempState: GameState = {
+          ...stateRef.current,
+          progress: outcome.progress,
+          condition: outcome.condition,
+          weather: outcome.weather,
+        };
+        setActiveVmg(vmgPreview(tempState, outcome.event));
+        setActiveEvent(outcome.event);
+      }
+      if (outcome.finished || outcome.retired) {
+        clearInterval(id);
+        goToResults();
+      }
+    }, TICK_MS);
+    return () => clearInterval(id);
+  }, [started, paused, goToResults]);
 
   const handleChoice = useCallback(
     (choice: TacticalChoice) => {
       setActiveEvent(null);
       setActiveVmg(null);
-      const outcome = resolveLeg(choice);
-      finishIfDone(outcome.finished, outcome.retired);
+      eventActiveRef.current = false;
+      const outcome = decide(choice);
+      if (outcome.finished || outcome.retired) {
+        goToResults();
+      }
     },
-    [resolveLeg, finishIfDone]
+    [decide, goToResults]
   );
 
   const confirmRetire = useCallback(() => {
@@ -84,11 +132,11 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
         style: 'destructive',
         onPress: () => {
           retireRace();
-          navigation.reset({ index: 0, routes: [{ name: 'Results' }] });
+          goToResults();
         },
       },
     ]);
-  }, [retireRace, navigation]);
+  }, [retireRace, goToResults]);
 
   if (!race || !boat || !state.progress || !state.weather) {
     return (
@@ -99,13 +147,20 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
   }
 
   const { progress, condition, weather } = state;
-  const nextPointOfSail = pointOfSailForLeg(progress.currentLeg);
-  const recentLog = state.eventLog.slice(-4).reverse();
+  const total = progress.totalDistanceNm;
+  const covered = progress.distanceCoveredNm;
+  const remaining = Math.max(total - covered, 0);
+  const pct = total > 0 ? Math.round((covered / total) * 100) : 0;
   const fleetSize = raceDivision(race, state.selectedDivision).fleetSize;
-  const currentVmg = computeVmg(
-    effectiveSpeed(boat, weather, condition, nextPointOfSail),
-    nextPointOfSail
-  );
+  const speed = currentSpeed(state);
+  const currentVmg = speedMadeGood(state);
+  const etaHours = remaining / Math.max(currentVmg, 0.2);
+  const recentLog = state.eventLog.slice(-4).reverse();
+  const strategy = state.strategy;
+  const hint =
+    state.windField !== undefined
+      ? pressureHint(state.windField, progress.lat, progress.lon, progress.elapsedHours)
+      : null;
 
   return (
     <View style={styles.screen}>
@@ -122,33 +177,74 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
         </View>
 
         <RouteMap
-          totalLegs={race.totalLegs}
-          currentLeg={progress.currentLeg}
+          waypoints={race.waypoints}
+          route={progress.route}
+          trail={progress.trail}
+          boat={{ lat: progress.lat, lon: progress.lon }}
+          competitors={state.fleet ? competitorPoints(state.fleet, race) : []}
+          nextMarkIndex={progress.nextMarkIndex}
+          land={LANDMASSES[race.id]}
           width={width - spacing.lg * 2 - spacing.sm * 2}
         />
 
+        <View style={styles.progressTrack}>
+          <View style={[styles.progressFill, { width: `${pct}%` }]} />
+        </View>
+
         <View style={styles.metricsRow}>
-          <Metric
-            label="Leg"
-            value={`${Math.min(progress.currentLeg + 1, race.totalLegs)}/${race.totalLegs}`}
-          />
+          <Metric label="Sailed" value={`${Math.round(covered)} nm`} />
+          <Metric label="To go" value={`${Math.round(remaining)} nm`} />
+          <Metric label="Done" value={`${pct}%`} />
+        </View>
+        <View style={styles.metricsRow}>
           <Metric label="Elapsed" value={formatDuration(progress.elapsedHours)} />
-          <Metric
-            label="Sailed"
-            value={`${Math.round(progress.distanceCoveredNm)} nm`}
-          />
+          <Metric label="Speed" value={`${speed.toFixed(1)} kn`} />
+          <Metric label="ETA" value={remaining <= 0 ? '—' : formatDuration(etaHours)} />
         </View>
 
         <View style={styles.panel}>
           <View style={styles.windRow}>
             <WindIndicator weather={weather} size={110} />
             <View style={styles.windInfo}>
-              <Text style={styles.nextLeg}>Next leg</Text>
-              <Text style={styles.pointOfSail}>{nextPointOfSail}</Text>
+              <Text style={styles.nextLeg}>Point of sail</Text>
+              <Text style={styles.pointOfSail}>{progress.pointOfSail}</Text>
               <Text style={styles.vmgLine}>VMG {currentVmg.toFixed(1)} kn</Text>
               <Text style={styles.weatherDesc}>{weather.description}</Text>
             </View>
           </View>
+        </View>
+
+        <View style={styles.panel}>
+          <View style={styles.tacticsHeader}>
+            <Text style={styles.panelTitle}>Tactics</Text>
+            {hint ? (
+              <Text style={styles.hint}>
+                {hint.strong ? 'More breeze' : 'Slightly more breeze'} to the {hint.compass}
+              </Text>
+            ) : null}
+          </View>
+
+          <Text style={styles.tacticsLabel}>Effort</Text>
+          <Segmented<EffortMode>
+            value={strategy.effort}
+            options={[
+              { value: 'conserve', label: 'Conserve' },
+              { value: 'cruise', label: 'Cruise' },
+              { value: 'push', label: 'Push' },
+            ]}
+            onSelect={(effort) => setStrategy({ effort })}
+          />
+
+          <Text style={[styles.tacticsLabel, { marginTop: spacing.sm }]}>Routing</Text>
+          <Segmented<RoutingBias>
+            value={strategy.bias}
+            options={[
+              { value: -1, label: 'Bank Left' },
+              { value: 0, label: 'Optimal' },
+              { value: 1, label: 'Bank Right' },
+            ]}
+            onSelect={(bias) => setStrategy({ bias })}
+          />
         </View>
 
         <View style={styles.panel}>
@@ -171,9 +267,22 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
-        <NauticalButton label="Sail Next Leg" onPress={handleSail} />
-        <NauticalButton label="Retire" variant="ghost" onPress={confirmRetire} />
+        <NauticalButton
+          label={paused ? 'Resume' : 'Pause'}
+          variant={paused ? 'primary' : 'secondary'}
+          onPress={() => setPaused((p) => !p)}
+        />
+        <View style={styles.footerRow}>
+          <View style={{ flex: 1 }}>
+            <NauticalButton label="How to Race" variant="ghost" onPress={() => setShowHelp(true)} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <NauticalButton label="Retire" variant="ghost" onPress={confirmRetire} />
+          </View>
+        </View>
       </View>
+
+      <TutorialOverlay visible={showHelp} onClose={closeHelp} />
 
       <TacticalDecisionModal
         visible={!!activeEvent}
@@ -191,6 +300,31 @@ const Metric: React.FC<{ label: string; value: string }> = ({ label, value }) =>
     <Text style={styles.metricLabel}>{label}</Text>
   </View>
 );
+
+interface SegmentedProps<T> {
+  value: T;
+  options: { value: T; label: string }[];
+  onSelect: (value: T) => void;
+}
+
+function Segmented<T extends string | number>({ value, options, onSelect }: SegmentedProps<T>) {
+  return (
+    <View style={styles.segmented}>
+      {options.map((opt) => {
+        const active = opt.value === value;
+        return (
+          <Pressable
+            key={String(opt.value)}
+            onPress={() => onSelect(opt.value)}
+            style={[styles.segment, active && styles.segmentActive]}
+          >
+            <Text style={[styles.segmentLabel, active && styles.segmentLabelActive]}>{opt.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
 
 const styles = StyleSheet.create({
   screen: {
@@ -242,10 +376,23 @@ const styles = StyleSheet.create({
     color: colors.mist,
     fontSize: fontSize.xs,
   },
+  progressTrack: {
+    height: 8,
+    borderRadius: radius.pill,
+    backgroundColor: colors.navy,
+    borderWidth: 1,
+    borderColor: colors.hull,
+    overflow: 'hidden',
+    marginTop: spacing.md,
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: colors.brassLight,
+  },
   metricsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginVertical: spacing.md,
+    marginTop: spacing.md,
   },
   metric: {
     flex: 1,
@@ -273,7 +420,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.hull,
     padding: spacing.lg,
-    marginBottom: spacing.md,
+    marginTop: spacing.md,
   },
   panelTitle: {
     color: colors.foam,
@@ -319,12 +466,59 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     lineHeight: 20,
   },
+  tacticsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  hint: {
+    color: colors.signalGreen,
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.bold,
+  },
+  tacticsLabel: {
+    color: colors.slate,
+    fontSize: fontSize.xs,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: spacing.xs,
+  },
+  segmented: {
+    flexDirection: 'row',
+    backgroundColor: colors.navy,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.hull,
+    overflow: 'hidden',
+  },
+  segment: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+  },
+  segmentActive: {
+    backgroundColor: colors.hull,
+  },
+  segmentLabel: {
+    color: colors.mist,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.medium,
+  },
+  segmentLabelActive: {
+    color: colors.brassLight,
+    fontWeight: fontWeight.bold,
+  },
   footer: {
     padding: spacing.lg,
     gap: spacing.sm,
     borderTopWidth: 1,
     borderTopColor: colors.hull,
     backgroundColor: colors.deepSea,
+  },
+  footerRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
   },
 });
 

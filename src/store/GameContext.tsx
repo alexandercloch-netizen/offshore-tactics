@@ -10,13 +10,15 @@ import React, {
 import {
   BoatCondition,
   DivisionKey,
-  GameEvent,
   GameState,
-  LegOutcome,
   RaceProgress,
   RaceResult,
+  StepResult,
+  Competitor,
+  PlayerStrategy,
   TacticalChoice,
   WeatherCondition,
+  WindField,
 } from '../types';
 import {
   CREW,
@@ -24,17 +26,20 @@ import {
   getBoatById,
   getCrewById,
   getRaceById,
-  pickWeatherForHazard,
 } from '../data';
 import {
-  advanceLeg,
+  DEFAULT_STRATEGY,
+  applyDecision,
   buildResult,
   campaignCost,
+  defaultStepNm,
   initialCondition,
   initialProgress,
-  maybeEvent,
   raceDivision,
+  stepRace,
 } from '../engine/gameEngine';
+import { createWindField, sampleWind, weatherFromWind } from '../engine/wind';
+import { createFleet } from '../engine/fleet';
 import { clearState, loadState, saveState } from './storage';
 import { useAuth } from './AuthContext';
 import { loadCloudSave, saveCloud } from '../services/cloudSave';
@@ -51,9 +56,11 @@ const INITIAL_STATE: GameState = {
   selectedDivision: 'corinthian',
   selectedCrewIds: [],
   provisions: [],
+  strategy: DEFAULT_STRATEGY,
   condition: DEFAULT_CONDITION,
   history: [],
   eventLog: [],
+  tutorialSeen: false,
 };
 
 type Action =
@@ -62,22 +69,27 @@ type Action =
   | { type: 'SELECT_BOAT'; payload: string }
   | { type: 'TOGGLE_CREW'; payload: { crewId: string; capacity: number } }
   | { type: 'SET_PROVISION'; payload: { provisionId: string; quantity: number } }
+  | { type: 'SET_STRATEGY'; payload: Partial<PlayerStrategy> }
+  | { type: 'SET_TUTORIAL_SEEN' }
   | {
       type: 'BEGIN_RACE';
       payload: {
         progress: RaceProgress;
         condition: BoatCondition;
         weather: WeatherCondition;
+        windField: WindField;
+        fleet: Competitor[];
         cost: number;
       };
     }
   | {
-      type: 'APPLY_LEG';
+      type: 'APPLY_STEP';
       payload: {
         progress: RaceProgress;
         condition: BoatCondition;
         weather: WeatherCondition;
-        log: string;
+        fleet: Competitor[];
+        log?: string;
       };
     }
   | { type: 'FINISH_RACE'; payload: { result: RaceResult } }
@@ -132,24 +144,36 @@ function reducer(state: GameState, action: Action): GameState {
       };
     }
 
+    case 'SET_STRATEGY':
+      return { ...state, strategy: { ...state.strategy, ...action.payload } };
+
+    case 'SET_TUTORIAL_SEEN':
+      return { ...state, tutorialSeen: true };
+
     case 'BEGIN_RACE':
       return {
         ...state,
         funds: state.funds - action.payload.cost,
+        strategy: DEFAULT_STRATEGY,
         progress: action.payload.progress,
         condition: action.payload.condition,
         weather: action.payload.weather,
+        windField: action.payload.windField,
+        fleet: action.payload.fleet,
         lastResult: undefined,
         eventLog: [],
       };
 
-    case 'APPLY_LEG':
+    case 'APPLY_STEP':
       return {
         ...state,
         progress: action.payload.progress,
         condition: action.payload.condition,
         weather: action.payload.weather,
-        eventLog: [...state.eventLog, action.payload.log],
+        fleet: action.payload.fleet,
+        eventLog: action.payload.log
+          ? [...state.eventLog, action.payload.log]
+          : state.eventLog,
       };
 
     case 'FINISH_RACE':
@@ -160,6 +184,8 @@ function reducer(state: GameState, action: Action): GameState {
         history: [action.payload.result, ...state.history].slice(0, 50),
         progress: undefined,
         weather: undefined,
+        windField: undefined,
+        fleet: undefined,
       };
 
     case 'PREPARE_NEXT_RACE':
@@ -172,6 +198,8 @@ function reducer(state: GameState, action: Action): GameState {
         provisions: [],
         progress: undefined,
         weather: undefined,
+        windField: undefined,
+        fleet: undefined,
         condition: DEFAULT_CONDITION,
       };
 
@@ -191,10 +219,12 @@ export interface GameContextValue {
   selectBoat: (boatId: string) => void;
   toggleCrew: (crewId: string) => void;
   setProvisionQuantity: (provisionId: string, quantity: number) => void;
+  setStrategy: (partial: Partial<PlayerStrategy>) => void;
+  markTutorialSeen: () => void;
   // race lifecycle
   beginRace: () => void;
-  sailLeg: () => GameEvent | null;
-  resolveLeg: (choice: TacticalChoice | null) => LegOutcome;
+  tick: () => StepResult;
+  decide: (choice: TacticalChoice) => StepResult;
   retireRace: () => void;
   prepareNextRace: () => void;
   resetCampaign: () => void;
@@ -304,6 +334,14 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
     []
   );
 
+  const setStrategy = useCallback((partial: Partial<PlayerStrategy>) => {
+    dispatch({ type: 'SET_STRATEGY', payload: partial });
+  }, []);
+
+  const markTutorialSeen = useCallback(() => {
+    dispatch({ type: 'SET_TUTORIAL_SEEN' });
+  }, []);
+
   const campaignTotal = useCallback(() => campaignCost(stateRef.current).total, []);
 
   const canAffordCampaign = useCallback(
@@ -314,24 +352,27 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
   const beginRace = useCallback(() => {
     const current = stateRef.current;
     const race = getRaceById(current.selectedRaceId);
-    if (!race) return;
+    const boat = getBoatById(current.selectedBoatId);
+    if (!race || !boat) return;
     const crew = current.selectedCrewIds
       .map((id) => getCrewById(id))
       .filter((c): c is NonNullable<typeof c> => Boolean(c));
     const cost = campaignCost(current).total;
+    const windField = createWindField(race);
+    const start = race.waypoints[0];
+    const weather = weatherFromWind(sampleWind(windField, start.lat, start.lon, 0));
+    const fleet = createFleet(race, raceDivision(race, current.selectedDivision));
     dispatch({
       type: 'BEGIN_RACE',
       payload: {
-        progress: initialProgress(race, current.selectedDivision),
+        progress: initialProgress(race, boat, current.selectedDivision, windField),
         condition: initialCondition(crew, current.provisions),
-        weather: pickWeatherForHazard(race.hazard),
+        weather,
+        windField,
+        fleet,
         cost,
       },
     });
-  }, []);
-
-  const sailLeg = useCallback((): GameEvent | null => {
-    return maybeEvent(stateRef.current);
   }, []);
 
   // Push a completed race to the global leaderboard when signed in.
@@ -351,16 +392,17 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
     });
   }, [configured]);
 
-  const resolveLeg = useCallback(
-    (choice: TacticalChoice | null): LegOutcome => {
+  // Applies a step/decision outcome to state and finalizes the race if it ended.
+  const applyOutcome = useCallback(
+    (outcome: StepResult) => {
       const current = stateRef.current;
-      const outcome = advanceLeg(current, choice);
       dispatch({
-        type: 'APPLY_LEG',
+        type: 'APPLY_STEP',
         payload: {
           progress: outcome.progress,
           condition: outcome.condition,
           weather: outcome.weather,
+          fleet: outcome.fleet,
           log: outcome.log,
         },
       });
@@ -369,9 +411,27 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
         dispatch({ type: 'FINISH_RACE', payload: { result } });
         publishResult(result);
       }
-      return outcome;
     },
     [publishResult]
+  );
+
+  // One auto-play tick: advance the boat until the next decision or the finish.
+  const tick = useCallback((): StepResult => {
+    const current = stateRef.current;
+    const race = getRaceById(current.selectedRaceId);
+    const outcome = stepRace(current, race ? defaultStepNm(race) : 1);
+    applyOutcome(outcome);
+    return outcome;
+  }, [applyOutcome]);
+
+  // Resolve the active decision with the player's choice.
+  const decide = useCallback(
+    (choice: TacticalChoice): StepResult => {
+      const outcome = applyDecision(stateRef.current, choice);
+      applyOutcome(outcome);
+      return outcome;
+    },
+    [applyOutcome]
   );
 
   const retireRace = useCallback(() => {
@@ -379,12 +439,12 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
     const race = getRaceById(current.selectedRaceId);
     if (!race || !current.progress || !current.weather) return;
     const fleetSize = raceDivision(race, current.selectedDivision).fleetSize;
-    const outcome: LegOutcome = {
+    const outcome: StepResult = {
       progress: { ...current.progress, position: fleetSize },
       condition: current.condition,
       weather: current.weather,
-      pointOfSail: 'Reach',
-      legHours: 0,
+      fleet: current.fleet ?? [],
+      event: null,
       log: `Retired from ${race.name}.`,
       finished: false,
       retired: true,
@@ -411,9 +471,11 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
       selectBoat,
       toggleCrew,
       setProvisionQuantity,
+      setStrategy,
+      markTutorialSeen,
       beginRace,
-      sailLeg,
-      resolveLeg,
+      tick,
+      decide,
       retireRace,
       prepareNextRace,
       resetCampaign,
@@ -427,9 +489,11 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
       selectBoat,
       toggleCrew,
       setProvisionQuantity,
+      setStrategy,
+      markTutorialSeen,
       beginRace,
-      sailLeg,
-      resolveLeg,
+      tick,
+      decide,
       retireRace,
       prepareNextRace,
       resetCampaign,

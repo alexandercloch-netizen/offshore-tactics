@@ -1,4 +1,5 @@
 import { GameEvent, HazardKey } from '../types';
+import { rnd, rndPick } from '../engine/rng';
 
 // ---------------------------------------------------------------------------
 // Generic tactical events — can appear in any race.
@@ -515,28 +516,24 @@ export const EVENTS: GameEvent[] = [
 ];
 
 export function pickEvent(): GameEvent {
-  return EVENTS[Math.floor(Math.random() * EVENTS.length)];
-}
-
-function randomOf<T>(items: T[]): T {
-  return items[Math.floor(Math.random() * items.length)];
+  return rndPick(EVENTS);
 }
 
 // Chooses which event to present during a race, weighted toward the race's
 // signature hazard, with a rare chance of a man-overboard drama.
 export function pickEventForRace(hazard?: HazardKey): GameEvent {
-  const roll = Math.random();
+  const roll = rnd();
   if (roll < 0.07) {
-    return randomOf(MOB_EVENTS);
+    return rndPick(MOB_EVENTS);
   }
   if (hazard && roll < 0.4) {
     return HAZARD_EVENTS[hazard];
   }
   if (roll < 0.62) {
-    return randomOf(WEATHER_EVENTS);
+    return rndPick(WEATHER_EVENTS);
   }
   if (roll < 0.8) {
-    return randomOf(MORALE_EVENTS);
+    return rndPick(MORALE_EVENTS);
   }
-  return randomOf(GENERIC_EVENTS);
+  return rndPick(GENERIC_EVENTS);
 }

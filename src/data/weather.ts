@@ -1,4 +1,5 @@
 import { HazardKey, WeatherCondition } from '../types';
+import { rnd } from '../engine/rng';
 
 export const WEATHER: WeatherCondition[] = [
   {
@@ -95,7 +96,7 @@ function weightedPick(weights: Record<string, number>): WeatherCondition {
     }
   });
   if (pool.length === 0) return WEATHER[2];
-  return pool[Math.floor(Math.random() * pool.length)];
+  return pool[Math.floor(rnd() * pool.length)];
 }
 
 export function pickWeather(): WeatherCondition {

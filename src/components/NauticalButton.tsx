@@ -19,6 +19,7 @@ interface NauticalButtonProps {
   loading?: boolean;
   subtitle?: string;
   style?: ViewStyle;
+  testID?: string;
 }
 
 const VARIANT_STYLES: Record<
@@ -39,6 +40,7 @@ export const NauticalButton: React.FC<NauticalButtonProps> = ({
   loading = false,
   subtitle,
   style,
+  testID,
 }) => {
   const palette = VARIANT_STYLES[variant];
   const isDisabled = disabled || loading;
@@ -47,6 +49,7 @@ export const NauticalButton: React.FC<NauticalButtonProps> = ({
     <Pressable
       onPress={onPress}
       disabled={isDisabled}
+      testID={testID}
       accessibilityRole="button"
       accessibilityLabel={label}
       style={({ pressed }) => [

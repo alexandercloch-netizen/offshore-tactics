@@ -21,11 +21,13 @@ tactical calls that decide whether you take line honours or limp home.
 5. **Provision the Boat** — buy food, water, medical, spares and safety gear.
    Provisions boost crew condition, hull integrity and reduce incident risk —
    all within your budget.
-6. **Race** — sail the course one leg at a time. Watch the wind, hull integrity
-   and crew condition, and resolve **tactical decisions** that trade time
-   against risk. Each decision shows your current **VMG** and the projected VMG
-   for every choice. Events include race-specific **signature hazards** (Gulf
-   Stream eddies, Bass Strait southerly busters, light-air parking lots),
+6. **Race** — the boat sails the **real course** continuously (pause any time),
+   tracked by **distance covered / remaining, % done, speed and ETA** on a chart
+   of the actual waypoints. There are no "legs" — conditions evolve and
+   **tactical decisions** interrupt the race at random, just like the real
+   thing. Each decision shows your current **VMG** and the projected VMG for
+   every choice. Events include race-specific **signature hazards** (Gulf Stream
+   eddies, Bass Strait southerly busters, light-air parking lots),
    **weather-on-the-horizon** calls, crew-morale moments, and the rare,
    high-stakes **man overboard**. Low crew morale slows the boat and makes
    incidents more likely, so look after your people.
@@ -34,17 +36,88 @@ tactical calls that decide whether you take line honours or limp home.
 
 ## Game model
 
-The simulation lives in `src/engine/gameEngine.ts`:
+The simulation lives in `src/engine/gameEngine.ts` and is a pure,
+distance-based model (no React Native imports), which keeps it fast and fully
+unit-testable:
 
-- **Speed** is derived from the boat's base speed, its rating for the current
-  point of sail, the weather's speed modifier, and crew stamina/morale plus hull
-  integrity.
-- **Each leg** wears the crew and hull (scaled by weather risk). Tactical choices
-  add or save time and apply stamina/morale/hull deltas, with a gamble: a failed
-  risk roll costs extra time and damage.
-- **Position** is estimated each leg by comparing your pace against the course
-  record, across the size of the fleet.
-- **Retirement** happens if hull integrity or crew stamina hits zero.
+- **Continuous distance model.** `stepRace` advances the boat a small slice of
+  the course each tick, accumulating elapsed time from speed. The UI auto-plays
+  these ticks; decisions are scheduled at random distances and pause the race.
+- **Real geography.** Each race carries real `waypoints` (`src/engine/geo.ts`
+  does haversine distance, bearings and along-track interpolation). The chart
+  also draws real **land masses** (`src/data/landmasses.ts`): Natural Earth
+  1:10m coastlines clipped to each course, with lakes carved out so e.g. Lake
+  Michigan stays water on the Chicago–Mac map.
+- **Weather routing (the route follows the wind).** The mandatory marks are
+  fixed by the rules, but the path between them is computed from the wind, the
+  way real navigators route a boat:
+  - **Polars** (`src/engine/polar.ts`): boat speed as a function of true wind
+    angle and speed, with a no-go zone — so you cannot sail straight upwind.
+  - **Wind field** (`src/engine/wind.ts`): a seeded, analytic spatial +
+    temporal field per race (prevailing wind + shifts, a systematic veer, a
+    speed gradient and a drifting puff/hole), flavoured by the race's hazard.
+  - **Isochrone router** (`src/engine/router.ts`): a time-optimal solver that
+    tacks upwind and gybes downwind to the laylines, routing the active leg and
+    rhumb-lining the marks beyond it.
+  - **Dynamic re-routing**: as the field evolves the engine re-plans (on a wind
+    shift, a mark rounding, or periodically), so the displayed track bends and
+    the boat tacks through the race. The **point of sail** is the boat's real
+    heading vs the local wind.
+- **A real AI fleet** (`src/engine/fleet.ts`) sails the same course and wind
+  field. Competitors advance on a fast velocity-made-good model (so the fleet
+  spreads out under the same weather) with seeded per-boat skill — tighter and
+  faster in the pro division. Your **standing is your real rank** in the fleet,
+  it updates live on the chart, and a costly tactical decision lets the fleet
+  sail past you. Manage the boat well or you'll drop down the order.
+- **Interactive tactics.** Two dials you control live during the race:
+  - **Effort** — *Conserve / Cruise / Push*. Push sails ~8% faster but wears the
+    crew and hull harder and raises incident risk; Conserve nurses the boat home.
+  - **Routing bias** — *Bank Left / Optimal / Bank Right*. Banking commits the
+    route to a side of the course via a strategic waypoint. The autopilot only
+    routes on the wind as it is *now*, so reading the **pressure hint** ("more
+    breeze to the NW") and banking into a developing shift or puff can beat the
+    optimizer — or cost you if you call it wrong.
+- **Speed** comes from the boat's base speed, its rating for the current point of
+  sail, the weather's modifier, and crew stamina/morale plus hull integrity.
+- **Wear** scales with the fraction of the course sailed and the weather risk;
+  tactical choices apply time/stamina/morale/hull deltas with a gamble (a failed
+  risk roll, more likely when morale is low, costs extra time and damage).
+- **Position** is estimated from your pace vs the division's pace target across
+  the fleet; **retirement** happens if hull or crew stamina hits zero.
+- **Determinism for tests.** All randomness flows through `src/engine/rng.ts`;
+  tests call `setRng(mulberry32(seed))` to pin the sequence.
+
+## Testing & CI
+
+```bash
+npm test          # run the Jest unit suite
+npm run tsc       # type-check
+npm run build:web # produce the static web bundle
+npm run e2e       # Playwright end-to-end playthrough (build:web first)
+```
+
+The engine and data layer are covered by deterministic **Jest** unit tests
+(`src/__tests__/`) using a seeded RNG — geometry, polars, the wind field, the
+isochrone router (upwind legs tack and end on the mark), divisions, unlocks, a
+full simulated race, decisions and result/prize logic. A **Playwright**
+end-to-end test (`e2e/`) drives the exported web build through a complete
+campaign — race select, boat, crew, provisioning, the race itself (answering
+tactical decisions) and the results screen. A **GitHub Actions** workflow
+(`.github/workflows/ci.yml`) gates every push and PR on type-check, unit tests,
+a web-build smoke test, and the end-to-end playthrough.
+
+### Regenerating coastlines
+
+`src/data/landmasses.ts` is generated and committed, so the app and CI need no
+network access. To rebuild it (e.g. after changing a course), download the
+public-domain Natural Earth 1:10m sources into `/tmp`
+(`ne_10m_land.json`, `ne_10m_minor_islands.json`, `ne_10m_lakes.json` from
+[martynafford/natural-earth-geojson](https://github.com/martynafford/natural-earth-geojson))
+and run:
+
+```bash
+node scripts/build-coastlines.mjs   # needs the polygon-clipping dev dependency
+```
 
 State is managed with a reducer in `src/store/GameContext.tsx` and persisted to
 device storage via `@react-native-async-storage/async-storage`.
@@ -63,7 +136,15 @@ src/
   data/                         Static game content
     races.ts boats.ts crew.ts provisions.ts events.ts weather.ts
     index.ts                    Re-exports + lookup helpers
-  engine/gameEngine.ts          Core simulation (speed, legs, results)
+  engine/
+    gameEngine.ts               Core simulation (routed model, results)
+    geo.ts                      Haversine, bearings, projection helpers
+    polar.ts                    Boat polar (speed vs wind angle/strength)
+    wind.ts                     Spatial + temporal wind field
+    router.ts                   Isochrone weather routing
+    fleet.ts                    AI competitor fleet & live standings
+    rng.ts                      Seedable RNG for deterministic tests
+  __tests__/                    Jest unit tests (engine, polar, wind, router, fleet, geo, rng)
   services/
     cloudSave.ts                Per-user cloud save (Supabase)
     leaderboard.ts              Submit/fetch global leaderboard
@@ -168,6 +249,7 @@ links resolve back to the app.
 - TypeScript (strict)
 - React Navigation (native stack)
 - Supabase (auth, Postgres cloud save, leaderboard) with row-level security
-- react-native-svg (wind compass & route map)
+- react-native-svg (wind compass & real-course chart)
 - AsyncStorage (local persistence + offline fallback)
+- Jest + ts-jest unit tests; GitHub Actions CI
 - Hosted on Netlify

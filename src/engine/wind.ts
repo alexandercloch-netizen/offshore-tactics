@@ -1,0 +1,155 @@
+import { HazardKey, Race, WeatherCondition, WindField, WindSample } from '../types';
+import { WEATHER } from '../data/weather';
+import { haversineNm, movePoint } from './geo';
+import { rnd, rndRange } from './rng';
+
+const toRad = (deg: number): number => (deg * Math.PI) / 180;
+const norm360 = (deg: number): number => ((deg % 360) + 360) % 360;
+const jitter = (center: number, spread: number): number =>
+  center + rndRange(-spread, spread);
+
+// Per-hazard character of the wind field.
+interface HazardProfile {
+  speedMul: number;
+  shiftAmp: number; // degrees
+  rotatePerH: number; // systematic veer/back
+  featureDeltaMul: number; // x baseSpeed; negative = hole, positive = more wind
+  featureRadiusNm: number;
+}
+
+function hazardProfile(hazard: HazardKey, baseSpeed: number): HazardProfile {
+  switch (hazard) {
+    case 'light_air':
+    case 'doldrums':
+      return { speedMul: 0.65, shiftAmp: 22, rotatePerH: 0.4, featureDeltaMul: -0.55, featureRadiusNm: 90 };
+    case 'med_fickle':
+    case 'tidal_gate':
+      return { speedMul: 0.9, shiftAmp: 34, rotatePerH: 0.6, featureDeltaMul: -0.3, featureRadiusNm: 45 };
+    case 'island_accel':
+      return { speedMul: 1.0, shiftAmp: 14, rotatePerH: 0.3, featureDeltaMul: 0.5, featureRadiusNm: 22 };
+    case 'gulf_stream':
+      return { speedMul: 1.0, shiftAmp: 18, rotatePerH: 0.8, featureDeltaMul: 0.35, featureRadiusNm: 70 };
+    case 'celtic_weather':
+    case 'bass_strait':
+      return { speedMul: 1.15, shiftAmp: 20, rotatePerH: 2.2, featureDeltaMul: 0.6, featureRadiusNm: 80 };
+    default:
+      return { speedMul: 1.0, shiftAmp: 18, rotatePerH: 0.5, featureDeltaMul: 0.2, featureRadiusNm: 50 };
+  }
+}
+
+function courseCentre(race: Race): { lat: number; lon: number } {
+  const wps = race.waypoints;
+  const lat = wps.reduce((s, w) => s + w.lat, 0) / wps.length;
+  const lon = wps.reduce((s, w) => s + w.lon, 0) / wps.length;
+  return { lat, lon };
+}
+
+// Build a fresh, seeded wind field for a race from its prevailing wind + hazard.
+export function createWindField(race: Race): WindField {
+  const profile = hazardProfile(race.hazard, race.prevailingWind.speedKn);
+  const baseSpeed = Math.max(3, race.prevailingWind.speedKn * profile.speedMul * jitter(1, 0.12));
+  const centre = courseCentre(race);
+
+  // Place the feature off to one side of the course so favouring a side matters.
+  const featureBearing = rndRange(0, 360);
+  const featurePos = movePoint(centre.lat, centre.lon, featureBearing, rndRange(20, 70));
+
+  return {
+    baseDir: norm360(jitter(race.prevailingWind.fromDeg, 15)),
+    baseSpeed,
+    shiftAmpDeg: profile.shiftAmp * jitter(1, 0.2),
+    shiftPeriodH: rndRange(3, 8),
+    shiftPhase: rndRange(0, Math.PI * 2),
+    rotateDegPerH: profile.rotatePerH * (rnd() < 0.5 ? -1 : 1),
+    gradientAxisDeg: rndRange(0, 360),
+    gradientPerNm: rndRange(0.01, 0.05) * (rnd() < 0.5 ? -1 : 1),
+    refLat: centre.lat,
+    refLon: centre.lon,
+    feature: {
+      lat: featurePos.lat,
+      lon: featurePos.lon,
+      radiusNm: profile.featureRadiusNm * jitter(1, 0.2),
+      deltaKn: baseSpeed * profile.featureDeltaMul,
+      driftDir: rndRange(0, 360),
+      driftKn: rndRange(2, 9),
+    },
+  };
+}
+
+// Sample the wind (direction FROM, speed) at a position and time.
+export function sampleWind(field: WindField, lat: number, lon: number, hours: number): WindSample {
+  // Spatial gradient: component of the offset from the reference along the axis.
+  const north = (lat - field.refLat) * 60;
+  const east = (lon - field.refLon) * 60 * Math.cos(toRad(field.refLat));
+  const axis = toRad(field.gradientAxisDeg);
+  const along = north * Math.cos(axis) + east * Math.sin(axis); // nm along axis
+
+  // Drifting puff/hole.
+  const featPos = movePoint(field.feature.lat, field.feature.lon, field.feature.driftDir, field.feature.driftKn * hours);
+  const d = haversineNm(lat, lon, featPos.lat, featPos.lon);
+  const featTerm = field.feature.deltaKn * Math.exp(-((d / field.feature.radiusNm) ** 2));
+
+  const dir =
+    field.baseDir +
+    field.rotateDegPerH * hours +
+    field.shiftAmpDeg * Math.sin((2 * Math.PI * hours) / field.shiftPeriodH + field.shiftPhase) +
+    along * 0.02;
+
+  const speed = field.baseSpeed + field.gradientPerNm * along + featTerm;
+
+  return { fromDeg: norm360(dir), speedKn: Math.max(2, Math.min(50, speed)) };
+}
+
+const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+
+export interface PressureHint {
+  bearing: number; // direction toward stronger wind
+  compass: string;
+  strong: boolean; // whether the gradient is pronounced enough to chase
+}
+
+// Where is the breeze building? Combines the field's speed gradient with the
+// pull toward a nearby puff (or away from a hole), to hint which side to bank.
+export function pressureHint(field: WindField, lat: number, lon: number, hours: number): PressureHint {
+  // Gradient contribution (a unit vector along the +speed axis).
+  const ga = toRad(field.gradientAxisDeg);
+  let east = Math.sin(ga) * Math.sign(field.gradientPerNm) * Math.abs(field.gradientPerNm) * 100;
+  let north = Math.cos(ga) * Math.sign(field.gradientPerNm) * Math.abs(field.gradientPerNm) * 100;
+
+  // Feature contribution: toward a puff, away from a hole.
+  const featPos = movePoint(field.feature.lat, field.feature.lon, field.feature.driftDir, field.feature.driftKn * hours);
+  const dNorth = (featPos.lat - lat) * 60;
+  const dEast = (featPos.lon - lon) * 60 * Math.cos(toRad(lat));
+  const dist = Math.hypot(dNorth, dEast) || 1;
+  const pull = (field.feature.deltaKn / Math.max(dist, 10)) * 30;
+  north += (dNorth / dist) * pull;
+  east += (dEast / dist) * pull;
+
+  const magnitude = Math.hypot(north, east);
+  const bearing = (Math.atan2(east, north) * 180) / Math.PI;
+  const norm = ((bearing % 360) + 360) % 360;
+  return {
+    bearing: norm,
+    compass: COMPASS[Math.round(norm / 45) % 8],
+    strong: magnitude > 1.2,
+  };
+}
+
+// Map a wind sample onto the nearest descriptive WeatherCondition (for the
+// compass, wear and decision risk), keeping the field's exact local direction.
+export function weatherFromWind(sample: WindSample): WeatherCondition {
+  let best = WEATHER[0];
+  let bestDiff = Infinity;
+  for (const w of WEATHER) {
+    const diff = Math.abs(w.windSpeedKts - sample.speedKn);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      best = w;
+    }
+  }
+  return {
+    ...best,
+    windDirection: Math.round(sample.fromDeg),
+    windSpeedKts: Math.round(sample.speedKn),
+  };
+}

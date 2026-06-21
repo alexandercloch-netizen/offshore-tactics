@@ -25,14 +25,62 @@ export type HazardKey =
   | 'bass_strait'
   | 'doldrums';
 
+export type WaypointType = 'start' | 'turn' | 'island' | 'mark' | 'finish';
+
+export interface Waypoint {
+  name: string;
+  lat: number;
+  lon: number;
+  type: WaypointType;
+}
+
+export interface GeoPoint {
+  lat: number;
+  lon: number;
+}
+
+// A wind sample at a point/time: the direction it blows FROM and its speed.
+export interface WindSample {
+  fromDeg: number; // degrees the wind is coming FROM (0 = N)
+  speedKn: number;
+}
+
+// A drifting puff (deltaKn > 0) or hole (deltaKn < 0) in the wind field.
+export interface WindFeature {
+  lat: number;
+  lon: number;
+  radiusNm: number;
+  deltaKn: number;
+  driftDir: number; // bearing the feature drifts toward
+  driftKn: number; // drift speed in knots
+}
+
+// Analytic spatial + temporal wind field for a race. Drives both the boat's
+// speed (via the polar) and the isochrone router; it evolves with elapsed hours
+// and varies across the course, so the optimal route changes through the race.
+export interface WindField {
+  baseDir: number; // prevailing direction FROM
+  baseSpeed: number;
+  shiftAmpDeg: number; // oscillating shift amplitude
+  shiftPeriodH: number;
+  shiftPhase: number;
+  rotateDegPerH: number; // systematic veer/back (e.g. a front passing through)
+  gradientAxisDeg: number; // bearing along which wind speed increases
+  gradientPerNm: number; // knots gained per nm along that axis
+  refLat: number; // gradient reference point (course centre)
+  refLon: number;
+  feature: WindFeature;
+}
+
 export interface Race {
   id: string;
   name: string;
   location: string;
   description: string;
-  distanceNm: number; // course length in nautical miles
+  distanceNm: number; // course length in nautical miles (gameplay-tuned)
   difficulty: RaceDifficulty;
-  totalLegs: number; // number of tactical legs in the course
+  waypoints: Waypoint[]; // real course geometry for the map & bearings
+  prevailingWind: WindSample; // seasonal prevailing wind that anchors the field
   recordTimeHours: number; // course record, used as a pace benchmark
   corinthianRating: number; // 1-5, higher = more accessible to amateur crews
   hazard: HazardKey;
@@ -97,6 +145,15 @@ export type WindStrength =
 
 export type PointOfSail = 'Upwind' | 'Reach' | 'Downwind';
 
+// Player-controlled tactics, adjustable mid-race.
+export type RoutingBias = -1 | 0 | 1; // favour left of course / optimal / right
+export type EffortMode = 'conserve' | 'cruise' | 'push';
+
+export interface PlayerStrategy {
+  bias: RoutingBias;
+  effort: EffortMode;
+}
+
 export interface WeatherCondition {
   id: string;
   label: string;
@@ -139,11 +196,36 @@ export interface VmgPreview {
 }
 
 export interface RaceProgress {
-  currentLeg: number; // legs completed
-  totalLegs: number;
+  distanceCoveredNm: number; // geometric advance toward the finish
+  totalDistanceNm: number; // geometric course length (mark to mark)
   elapsedHours: number;
-  distanceCoveredNm: number;
   position: number; // current standing in the fleet
+  pointOfSail: PointOfSail; // derived from boat heading vs local wind
+  // Live position & weather-routed track:
+  lat: number;
+  lon: number;
+  heading: number; // current heading (bearing of the active route segment)
+  nextMarkIndex: number; // index of the next mandatory mark to round
+  route: GeoPoint[]; // remaining weather-routed path (route[0] = current pos)
+  trail: GeoPoint[]; // track actually sailed so far
+  routeWindDir: number; // wind direction the current route was planned for
+  routePlannedAtNm: number; // distance covered when the route was last planned
+  routeBias: RoutingBias; // the routing bias the current route was planned with
+  windDir: number; // local wind direction FROM at the boat
+  windSpeedKn: number; // local wind speed at the boat
+  // Internal scheduling, hidden from the UI:
+  nextDecisionAtNm: number; // distance at which the next decision fires
+  decisionsTaken: number;
+}
+
+// An AI competitor sailing the same course & wind field as the player.
+export interface Competitor {
+  id: string;
+  name: string;
+  speedMul: number; // skill multiplier on made-good speed
+  distanceNm: number; // geometric distance covered along the course
+  finishedHours: number | null; // elapsed time at finish, or null if still racing
+  retired: boolean;
 }
 
 export interface BoatCondition {
@@ -175,21 +257,25 @@ export interface GameState {
   selectedCrewIds: string[];
   provisions: ProvisionSelection[];
   progress?: RaceProgress;
+  windField?: WindField;
+  fleet?: Competitor[];
+  strategy: PlayerStrategy;
   condition: BoatCondition;
   weather?: WeatherCondition;
   lastResult?: RaceResult;
   history: RaceResult[];
   eventLog: string[];
+  tutorialSeen?: boolean; // whether the player has seen the race how-to-play
 }
 
-// Outcome returned by the engine after sailing a leg
-export interface LegOutcome {
+// Outcome returned by the engine after a simulation step.
+export interface StepResult {
   progress: RaceProgress;
   condition: BoatCondition;
   weather: WeatherCondition;
-  pointOfSail: PointOfSail;
-  legHours: number;
-  log: string;
+  fleet: Competitor[];
+  event: GameEvent | null; // a decision that interrupts the auto-play, if any
+  log?: string;
   finished: boolean;
   retired: boolean;
 }
