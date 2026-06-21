@@ -73,6 +73,15 @@ unit-testable:
   faster in the pro division. Your **standing is your real rank** in the fleet,
   it updates live on the chart, and a costly tactical decision lets the fleet
   sail past you. Manage the boat well or you'll drop down the order.
+- **Custom boats & your fleet.** Build your own boats from a real **polar
+  diagram** and keep them in your **fleet** (`src/engine/polarTable.ts`,
+  `src/data/polarLibrary.ts`). Start from a class (Cruiser-Racer / TP52 /
+  Class40 / Maxi 72) and tweak the upwind/downwind performance %, or **import a
+  polar file** — PredictWind / generic `TWA×TWS` grids and Expedition/ORC curve
+  formats are all parsed (`src/engine/polarImport.ts`). The engine reads the
+  boat's polar table directly (bilinear TWA/TWS interpolation) behind the same
+  `polarSpeed` seam, so routing, the fleet and VMG all just work. Custom boats
+  are owned outright. (Sail inventories and richer crew come next.)
 - **Interactive tactics.** Two dials you control live during the race:
   - **Effort** — *Conserve / Cruise / Push*. Push sails ~8% faster but wears the
     crew and hull harder and raises incident risk; Conserve nurses the boat home.

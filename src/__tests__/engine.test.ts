@@ -60,6 +60,7 @@ function baseState(overrides: Partial<GameState> = {}): GameState {
     windField,
     fleet: createFleet(race, raceDivision(race, division)),
     strategy: DEFAULT_STRATEGY,
+    profile: { fleet: [] },
     progress: initialProgress(race, boat, division, windField),
     history: [],
     eventLog: [],

@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Boat, RootStackParamList } from '../types';
 import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
 import { BOATS } from '../data';
+import { isBoatOwned } from '../engine/gameEngine';
 import { useGame } from '../store/GameContext';
 import StatBar from '../components/StatBar';
 import NauticalButton from '../components/NauticalButton';
@@ -30,9 +31,9 @@ export const BoatSelectScreen: React.FC<Props> = ({ navigation }) => {
           Buy the boat that suits the course — you keep it for future races.
           Funds: £{state.funds.toLocaleString()}
         </Text>
-        {BOATS.map((boat: Boat) => {
+        {[...state.profile.fleet, ...BOATS].map((boat: Boat) => {
           const selected = boat.id === selectedId;
-          const owned = state.ownedBoatIds.includes(boat.id);
+          const owned = isBoatOwned(state, boat);
           const affordable = owned || state.funds >= boat.price;
           return (
             <Pressable

@@ -121,6 +121,16 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
           variant={raceInProgress ? 'secondary' : 'primary'}
           onPress={startNewCampaign}
         />
+        <NauticalButton
+          label="My Fleet"
+          subtitle={
+            state.profile.fleet.length > 0
+              ? `${state.profile.fleet.length} custom boat${state.profile.fleet.length > 1 ? 's' : ''}`
+              : 'Build a custom boat'
+          }
+          variant="secondary"
+          onPress={() => navigation.navigate('Fleet')}
+        />
         {configured ? (
           <NauticalButton
             label="Leaderboard"

@@ -3,6 +3,7 @@ import {
   BoatCondition,
   CrewMember,
   DivisionKey,
+  FleetBoat,
   GameEvent,
   GameState,
   GeoPoint,
@@ -83,6 +84,19 @@ export function raceDivision(race: Race, division: DivisionKey): RaceDivision {
   return race.divisions[division];
 }
 
+// Resolve a boat id against both the catalogue and the player's custom fleet.
+export function resolveBoatById(state: GameState, id?: string): Boat | undefined {
+  if (!id) return undefined;
+  return getBoatById(id) ?? state.profile?.fleet.find((b) => b.id === id);
+}
+
+// A boat is owned (no purchase charged) if it's been bought, or it's a custom
+// boat the player built.
+export function isBoatOwned(state: GameState, boat?: Boat): boolean {
+  if (!boat) return false;
+  return Boolean((boat as FleetBoat).custom) || (state.ownedBoatIds?.includes(boat.id) ?? false);
+}
+
 // ---- Provisioning helpers ----
 
 export function provisionCost(selections: ProvisionSelection[]): number {
@@ -119,11 +133,10 @@ export interface CampaignCost {
 
 export function campaignCost(state: GameState): CampaignCost {
   const race = getRaceById(state.selectedRaceId);
-  const boat = getBoatById(state.selectedBoatId);
+  const boat = resolveBoatById(state, state.selectedBoatId);
   const entryFee = race ? raceDivision(race, state.selectedDivision).entryFee : 0;
   // Boats are bought once and then owned; no charter the next time you race one.
-  const owned = boat ? state.ownedBoatIds?.includes(boat.id) : false;
-  const charter = boat && !owned ? boat.price : 0;
+  const charter = boat && !isBoatOwned(state, boat) ? boat.price : 0;
   const wages = crewWageTotal(state.selectedCrewIds);
   const provisions = provisionCost(state.provisions);
   return {
@@ -245,7 +258,7 @@ export function boatSpeedFor(
 
 // Boat speed right now, from the live progress + condition + effort dial.
 export function currentSpeed(state: GameState): number {
-  const boat = getBoatById(state.selectedBoatId);
+  const boat = resolveBoatById(state, state.selectedBoatId);
   if (!boat || !state.progress) return 0;
   const p = state.progress;
   return boatSpeedFor(
@@ -330,7 +343,7 @@ function appendTrail(trail: GeoPoint[], pos: GeoPoint): GeoPoint[] {
 // wind field evolves. The mandatory marks stay fixed; only the path bends.
 export function stepRace(state: GameState, stepNm: number): StepResult {
   const race = getRaceById(state.selectedRaceId);
-  const boat = getBoatById(state.selectedBoatId);
+  const boat = resolveBoatById(state, state.selectedBoatId);
   if (!race || !boat || !state.progress || !state.windField) {
     throw new Error('Cannot step a race before it has been set up.');
   }
@@ -456,7 +469,7 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
 // then resolve the gamble and any resulting retirement.
 export function applyDecision(state: GameState, choice: TacticalChoice): StepResult {
   const race = getRaceById(state.selectedRaceId);
-  const boat = getBoatById(state.selectedBoatId);
+  const boat = resolveBoatById(state, state.selectedBoatId);
   if (!race || !boat || !state.progress || !state.weather) {
     throw new Error('Cannot apply a decision outside a race.');
   }
