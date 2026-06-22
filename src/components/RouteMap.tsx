@@ -23,6 +23,7 @@ interface RouteMapProps {
   boat?: GeoPoint; // current boat position
   competitors?: GeoPoint[]; // AI fleet positions
   wind?: WindArrow[]; // sampled wind field, drawn as arrows
+  windFeature?: { lat: number; lon: number; radiusNm: number; puff: boolean }; // puff/hole to shade
   nextMarkIndex?: number; // for shading rounded marks
   land?: LandPolygon[];
   width?: number;
@@ -94,6 +95,7 @@ export const RouteMap: React.FC<RouteMapProps> = ({
   boat,
   competitors,
   wind,
+  windFeature,
   nextMarkIndex = 0,
   land,
   width = 320,
@@ -109,6 +111,16 @@ export const RouteMap: React.FC<RouteMapProps> = ({
   const trailPts = (trail ?? []).map((p) => project(p.lat, p.lon));
   const boatXY = boat ? project(boat.lat, boat.lon) : null;
   const competitorXY = (competitors ?? []).map((c) => project(c.lat, c.lon));
+
+  // Project the drifting puff/hole: its centre, and a radius in pixels derived
+  // from projecting a point one feature-radius north of the centre.
+  const feature = windFeature
+    ? (() => {
+        const c = project(windFeature.lat, windFeature.lon);
+        const edge = project(windFeature.lat + windFeature.radiusNm / 60, windFeature.lon);
+        return { c, rPx: Math.max(8, Math.hypot(edge.x - c.x, edge.y - c.y)), puff: windFeature.puff };
+      })()
+    : null;
 
   // Wind arrows: each is centred on its grid point, points the way the wind
   // blows TO, with length and colour scaled by strength.
@@ -165,6 +177,38 @@ export const RouteMap: React.FC<RouteMapProps> = ({
               fillRule="evenodd"
             />
           ))}
+
+          {/* Drifting pressure system: a puff (more breeze) or a hole. */}
+          {feature ? (
+            <>
+              <Circle
+                cx={feature.c.x}
+                cy={feature.c.y}
+                r={feature.rPx}
+                fill={feature.puff ? colors.signalGreen : colors.steel}
+                opacity={0.12}
+              />
+              <Circle
+                cx={feature.c.x}
+                cy={feature.c.y}
+                r={feature.rPx}
+                stroke={feature.puff ? colors.signalGreen : colors.steel}
+                strokeWidth={1}
+                strokeDasharray="3 4"
+                fill="none"
+                opacity={0.7}
+              />
+              <SvgText
+                x={feature.c.x}
+                y={feature.c.y + 3}
+                fill={feature.puff ? colors.signalGreen : colors.mist}
+                fontSize="9"
+                textAnchor="middle"
+              >
+                {feature.puff ? 'MORE BREEZE' : 'LIGHT PATCH'}
+              </SvgText>
+            </>
+          ) : null}
 
           {/* Live wind field: direction & strength across the course. */}
           {windArrows.map((w) => (

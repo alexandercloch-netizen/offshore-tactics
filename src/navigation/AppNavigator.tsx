@@ -18,6 +18,7 @@ import RaceSelectScreen from '../screens/RaceSelectScreen';
 import BoatSelectScreen from '../screens/BoatSelectScreen';
 import CrewSelectScreen from '../screens/CrewSelectScreen';
 import ProvisioningScreen from '../screens/ProvisioningScreen';
+import BriefingScreen from '../screens/BriefingScreen';
 import RaceMapScreen from '../screens/RaceMapScreen';
 import ResultsScreen from '../screens/ResultsScreen';
 import FleetScreen from '../screens/FleetScreen';
@@ -134,6 +135,11 @@ export const AppNavigator: React.FC = () => {
           name="Provisioning"
           component={ProvisioningScreen}
           options={{ title: 'Provision the Boat' }}
+        />
+        <Stack.Screen
+          name="Briefing"
+          component={BriefingScreen}
+          options={{ title: 'Race Briefing', headerBackVisible: false }}
         />
         <Stack.Screen
           name="RaceMap"

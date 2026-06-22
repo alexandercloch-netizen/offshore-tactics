@@ -31,7 +31,7 @@ import {
 } from '../engine/gameEngine';
 import { competitorPoints } from '../engine/fleet';
 import { courseAspect, courseBounds } from '../engine/geo';
-import { pressureHint, sampleWindGrid, weatherOutlook } from '../engine/wind';
+import { featureState, pressureHint, sampleWindGrid, weatherOutlook } from '../engine/wind';
 import { EffortMode, RoutingBias } from '../types';
 import RouteMap from '../components/RouteMap';
 import TutorialOverlay from '../components/TutorialOverlay';
@@ -228,6 +228,9 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
           boat={{ lat: progress.lat, lon: progress.lon }}
           competitors={state.fleet ? competitorPoints(state.fleet, race) : []}
           wind={windArrows}
+          windFeature={
+            state.windField ? featureState(state.windField, progress.elapsedHours) : undefined
+          }
           nextMarkIndex={progress.nextMarkIndex}
           land={LANDMASSES[race.id]}
           width={mapWidth}

@@ -167,6 +167,28 @@ export function pressureHint(field: WindField, lat: number, lon: number, hours: 
   };
 }
 
+export interface WindFeatureState {
+  lat: number; // current centre (drifted to `hours`)
+  lon: number;
+  radiusNm: number;
+  puff: boolean; // true = more breeze, false = a hole
+  deltaKn: number;
+}
+
+// The wind field's drifting puff/hole at a given time — its centre moves with
+// the drift, so the chart can draw where the pressure system is right now.
+export function featureState(field: WindField, hours: number): WindFeatureState {
+  const f = field.feature;
+  const pos = movePoint(f.lat, f.lon, f.driftDir, f.driftKn * hours);
+  return {
+    lat: pos.lat,
+    lon: pos.lon,
+    radiusNm: f.radiusNm,
+    puff: f.deltaKn > 0,
+    deltaKn: f.deltaKn,
+  };
+}
+
 export interface WeatherOutlook {
   nowKn: number;
   soonKn: number;

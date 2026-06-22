@@ -26,8 +26,10 @@ export const ProvisioningScreen: React.FC<Props> = ({ navigation }) => {
 
   const setSail = () => {
     if (overBudget) return;
+    // Commit the campaign (funds, wind field, fleet) and head to the briefing —
+    // the calm beat before the gun to review conditions and set the plan.
     beginRace();
-    navigation.reset({ index: 0, routes: [{ name: 'RaceMap' }] });
+    navigation.reset({ index: 0, routes: [{ name: 'Briefing' }] });
   };
 
   return (

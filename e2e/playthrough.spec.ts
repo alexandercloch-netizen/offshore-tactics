@@ -26,8 +26,11 @@ test('a full race can be played from start to finish', async ({ page }) => {
   await page.getByText('Captain Mara Vega', { exact: true }).first().click();
   await page.getByRole('button', { name: 'Continue to Provisions' }).click();
 
-  // Set sail.
+  // Set sail → the pre-start briefing.
   await page.getByRole('button', { name: 'Set Sail' }).click();
+
+  // Review the briefing, then start the race.
+  await page.getByRole('button', { name: 'Start Racing' }).click();
 
   // Dismiss the first-run how-to-play overlay so the race starts.
   await page.getByRole('button', { name: /Got it/ }).click();

@@ -1,0 +1,283 @@
+import React, { useEffect } from 'react';
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { EffortMode, RootStackParamList, RoutingBias } from '../types';
+import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
+import { getRaceById } from '../data';
+import { LANDMASSES } from '../data/landmasses';
+import { useGame } from '../store/GameContext';
+import { formatDuration, raceDivision, resolveBoatById } from '../engine/gameEngine';
+import { courseAspect, courseBounds } from '../engine/geo';
+import { featureState, pressureHint, sampleWindGrid, weatherOutlook } from '../engine/wind';
+import RouteMap from '../components/RouteMap';
+import WindIndicator from '../components/WindIndicator';
+import NauticalButton from '../components/NauticalButton';
+
+type Props = NativeStackScreenProps<RootStackParamList, 'Briefing'>;
+
+// The pre-start briefing: a calm beat before the gun to read the course and the
+// conditions, and to set the plan (effort + which side to favour) you'll sail
+// off the line. Mirrors how a real crew prepares before racing.
+export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
+  const insets = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
+  const { state, beginRace, setStrategy } = useGame();
+
+  const race = getRaceById(state.selectedRaceId);
+  const boat = resolveBoatById(state, state.selectedBoatId);
+
+  // The race is normally committed (funds + wind field + fleet) when leaving
+  // provisioning; begin it here as a fallback if we somehow arrived unstarted.
+  useEffect(() => {
+    if (!state.progress && race && boat && state.selectedCrewIds.length > 0) {
+      beginRace();
+    }
+  }, [state.progress, race, boat, state.selectedCrewIds.length, beginRace]);
+
+  if (!race || !boat || !state.progress || !state.weather || !state.windField) {
+    return (
+      <View style={styles.loading}>
+        <Text style={styles.loadingText}>Reading the conditions…</Text>
+      </View>
+    );
+  }
+
+  const { progress, weather, windField } = state;
+  const divisionName = state.selectedDivision === 'pro' ? 'Pro' : 'Corinthian';
+  const fleetSize = raceDivision(race, state.selectedDivision).fleetSize;
+  const outlook = weatherOutlook(windField, progress.lat, progress.lon, 0);
+  const hint = pressureHint(windField, progress.lat, progress.lon, 0);
+
+  // Map sized to the course, centred in a max-width column (as in the race).
+  const CONTENT_MAX = 760;
+  const columnWidth = Math.min(width - spacing.lg * 2, CONTENT_MAX);
+  const mapWidth = columnWidth - spacing.sm * 2;
+  const mapAspect = Math.max(0.55, Math.min(courseAspect(race.waypoints), 1.3));
+  const mapHeight = Math.max(280, Math.min(Math.round(mapWidth * mapAspect), Math.round(height * 0.5)));
+
+  const windArrows = sampleWindGrid(windField, courseBounds(race.waypoints), 7, 6, 0);
+  const feature = featureState(windField, 0);
+
+  const start = () => {
+    navigation.reset({ index: 0, routes: [{ name: 'RaceMap' }] });
+  };
+
+  return (
+    <View style={styles.screen}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: spacing.xxl }]}>
+        <View style={{ width: columnWidth }}>
+          <Text style={styles.kicker}>Skipper's Briefing</Text>
+          <Text style={styles.raceName}>{race.name}</Text>
+          <Text style={styles.sub}>
+            {race.location} · {divisionName} division · {fleetSize} boats
+          </Text>
+
+          <View style={styles.mapWrap}>
+            <RouteMap
+              waypoints={race.waypoints}
+              route={progress.route}
+              boat={{ lat: progress.lat, lon: progress.lon }}
+              wind={windArrows}
+              windFeature={feature}
+              land={LANDMASSES[race.id]}
+              width={mapWidth}
+              height={mapHeight}
+            />
+          </View>
+
+          <View style={styles.panel}>
+            <View style={styles.windRow}>
+              <WindIndicator weather={weather} size={108} />
+              <View style={styles.windInfo}>
+                <Text style={styles.panelLabel}>At the start</Text>
+                <Text style={styles.bigValue}>
+                  {Math.round(weather.windSpeedKts)} kn · {weather.windStrength}
+                </Text>
+                <Text style={styles.outlook}>
+                  {outlook.trend === 'building'
+                    ? `Building — ${Math.round(outlook.soonKn)} kn within ${outlook.lookaheadH}h`
+                    : outlook.trend === 'easing'
+                      ? 'Breeze easing over the next couple of hours'
+                      : 'Holding steady for now'}
+                </Text>
+                <Text style={styles.hint}>
+                  More pressure to the {hint.compass}
+                  {hint.strong ? ' — worth chasing' : ''}
+                </Text>
+                <Text style={styles.firstLeg}>
+                  First leg: {progress.pointOfSail.toLowerCase()}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.panel}>
+            <Text style={styles.panelTitle}>Signature Challenge</Text>
+            <Text style={styles.hazard}>{race.signatureHazard}</Text>
+            <View style={styles.factRow}>
+              <Fact label="Course" value={`${Math.round(race.distanceNm)} nm`} />
+              <Fact label="Record" value={formatDuration(race.recordTimeHours)} />
+              <Fact label="Difficulty" value={race.difficulty} />
+            </View>
+          </View>
+
+          <View style={styles.panel}>
+            <Text style={styles.panelTitle}>Your Plan off the Line</Text>
+            <Text style={styles.planLabel}>Effort</Text>
+            <Segmented<EffortMode>
+              value={state.strategy.effort}
+              options={[
+                { value: 'conserve', label: 'Conserve' },
+                { value: 'cruise', label: 'Cruise' },
+                { value: 'push', label: 'Push' },
+              ]}
+              onSelect={(effort) => setStrategy({ effort })}
+            />
+            <Text style={[styles.planLabel, { marginTop: spacing.sm }]}>Favour a side</Text>
+            <Segmented<RoutingBias>
+              value={state.strategy.bias}
+              options={[
+                { value: -1, label: 'Bank Left' },
+                { value: 0, label: 'Optimal' },
+                { value: 1, label: 'Bank Right' },
+              ]}
+              onSelect={(bias) => setStrategy({ bias })}
+            />
+            <Text style={styles.planHint}>
+              You can adjust both at any time during the race.
+            </Text>
+          </View>
+        </View>
+      </ScrollView>
+
+      <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
+        <NauticalButton label="Start Racing" onPress={start} />
+      </View>
+    </View>
+  );
+};
+
+const Fact: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+  <View style={styles.fact}>
+    <Text style={styles.factValue}>{value}</Text>
+    <Text style={styles.factLabel}>{label}</Text>
+  </View>
+);
+
+interface SegProps<T> {
+  value: T;
+  options: { value: T; label: string }[];
+  onSelect: (value: T) => void;
+}
+function Segmented<T extends string | number>({ value, options, onSelect }: SegProps<T>) {
+  return (
+    <View style={styles.segmented}>
+      {options.map((opt) => {
+        const active = opt.value === value;
+        return (
+          <Pressable
+            key={String(opt.value)}
+            onPress={() => onSelect(opt.value)}
+            style={[styles.segment, active && styles.segmentActive]}
+          >
+            <Text style={[styles.segmentLabel, active && styles.segmentLabelActive]}>{opt.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: colors.abyss },
+  loading: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.abyss },
+  loadingText: { color: colors.mist, fontSize: fontSize.md },
+  content: { padding: spacing.lg, alignItems: 'center' },
+  kicker: {
+    color: colors.brassLight,
+    fontSize: fontSize.xs,
+    textTransform: 'uppercase',
+    letterSpacing: 2,
+    marginBottom: spacing.xs,
+  },
+  raceName: { color: colors.foam, fontSize: fontSize.xl, fontWeight: fontWeight.bold },
+  sub: { color: colors.mist, fontSize: fontSize.sm, marginTop: 2, marginBottom: spacing.md },
+  mapWrap: { alignItems: 'center', marginBottom: spacing.md },
+  panel: {
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.hull,
+    padding: spacing.lg,
+    marginTop: spacing.md,
+  },
+  panelTitle: {
+    color: colors.foam,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.bold,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: spacing.sm,
+  },
+  windRow: { flexDirection: 'row', alignItems: 'center' },
+  windInfo: { flex: 1, marginLeft: spacing.lg },
+  panelLabel: {
+    color: colors.slate,
+    fontSize: fontSize.xs,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  bigValue: { color: colors.foam, fontSize: fontSize.lg, fontWeight: fontWeight.bold, marginTop: 2 },
+  outlook: { color: colors.brassLight, fontSize: fontSize.sm, marginTop: spacing.xs, lineHeight: 18 },
+  hint: { color: colors.signalGreen, fontSize: fontSize.sm, marginTop: spacing.xs },
+  firstLeg: { color: colors.mist, fontSize: fontSize.sm, marginTop: spacing.xs },
+  hazard: { color: colors.mist, fontSize: fontSize.sm, lineHeight: 20 },
+  factRow: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.md },
+  fact: {
+    flex: 1,
+    backgroundColor: colors.navy,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.hull,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+  },
+  factValue: { color: colors.foam, fontSize: fontSize.sm, fontWeight: fontWeight.bold },
+  factLabel: { color: colors.slate, fontSize: fontSize.xs, textTransform: 'uppercase', marginTop: 2 },
+  planLabel: {
+    color: colors.slate,
+    fontSize: fontSize.xs,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: spacing.xs,
+  },
+  planHint: { color: colors.slate, fontSize: fontSize.xs, marginTop: spacing.sm },
+  segmented: {
+    flexDirection: 'row',
+    backgroundColor: colors.navy,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.hull,
+    overflow: 'hidden',
+  },
+  segment: { flex: 1, paddingVertical: spacing.sm, alignItems: 'center' },
+  segmentActive: { backgroundColor: colors.hull },
+  segmentLabel: { color: colors.mist, fontSize: fontSize.sm, fontWeight: fontWeight.medium },
+  segmentLabelActive: { color: colors.brassLight, fontWeight: fontWeight.bold },
+  footer: {
+    padding: spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: colors.hull,
+    backgroundColor: colors.deepSea,
+  },
+});
+
+export default BriefingScreen;
