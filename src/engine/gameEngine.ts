@@ -77,7 +77,7 @@ const TRAIL_CAP = 400;
 
 export const DEFAULT_STRATEGY: PlayerStrategy = { bias: 0, effort: 'cruise' };
 // Effort dial: speed multiplier and wear multiplier per mode.
-const EFFORT_SPEED: Record<EffortMode, number> = { conserve: 0.93, cruise: 1, push: 1.08 };
+export const EFFORT_SPEED: Record<EffortMode, number> = { conserve: 0.93, cruise: 1, push: 1.08 };
 const EFFORT_WEAR: Record<EffortMode, number> = { conserve: 0.7, cruise: 1, push: 1.6 };
 
 function strategyOf(state: GameState): PlayerStrategy {
@@ -381,6 +381,41 @@ export function boatSpeedFor(
     polarSpeed(boat, twa, wind.speedKn) * conditionFactor(condition) * effortMul * skillMul,
     0.4
   );
+}
+
+// Estimated time (hours) to sail a planned route under the evolving wind: walk
+// the polyline, sampling the wind and boat speed as the clock advances, so the
+// briefing can preview a finish ETA. Long segments are subdivided so the wind's
+// drift over a leg is felt. A forward estimate, not a full tick-by-tick sim.
+export function estimateRouteHours(
+  boat: Boat,
+  condition: BoatCondition,
+  route: GeoPoint[],
+  field: WindField,
+  startHours: number,
+  effortMul = 1,
+  skillMul = 1
+): number {
+  if (route.length < 2) return 0;
+  const CHUNK_NM = 6;
+  let hours = startHours;
+  for (let i = 0; i < route.length - 1; i += 1) {
+    const a = route[i];
+    const b = route[i + 1];
+    const segNm = haversineNm(a.lat, a.lon, b.lat, b.lon);
+    if (segNm < 1e-6) continue;
+    const heading = brg(a, b);
+    const chunks = Math.max(1, Math.ceil(segNm / CHUNK_NM));
+    for (let c = 0; c < chunks; c += 1) {
+      const f = (c + 0.5) / chunks;
+      const lat = a.lat + (b.lat - a.lat) * f;
+      const lon = a.lon + (b.lon - a.lon) * f;
+      const wind = sampleWind(field, lat, lon, hours);
+      const sp = boatSpeedFor(boat, condition, heading, wind, effortMul, skillMul);
+      hours += segNm / chunks / sp;
+    }
+  }
+  return hours - startHours;
 }
 
 // Boat speed right now, from the live progress + condition + effort dial + the
