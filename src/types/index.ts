@@ -413,6 +413,7 @@ export type RootStackParamList = {
   BoatSelect: undefined;
   CrewSelect: undefined;
   Provisioning: undefined;
+  Briefing: undefined;
   RaceMap: undefined;
   Results: undefined;
   BoatBuilder: undefined;

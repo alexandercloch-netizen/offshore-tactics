@@ -4,6 +4,7 @@ import {
   sampleWindGrid,
   weatherFromWind,
   weatherOutlook,
+  featureState,
 } from '../engine/wind';
 import { mulberry32, resetRng, setRng } from '../engine/rng';
 import { getRaceById } from '../data';
@@ -161,5 +162,26 @@ describe('weatherOutlook', () => {
     const o = weatherOutlook(field({ baseSpeed: 32 }), 0, 0, 0, 2);
     expect(o.peakKn).toBeGreaterThanOrEqual(28);
     expect(o.warn).toBe(true);
+  });
+});
+
+describe('featureState', () => {
+  it('reports the puff/hole centre, drifting over time', () => {
+    const f = field({
+      feature: { lat: 0, lon: 0, radiusNm: 40, deltaKn: 12, driftDir: 0, driftKn: 6 },
+    });
+    const now = featureState(f, 0);
+    expect(now.puff).toBe(true);
+    expect(now.lat).toBeCloseTo(0, 6);
+    expect(now.radiusNm).toBe(40);
+    const later = featureState(f, 5); // drifts north (bearing 0) for 5h at 6kn
+    expect(later.lat).toBeGreaterThan(now.lat);
+  });
+
+  it('flags a hole when the delta is negative', () => {
+    const f = field({
+      feature: { lat: 1, lon: 2, radiusNm: 20, deltaKn: -8, driftDir: 90, driftKn: 0 },
+    });
+    expect(featureState(f, 0).puff).toBe(false);
   });
 });
