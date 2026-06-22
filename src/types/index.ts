@@ -164,6 +164,40 @@ export interface FleetBoat extends Boat {
 
 export interface Profile {
   fleet: FleetBoat[]; // custom boats the player has built (crew & sails come later)
+  player?: PlayerProfile; // onboarding answers that personalise the experience
+}
+
+// ---- Player profile: captured at onboarding to tailor the experience ----
+
+export type SailorRole =
+  | 'owner'
+  | 'skipper'
+  | 'tactician'
+  | 'navigator'
+  | 'crew'
+  | 'fan';
+
+export type SailingRegion =
+  | 'uk'
+  | 'med'
+  | 'caribbean'
+  | 'usEast'
+  | 'usWest'
+  | 'greatLakes'
+  | 'ausNz'
+  | 'other';
+
+export type SailingGoal = 'destress' | 'tactics' | 'routing' | 'compete';
+
+export type ExperienceLevel = 'novice' | 'club' | 'seasoned' | 'pro';
+
+export interface PlayerProfile {
+  role: SailorRole;
+  region: SailingRegion;
+  goal: SailingGoal;
+  experience: ExperienceLevel;
+  boatType?: BoatType; // the class they sail, if any
+  onboardedAt: number; // epoch ms the quiz was completed
 }
 
 export type CrewRole = 'Skipper' | 'Navigator' | 'Tactician' | 'Trimmer' | 'Bowman';
@@ -375,4 +409,5 @@ export type RootStackParamList = {
   Fleet: undefined;
   BoatBuilder: undefined;
   SailLocker: { boatId: string };
+  Onboarding: undefined;
 };

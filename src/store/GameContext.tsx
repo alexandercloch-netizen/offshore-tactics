@@ -16,6 +16,7 @@ import {
   StepResult,
   Competitor,
   FleetBoat,
+  PlayerProfile,
   PlayerStrategy,
   TacticalChoice,
   WeatherCondition,
@@ -80,6 +81,7 @@ type Action =
   | { type: 'SET_TUTORIAL_SEEN' }
   | { type: 'ADD_FLEET_BOAT'; payload: { boat: FleetBoat; cost: number } }
   | { type: 'REMOVE_FLEET_BOAT'; payload: string }
+  | { type: 'SET_PLAYER_PROFILE'; payload: PlayerProfile }
   | { type: 'BUY_SAIL'; payload: { boatId: string; sailId: string; cost: number } }
   | { type: 'SELL_SAIL'; payload: { boatId: string; sailId: string; refund: number } }
   | {
@@ -213,6 +215,12 @@ function reducer(state: GameState, action: Action): GameState {
       };
     }
 
+    case 'SET_PLAYER_PROFILE':
+      return {
+        ...state,
+        profile: { ...state.profile, player: action.payload },
+      };
+
     case 'BEGIN_RACE':
       return {
         ...state,
@@ -294,6 +302,7 @@ export interface GameContextValue {
   removeFleetBoat: (id: string) => void;
   buySail: (boatId: string, sailId: string, cost: number) => void;
   sellSail: (boatId: string, sailId: string, refund: number) => void;
+  setPlayerProfile: (profile: PlayerProfile) => void;
   // race lifecycle
   beginRace: () => void;
   tick: () => StepResult;
@@ -475,6 +484,10 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
     dispatch({ type: 'SELL_SAIL', payload: { boatId, sailId, refund } });
   }, []);
 
+  const setPlayerProfile = useCallback((profile: PlayerProfile) => {
+    dispatch({ type: 'SET_PLAYER_PROFILE', payload: profile });
+  }, []);
+
   const campaignTotal = useCallback(() => campaignCost(stateRef.current).total, []);
 
   const canAffordCampaign = useCallback(
@@ -610,6 +623,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
       removeFleetBoat,
       buySail,
       sellSail,
+      setPlayerProfile,
       beginRace,
       tick,
       decide,
@@ -632,6 +646,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
       removeFleetBoat,
       buySail,
       sellSail,
+      setPlayerProfile,
       beginRace,
       tick,
       decide,

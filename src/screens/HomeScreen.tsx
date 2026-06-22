@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   Alert,
   ScrollView,
@@ -13,21 +13,50 @@ import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
 import { useGame } from '../store/GameContext';
 import { useAuth } from '../store/AuthContext';
 import { formatDuration } from '../engine/gameEngine';
+import { defaultDivision, goalHeadline, recommendedRace } from '../engine/recommend';
+import { getClassOption } from '../data/polarLibrary';
 import NauticalButton from '../components/NauticalButton';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
 export const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
-  const { state, prepareNextRace, resetCampaign } = useGame();
+  const { state, ready, prepareNextRace, resetCampaign, selectRace } = useGame();
   const { configured, user, displayName } = useAuth();
   const raceInProgress = !!state.progress;
   const best = state.history.find((r) => r.finished && r.position === 1);
   const wins = state.history.filter((r) => r.finished && r.position === 1).length;
+  const player = state.profile.player;
+
+  // First-run: send new players through the onboarding quiz (but never trap
+  // someone mid-race or before their save has loaded).
+  useEffect(() => {
+    if (ready && !player && !raceInProgress) {
+      navigation.replace('Onboarding');
+    }
+  }, [ready, player, raceInProgress, navigation]);
+
+  const recommended = recommendedRace(player, state.history);
+  // The boat class the player sails, if they don't already own one like it.
+  const suggestedClass =
+    player?.boatType && !state.profile.fleet.some((b) => b.boatType === player.boatType)
+      ? getClassOption(player.boatType)
+      : undefined;
 
   const startNewCampaign = () => {
     prepareNextRace();
     navigation.navigate('RaceSelect');
+  };
+
+  // Jump straight into the recommended race's setup with a sensible division.
+  const sailRecommended = () => {
+    if (!recommended) {
+      startNewCampaign();
+      return;
+    }
+    prepareNextRace();
+    selectRace(recommended.id, defaultDivision(player?.experience));
+    navigation.navigate('BoatSelect');
   };
 
   const confirmReset = () => {
@@ -68,13 +97,12 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
       ) : null}
 
       <View style={styles.hero}>
-        <Text style={styles.kicker}>A Sailing Strategy Game</Text>
+        <Text style={styles.kicker}>
+          {user ? `Welcome aboard, ${displayName}` : 'A Sailing Strategy Game'}
+        </Text>
         <Text style={styles.title}>OFFSHORE</Text>
         <Text style={styles.title}>TACTICS</Text>
-        <Text style={styles.tagline}>
-          Pick your race, charter a boat, sign a crew and outwit the weather to
-          take line honours.
-        </Text>
+        <Text style={styles.tagline}>{goalHeadline(player?.goal)}</Text>
       </View>
 
       <View style={styles.statsRow}>
@@ -104,17 +132,32 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
 
       <View style={styles.actions}>
         {raceInProgress ? (
+          <>
+            <NauticalButton
+              label="Resume Race"
+              subtitle="You have a race underway"
+              onPress={() => navigation.navigate('RaceMap')}
+            />
+            <NauticalButton label="New Race" variant="secondary" onPress={startNewCampaign} />
+          </>
+        ) : (
+          <>
+            <NauticalButton
+              label={recommended ? `Race the ${recommended.name}` : 'Start Racing'}
+              subtitle={recommended ? recommended.location : undefined}
+              onPress={sailRecommended}
+            />
+            <NauticalButton label="Browse All Races" variant="secondary" onPress={startNewCampaign} />
+          </>
+        )}
+        {suggestedClass ? (
           <NauticalButton
-            label="Resume Race"
-            subtitle="You have a race underway"
-            onPress={() => navigation.navigate('RaceMap')}
+            label={`Build your ${suggestedClass.name}`}
+            subtitle="Set up the boat you sail"
+            variant="secondary"
+            onPress={() => navigation.navigate('BoatBuilder')}
           />
         ) : null}
-        <NauticalButton
-          label={raceInProgress ? 'New Race' : 'Start Racing'}
-          variant={raceInProgress ? 'secondary' : 'primary'}
-          onPress={startNewCampaign}
-        />
         <NauticalButton
           label="My Fleet"
           subtitle={
@@ -132,6 +175,11 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
             onPress={() => navigation.navigate('Leaderboard')}
           />
         ) : null}
+        <NauticalButton
+          label="Edit Preferences"
+          variant="ghost"
+          onPress={() => navigation.navigate('Onboarding')}
+        />
         {state.history.length > 0 ? (
           <NauticalButton
             label="Reset Campaign"
