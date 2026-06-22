@@ -32,6 +32,7 @@ import {
 import { competitorPoints } from '../engine/fleet';
 import { courseAspect, courseBounds } from '../engine/geo';
 import { featureState, pressureHint, sampleWindGrid, weatherOutlook } from '../engine/wind';
+import { buildInstrumentReport, InstrumentReport } from '../engine/instruments';
 import { EffortMode, RoutingBias } from '../types';
 import RouteMap from '../components/RouteMap';
 import TutorialOverlay from '../components/TutorialOverlay';
@@ -50,6 +51,7 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
   const { state, beginRace, tick, decide, retireRace, setStrategy, markTutorialSeen } = useGame();
   const [activeEvent, setActiveEvent] = useState<GameEvent | null>(null);
   const [activeVmg, setActiveVmg] = useState<VmgPreview | null>(null);
+  const [activeInstruments, setActiveInstruments] = useState<InstrumentReport | null>(null);
   const [paused, setPaused] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
 
@@ -114,6 +116,20 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
           weather: outcome.weather,
         };
         setActiveVmg(vmgPreview(tempState, outcome.event));
+        // Instruments + this-leg trend, to inform the call.
+        const wf = stateRef.current.windField;
+        if (wf && race) {
+          const fleetSz = raceDivision(race, stateRef.current.selectedDivision).fleetSize;
+          const outlook = weatherOutlook(
+            wf,
+            outcome.progress.lat,
+            outcome.progress.lon,
+            outcome.progress.elapsedHours
+          );
+          setActiveInstruments(
+            buildInstrumentReport(outcome.progress, outcome.condition, fleetSz, outlook)
+          );
+        }
         setActiveEvent(outcome.event);
       }
       if (outcome.finished || outcome.retired) {
@@ -128,6 +144,7 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
     (choice: TacticalChoice) => {
       setActiveEvent(null);
       setActiveVmg(null);
+      setActiveInstruments(null);
       eventActiveRef.current = false;
       const outcome = decide(choice);
       if (outcome.finished || outcome.retired) {
@@ -339,6 +356,7 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
         visible={!!activeEvent}
         event={activeEvent}
         vmg={activeVmg}
+        instruments={activeInstruments}
         onSelect={handleChoice}
       />
     </View>

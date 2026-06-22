@@ -299,6 +299,17 @@ export interface VmgPreview {
   after: Record<string, number>;
 }
 
+// A single instrument sample, recorded as the boat sails, so a decision can be
+// made with the current readings and the trend since the last one.
+export interface InstrumentReading {
+  atNm: number; // distance covered when taken
+  hours: number; // elapsed race hours
+  windDir: number; // wind direction FROM (deg)
+  windSpeedKn: number;
+  speedKn: number; // boat speed
+  position: number; // fleet standing
+}
+
 export interface RaceProgress {
   distanceCoveredNm: number; // geometric advance toward the finish
   totalDistanceNm: number; // geometric course length (mark to mark)
@@ -321,6 +332,8 @@ export interface RaceProgress {
   nextDecisionAtNm: number; // distance at which the next decision fires
   decisionsTaken: number;
   shownEventIds: string[]; // ids of decisions already presented, to avoid repeats
+  readings: InstrumentReading[]; // recent instrument samples (capped)
+  legStartNm: number; // distance covered at the last decision (this leg's start)
 }
 
 // An AI competitor sailing the same course & wind field as the player.
