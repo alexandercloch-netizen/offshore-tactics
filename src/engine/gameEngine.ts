@@ -44,6 +44,7 @@ import { polarSpeed } from './polar';
 import { effectivePolar } from './sails';
 import { createWindField, sampleWind, weatherFromWind } from './wind';
 import { planRoute } from './router';
+import { LANDMASSES } from '../data/landmasses';
 import { advanceFleet, finalPosition, livePosition } from './fleet';
 
 export const clamp = (value: number, min = 0, max = 100): number =>
@@ -224,7 +225,7 @@ export function initialProgress(
   const pos: GeoPoint = { lat: start.lat, lon: start.lon };
   const total = courseLengthNm(race.waypoints);
   const wind = sampleWind(field, pos.lat, pos.lon, 0);
-  const route = planRoute(boat, field, pos, race.waypoints, 1, 0, bias);
+  const route = planRoute(boat, field, pos, race.waypoints, 1, 0, bias, LANDMASSES[race.id]);
   const heading = route.length > 1 ? brg(route[0], route[1]) : 0;
   const firstDecision =
     rndRange(FIRST_DECISION_MIN, FIRST_DECISION_MAX) * race.distanceNm;
@@ -447,7 +448,7 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
     (shifted && movedSincePlan > total * 0.03) ||
     movedSincePlan > total * 0.1;
   if (!finished && !retired && nextMarkIndex < marks.length && wantReroute) {
-    route = planRoute(boat, field, adv.pos, marks, nextMarkIndex, elapsedHours, strategy.bias);
+    route = planRoute(boat, field, adv.pos, marks, nextMarkIndex, elapsedHours, strategy.bias, LANDMASSES[race.id]);
     routeWindDir = wind.fromDeg;
     routePlannedAtNm = distanceCoveredNm;
     routeBias = strategy.bias;
