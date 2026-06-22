@@ -19,13 +19,13 @@ export interface RaceClimate {
 }
 
 export const WEATHER_CLIMATOLOGY: Record<string, RaceClimate> = {
-  'race-caribbean-600': {"fromDeg":75,"speedKn":18,"gustFactor":0.2,"variabilityDeg":20,"source":"seed"},
-  'race-chicago-mac': {"fromDeg":200,"speedKn":10,"gustFactor":0.2,"variabilityDeg":20,"source":"seed"},
-  'race-fastnet': {"fromDeg":240,"speedKn":18,"gustFactor":0.2,"variabilityDeg":20,"source":"seed"},
-  'race-middle-sea': {"fromDeg":315,"speedKn":14,"gustFactor":0.2,"variabilityDeg":20,"source":"seed"},
-  'race-newport-bermuda': {"fromDeg":225,"speedKn":15,"gustFactor":0.2,"variabilityDeg":20,"source":"seed"},
-  'race-r2ak': {"fromDeg":315,"speedKn":12,"gustFactor":0.2,"variabilityDeg":20,"source":"seed"},
-  'race-round-island': {"fromDeg":225,"speedKn":12,"gustFactor":0.2,"variabilityDeg":20,"source":"seed"},
-  'race-sydney-hobart': {"fromDeg":30,"speedKn":16,"gustFactor":0.2,"variabilityDeg":20,"source":"seed"},
-  'race-transpac': {"fromDeg":45,"speedKn":16,"gustFactor":0.2,"variabilityDeg":20,"source":"seed"},
+  'race-caribbean-600': {"fromDeg":97.8,"speedKn":12,"gustFactor":0.33,"variabilityDeg":55.4,"source":"open-meteo","sampledAt":"2026-06-22"},
+  'race-chicago-mac': {"fromDeg":259.6,"speedKn":5.2,"gustFactor":0.41,"variabilityDeg":70,"source":"open-meteo","sampledAt":"2026-06-22"},
+  'race-fastnet': {"fromDeg":261.1,"speedKn":11.7,"gustFactor":0.43,"variabilityDeg":64.9,"source":"open-meteo","sampledAt":"2026-06-22"},
+  'race-middle-sea': {"fromDeg":105.4,"speedKn":9.3,"gustFactor":0.54,"variabilityDeg":70,"source":"open-meteo","sampledAt":"2026-06-22"},
+  'race-newport-bermuda': {"fromDeg":226.6,"speedKn":13.1,"gustFactor":0.46,"variabilityDeg":70,"source":"open-meteo","sampledAt":"2026-06-22"},
+  'race-r2ak': {"fromDeg":214.4,"speedKn":3,"gustFactor":0.6,"variabilityDeg":70,"source":"open-meteo","sampledAt":"2026-06-22"},
+  'race-round-island': {"fromDeg":274.2,"speedKn":8.5,"gustFactor":0.53,"variabilityDeg":67.9,"source":"open-meteo","sampledAt":"2026-06-22"},
+  'race-sydney-hobart': {"fromDeg":294.2,"speedKn":16,"gustFactor":0.43,"variabilityDeg":67.6,"source":"open-meteo","sampledAt":"2026-06-22"},
+  'race-transpac': {"fromDeg":58.2,"speedKn":12.6,"gustFactor":0.36,"variabilityDeg":33.8,"source":"open-meteo","sampledAt":"2026-06-22"},
 };
