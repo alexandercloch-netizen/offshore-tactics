@@ -245,6 +245,7 @@ export type CrewTier = 'pro' | 'corinthian';
 // Presets for the one-tap auto-crew: stack the deck with veterans, run a
 // balanced watch, or blood a boatful of young guns.
 export type AutoCrewPreset = 'veteran' | 'balanced' | 'novice';
+export type AutoProvisionPreset = 'minimum' | 'balanced' | 'bluewater';
 
 export interface CrewMember {
   id: string;
@@ -262,16 +263,22 @@ export interface CrewMember {
 
 export type ProvisionCategory = 'Food' | 'Water' | 'Medical' | 'Spares' | 'Safety';
 
+// Consumables (food, water) must cover the crew for the length of the passage;
+// equipment (medical, spares, safety) is a one-off fit-out for the boat.
+export type ProvisionKind = 'consumable' | 'equipment';
+
 export interface Provision {
   id: string;
   name: string;
   category: ProvisionCategory;
+  kind: ProvisionKind;
   description: string;
   unitCost: number;
-  staminaBoost: number; // applied per unit at start of race
+  crewDaysPerUnit?: number; // consumables: how many crew-days one unit feeds
+  staminaBoost: number; // per-unit quality bonus (consumables) at the start
   moraleBoost: number;
-  repairBoost: number; // bonus hull integrity
-  safetyBoost: number; // reduces incident risk
+  repairBoost: number; // spares: resistance to hull wear during the race
+  safetyBoost: number; // safety/medical: reduces incident & retirement risk
 }
 
 export interface ProvisionSelection {
