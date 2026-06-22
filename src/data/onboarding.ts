@@ -1,13 +1,7 @@
-import {
-  BoatType,
-  ExperienceLevel,
-  SailingGoal,
-  SailingRegion,
-  SailorRole,
-} from '../types';
+import { ExperienceLevel, SailingGoal, SailingRegion } from '../types';
 
-// Catalogs for the onboarding quiz. Each option carries a value (stored on the
-// player profile) and friendly copy for the cards.
+// Catalogs for the quick onboarding quiz — three taps, playful copy. Each
+// option carries the value stored on the player profile plus friendly card text.
 
 export interface Choice<T> {
   value: T;
@@ -15,47 +9,29 @@ export interface Choice<T> {
   blurb: string;
 }
 
-export const ROLE_OPTIONS: Choice<SailorRole>[] = [
-  { value: 'owner', label: 'Owner', blurb: 'I own a boat' },
-  { value: 'skipper', label: 'Skipper', blurb: 'I helm / run the boat' },
-  { value: 'tactician', label: 'Tactician', blurb: 'I call the shifts' },
-  { value: 'navigator', label: 'Navigator', blurb: 'I plan the route' },
-  { value: 'crew', label: 'Crew', blurb: 'I sail on others’ boats' },
-  { value: 'fan', label: 'Enthusiast', blurb: 'I love the sport' },
-];
-
 export const REGION_OPTIONS: Choice<SailingRegion>[] = [
-  { value: 'uk', label: 'UK & Ireland', blurb: 'Solent, Channel, Celtic Sea' },
-  { value: 'med', label: 'Mediterranean', blurb: 'Sicily, Malta, Riviera' },
-  { value: 'caribbean', label: 'Caribbean', blurb: 'Antigua & the islands' },
-  { value: 'usEast', label: 'US East Coast', blurb: 'Newport, Bermuda, Atlantic' },
-  { value: 'usWest', label: 'US West Coast', blurb: 'California & the Pacific' },
-  { value: 'greatLakes', label: 'Great Lakes', blurb: 'Chicago, Mackinac' },
+  { value: 'uk', label: 'UK & Ireland', blurb: 'Solent, Fastnet, the Channel' },
+  { value: 'med', label: 'Mediterranean', blurb: 'Sun, Sicily, sundowners' },
+  { value: 'caribbean', label: 'Caribbean', blurb: 'Trade winds & rum' },
+  { value: 'usEast', label: 'US East Coast', blurb: 'Newport to Bermuda' },
+  { value: 'usWest', label: 'US West Coast', blurb: 'Cali to Hawaii' },
+  { value: 'greatLakes', label: 'Great Lakes', blurb: 'Freshwater grinders' },
   { value: 'ausNz', label: 'Australia & NZ', blurb: 'Sydney, Hobart, Tasman' },
-  { value: 'other', label: 'Elsewhere', blurb: 'Bluewater & beyond' },
+  { value: 'other', label: 'Somewhere else', blurb: 'Bluewater dreamer' },
 ];
 
 export const GOAL_OPTIONS: Choice<SailingGoal>[] = [
-  { value: 'destress', label: 'Unwind', blurb: 'Relax with a race before mine' },
-  { value: 'tactics', label: 'Sharpen tactics', blurb: 'Practise the big calls' },
-  { value: 'routing', label: 'Weather routing', blurb: 'Learn to read the breeze' },
-  { value: 'compete', label: 'Compete', blurb: 'Climb the leaderboard' },
+  { value: 'destress', label: 'Just here to chill', blurb: 'Salt air, zero stress' },
+  { value: 'tactics', label: 'Outsmart the fleet', blurb: 'Win the chess match' },
+  { value: 'routing', label: 'Crack the weather', blurb: 'Read the wind like a pro' },
+  { value: 'compete', label: 'Win, obviously', blurb: 'Top of the podium' },
 ];
 
 export const EXPERIENCE_OPTIONS: Choice<ExperienceLevel>[] = [
-  { value: 'novice', label: 'New to it', blurb: 'Still learning the ropes' },
-  { value: 'club', label: 'Club racer', blurb: 'Weeknights & weekends' },
-  { value: 'seasoned', label: 'Seasoned', blurb: 'Many offshore miles' },
-  { value: 'pro', label: 'Pro', blurb: 'I race at the sharp end' },
-];
-
-// Boat-class choices reuse the build library; 'none' means they don't sail one.
-export const BOAT_CHOICES: Choice<BoatType | 'none'>[] = [
-  { value: 'cruiserRacerIRC', label: 'Cruiser-Racer', blurb: 'IRC 40-footer' },
-  { value: 'tp52', label: 'TP52', blurb: 'Grand-prix inshore' },
-  { value: 'class40', label: 'Class40', blurb: 'Shorthanded offshore' },
-  { value: 'maxi72', label: 'Maxi 72', blurb: 'Big-boat pace' },
-  { value: 'none', label: 'I don’t own one', blurb: 'Or not sure yet' },
+  { value: 'novice', label: 'Landlubber', blurb: 'New to the helm' },
+  { value: 'club', label: 'Weekend warrior', blurb: 'Beers & buoys' },
+  { value: 'seasoned', label: 'Salty', blurb: 'Plenty of miles' },
+  { value: 'pro', label: 'Absolute legend', blurb: 'Pointy-end pro' },
 ];
 
 // Region → the races that best match it, in preference order. Used to pick a

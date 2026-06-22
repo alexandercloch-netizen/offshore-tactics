@@ -192,10 +192,10 @@ export type SailingGoal = 'destress' | 'tactics' | 'routing' | 'compete';
 export type ExperienceLevel = 'novice' | 'club' | 'seasoned' | 'pro';
 
 export interface PlayerProfile {
-  role: SailorRole;
   region: SailingRegion;
   goal: SailingGoal;
   experience: ExperienceLevel;
+  role?: SailorRole; // optional; not asked in the quick quiz
   boatType?: BoatType; // the class they sail, if any
   onboardedAt: number; // epoch ms the quiz was completed
 }

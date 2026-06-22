@@ -6,13 +6,11 @@ import { test, expect, Page } from '@playwright/test';
 test('a full race can be played from start to finish', async ({ page }) => {
   await page.goto('/');
 
-  // First run: answer the onboarding quiz (role → boat → region → goal →
+  // First run: answer the quick onboarding quiz (home waters → mission →
   // experience), which lands back on the personalised home screen.
-  await page.getByText('Skipper', { exact: true }).first().click();
-  await page.getByText('Cruiser-Racer', { exact: true }).first().click();
   await page.getByText('UK & Ireland', { exact: true }).first().click();
-  await page.getByText('Compete', { exact: true }).first().click();
-  await page.getByText('Club racer', { exact: true }).first().click();
+  await page.getByText('Win, obviously', { exact: true }).first().click();
+  await page.getByText('Weekend warrior', { exact: true }).first().click();
 
   // Home → race select (the always-present "browse" entry).
   await page.getByRole('button', { name: 'Browse All Races' }).click();
