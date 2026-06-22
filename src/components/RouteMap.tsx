@@ -21,6 +21,7 @@ import { LandPolygon } from '../data/landmasses';
 interface RouteMapProps {
   waypoints: Waypoint[]; // fixed marks (also set the projection bounds)
   route?: GeoPoint[]; // remaining weather-routed path
+  altRoute?: GeoPoint[]; // an alternative route to contrast (e.g. the faster line)
   trail?: GeoPoint[]; // track sailed so far
   boat?: GeoPoint; // current boat position
   competitors?: GeoPoint[]; // AI fleet positions
@@ -96,6 +97,7 @@ function landPath(polygon: LandPolygon, project: (lat: number, lon: number) => X
 export const RouteMap: React.FC<RouteMapProps> = ({
   waypoints,
   route,
+  altRoute,
   trail,
   boat,
   competitors,
@@ -116,6 +118,7 @@ export const RouteMap: React.FC<RouteMapProps> = ({
   const project = buildProjector(waypoints, width, height);
   const markPoints = waypoints.map((w) => project(w.lat, w.lon));
   const routePts = (route ?? []).map((p) => project(p.lat, p.lon));
+  const altRoutePts = (altRoute ?? []).map((p) => project(p.lat, p.lon));
   const trailPts = (trail ?? []).map((p) => project(p.lat, p.lon));
   const boatXY = boat ? project(boat.lat, boat.lon) : null;
   const competitorXY = (competitors ?? []).map((c) => project(c.lat, c.lon));
@@ -268,6 +271,11 @@ export const RouteMap: React.FC<RouteMapProps> = ({
               opacity={0.7}
             />
           ))}
+
+          {/* The faster alternative line, for contrast (drawn under the plan). */}
+          {altRoutePts.length > 1 ? (
+            <Path d={pathFrom(altRoutePts)} stroke={colors.signalGreen} strokeWidth={2} strokeDasharray="2 6" fill="none" opacity={0.8} />
+          ) : null}
 
           {/* Planned weather-routed path still to sail (dashed). */}
           {routePts.length > 1 ? (

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -14,7 +14,16 @@ import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
 import { getRaceById } from '../data';
 import { LANDMASSES } from '../data/landmasses';
 import { useGame } from '../store/GameContext';
-import { formatDuration, raceDivision, resolveBoatById } from '../engine/gameEngine';
+import {
+  EFFORT_SPEED,
+  crewSkillAverage,
+  crewSkillFactor,
+  estimateRouteHours,
+  formatDuration,
+  raceDivision,
+  resolveBoatById,
+} from '../engine/gameEngine';
+import { planRoute } from '../engine/router';
 import { courseAspect, courseBounds } from '../engine/geo';
 import { featureState, pressureHint, sampleWindGrid, weatherOutlook } from '../engine/wind';
 import RouteMap from '../components/RouteMap';
@@ -37,6 +46,28 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
 
   const race = getRaceById(state.selectedRaceId);
   const boat = resolveBoatById(state, state.selectedBoatId);
+
+  // Weather-route each side option (left / optimal / right) once, so the plan
+  // panel can compare finish ETAs. Routes depend on the wind & start, not the
+  // selected bias or effort, so this survives effort toggles and forecast scrubs.
+  const planRoutes = useMemo(() => {
+    if (!race || !boat || !state.windField || !state.progress) return null;
+    const from = { lat: state.progress.lat, lon: state.progress.lon };
+    return ([-1, 0, 1] as RoutingBias[]).map((bias) => ({
+      bias,
+      route: planRoute(
+        boat,
+        state.windField!,
+        from,
+        race.waypoints,
+        state.progress!.nextMarkIndex,
+        0,
+        bias,
+        LANDMASSES[race.id]
+      ),
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [race, boat, state.windField, state.progress?.lat, state.progress?.lon, state.progress?.nextMarkIndex]);
 
   // The race is normally committed (funds + wind field + fleet) when leaving
   // provisioning; begin it here as a fallback if we somehow arrived unstarted.
@@ -79,6 +110,19 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
   // A planning window scaled to the race, capped so the slider stays useful.
   const maxForecastHour = Math.min(48, Math.max(8, Math.ceil(race.recordTimeHours)));
 
+  // Finish ETA for each side at the player's current effort & crew, and how the
+  // chosen plan stacks up against the fastest line.
+  const effortMul = EFFORT_SPEED[state.strategy.effort];
+  const skillMul = crewSkillFactor(crewSkillAverage(state.selectedCrewIds));
+  const etas = (planRoutes ?? []).map((r) => ({
+    ...r,
+    hours: estimateRouteHours(boat, state.condition, r.route, windField, 0, effortMul, skillMul),
+  }));
+  const fastest = etas.length ? etas.reduce((a, b) => (b.hours < a.hours ? b : a), etas[0]) : null;
+  const mine = etas.find((e) => e.bias === state.strategy.bias) ?? fastest;
+  const saving = mine && fastest ? mine.hours - fastest.hours : 0;
+  const offThePace = !!fastest && !!mine && fastest.bias !== mine.bias && saving > 0.05;
+
   const start = () => {
     navigation.reset({ index: 0, routes: [{ name: 'RaceMap' }] });
   };
@@ -96,7 +140,8 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
           <View style={styles.mapWrap}>
             <RouteMap
               waypoints={race.waypoints}
-              route={progress.route}
+              route={mine?.route ?? progress.route}
+              altRoute={offThePace ? fastest!.route : undefined}
               boat={{ lat: progress.lat, lon: progress.lon }}
               wind={windArrows}
               heat={heat}
@@ -175,8 +220,30 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
               ]}
               onSelect={(bias) => setStrategy({ bias })}
             />
+            {mine ? (
+              <View style={styles.etaRow}>
+                <View>
+                  <Text style={styles.planLabel}>Projected finish</Text>
+                  <Text style={styles.etaValue}>{formatDuration(mine.hours)}</Text>
+                </View>
+                <View style={{ alignItems: 'flex-end', flex: 1 }}>
+                  <Text style={styles.planLabel}>vs the fast line</Text>
+                  {offThePace ? (
+                    <Text style={styles.etaSlower}>
+                      {sideName(fastest!.bias)} is {formatDuration(saving)} quicker
+                    </Text>
+                  ) : (
+                    <Text style={styles.etaOnPace}>You're on the fast line ✓</Text>
+                  )}
+                </View>
+              </View>
+            ) : null}
+            {offThePace ? (
+              <Text style={styles.etaCaption}>The green dashes mark the faster route.</Text>
+            ) : null}
+
             <Text style={styles.planHint}>
-              You can adjust both at any time during the race.
+              Estimated from the polar &amp; forecast — you can adjust both at any time during the race.
             </Text>
           </View>
         </View>
@@ -188,6 +255,9 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
     </View>
   );
 };
+
+const sideName = (bias: RoutingBias): string =>
+  bias < 0 ? 'Banking left' : bias > 0 ? 'Banking right' : 'The optimal line';
 
 const Fact: React.FC<{ label: string; value: string }> = ({ label, value }) => (
   <View style={styles.fact}>
@@ -284,6 +354,20 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   planHint: { color: colors.slate, fontSize: fontSize.xs, marginTop: spacing.sm },
+  etaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.hull,
+  },
+  etaValue: { color: colors.foam, fontSize: fontSize.lg, fontWeight: fontWeight.bold, marginTop: 2 },
+  etaSlower: { color: colors.brassLight, fontSize: fontSize.sm, fontWeight: fontWeight.bold, marginTop: 2, textAlign: 'right' },
+  etaOnPace: { color: colors.signalGreen, fontSize: fontSize.sm, fontWeight: fontWeight.bold, marginTop: 2, textAlign: 'right' },
+  etaCaption: { color: colors.signalGreen, fontSize: fontSize.xs, marginTop: spacing.xs },
   segmented: {
     flexDirection: 'row',
     backgroundColor: colors.navy,
