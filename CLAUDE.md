@@ -144,6 +144,15 @@ missing piece fails loudly — `npm run tsc` and `npm test` are your checklist.
 0–100 `upwind`/`downwind`/`stability`. Catalogue boats use the parametric polar;
 players build custom boats (real polars) via the Boat Builder.
 
+**Add crew** — append a `CrewMember` to `src/data/crew.ts` with a `tier`
+(`pro` | `corinthian`), a `role`, `age`/`homePort`/`bio` (keep the wit), and
+0–100 `skill`/`stamina`/`morale`. The tier is load-bearing: Corinthian races are
+**amateur-only and unpaid** (`wage: 0`), the Pro division hires `pro` sailors and
+pays their `wage`. `skill` feeds boat speed (`crewSkillFactor`) and steadies
+decisions, so rate it honestly. The crew-integrity tests in
+`src/__tests__/crew.test.ts` enforce the roster shape (four sailors per role per
+tier, unpaid Corinthians) — keep them in sync.
+
 ## Gotchas
 
 - After a squash-merge, your local `main` is behind — re-fetch before the next PR.

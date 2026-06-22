@@ -1,25 +1,51 @@
-import React from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CrewMember, RootStackParamList } from '../types';
+import { AutoCrewPreset, CrewMember, RootStackParamList } from '../types';
 import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
-import { CREW } from '../data';
 import { useGame } from '../store/GameContext';
-import { crewWageTotal, resolveBoatById } from '../engine/gameEngine';
+import {
+  autoSelectCrew,
+  crewPoolForDivision,
+  crewWageForDivision,
+  resolveBoatById,
+} from '../engine/gameEngine';
 import NauticalButton from '../components/NauticalButton';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CrewSelect'>;
 
+const PRESETS: { key: AutoCrewPreset; label: string; hint: string }[] = [
+  { key: 'veteran', label: 'Seasoned Salts', hint: 'Grizzled veterans' },
+  { key: 'balanced', label: 'Balanced Watch', hint: 'Old hands & youth' },
+  { key: 'novice', label: 'Young Guns', hint: 'Green & hungry' },
+];
+
 export const CrewSelectScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
-  const { state, toggleCrew, money } = useGame();
+  const { state, toggleCrew, setCrew, money } = useGame();
   // Resolve against the catalogue AND the player's custom fleet, so a
   // self-built boat reports its real berth count rather than zero.
   const boat = resolveBoatById(state, state.selectedBoatId);
   const capacity = boat ? boat.crewCapacity : 0;
+  const division = state.selectedDivision;
+  const isCorinthian = division === 'corinthian';
+
+  // Only sailors eligible for this division are on the dock: Corinthian races
+  // are amateur-only, the Pro division hires professionals.
+  const pool = useMemo(() => crewPoolForDivision(division), [division]);
   const selected = state.selectedCrewIds;
-  const wages = crewWageTotal(selected);
+
+  // If the eligible pool changed (e.g. the player switched divisions), drop any
+  // signed sailor who is no longer eligible so the roster stays legal.
+  useEffect(() => {
+    const legal = selected.filter((id) => pool.some((m) => m.id === id));
+    if (legal.length !== selected.length) setCrew(legal);
+  }, [pool, selected, setCrew]);
+
+  const wages = crewWageForDivision(selected, division);
+
+  const autoFill = (preset: AutoCrewPreset) => setCrew(autoSelectCrew(state, preset));
 
   const proceed = () => {
     if (selected.length === 0) return;
@@ -29,15 +55,44 @@ export const CrewSelectScreen: React.FC<Props> = ({ navigation }) => {
   return (
     <View style={styles.screen}>
       <View style={styles.banner}>
-        <Text style={styles.bannerText}>
-          Crew: {selected.length}/{capacity}
-        </Text>
-        <Text style={styles.bannerWages}>
-          Wages {money(wages)}
-        </Text>
+        <View>
+          <Text style={styles.bannerText}>
+            Crew: {selected.length}/{capacity}
+          </Text>
+          <Text style={styles.bannerSub}>
+            {isCorinthian ? 'Corinthian — amateurs only' : 'Pro — professionals for hire'}
+          </Text>
+        </View>
+        <View style={{ alignItems: 'flex-end' }}>
+          <Text style={styles.bannerWages}>{isCorinthian ? 'Unpaid' : money(wages)}</Text>
+          <Text style={styles.bannerSub}>{isCorinthian ? 'No crew wages' : 'Total wages'}</Text>
+        </View>
       </View>
+
+      <View style={styles.autoBar}>
+        <Text style={styles.autoLabel}>Auto-crew</Text>
+        <View style={styles.autoRow}>
+          {PRESETS.map((p) => (
+            <Pressable
+              key={p.key}
+              onPress={() => autoFill(p.key)}
+              disabled={capacity === 0}
+              style={({ pressed }) => [styles.preset, { opacity: pressed ? 0.85 : 1 }]}
+            >
+              <Text style={styles.presetLabel}>{p.label}</Text>
+              <Text style={styles.presetHint}>{p.hint}</Text>
+            </Pressable>
+          ))}
+        </View>
+        {selected.length > 0 ? (
+          <Pressable onPress={() => setCrew([])} hitSlop={8}>
+            <Text style={styles.clear}>Clear crew</Text>
+          </Pressable>
+        ) : null}
+      </View>
+
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: spacing.xxl }]}>
-        {CREW.map((member: CrewMember) => {
+        {pool.map((member: CrewMember) => {
           const isSelected = selected.includes(member.id);
           const full = !isSelected && selected.length >= capacity;
           return (
@@ -54,13 +109,15 @@ export const CrewSelectScreen: React.FC<Props> = ({ navigation }) => {
               <View style={styles.cardHeader}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.name}>{member.name}</Text>
-                  <Text style={styles.role}>{member.role}</Text>
+                  <Text style={styles.role}>
+                    {member.role} · {member.age} · {member.homePort}
+                  </Text>
                 </View>
                 <View style={styles.wageBox}>
-                  <Text style={styles.wage}>{money(member.wage)}</Text>
-                  {isSelected ? (
-                    <Text style={styles.signed}>Signed</Text>
-                  ) : null}
+                  <Text style={styles.wage}>
+                    {member.tier === 'pro' ? money(member.wage) : 'Amateur'}
+                  </Text>
+                  {isSelected ? <Text style={styles.signed}>Signed</Text> : null}
                 </View>
               </View>
               <Text style={styles.bio}>{member.bio}</Text>
@@ -73,12 +130,13 @@ export const CrewSelectScreen: React.FC<Props> = ({ navigation }) => {
           );
         })}
       </ScrollView>
+
       <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
         <NauticalButton
           label="Continue to Provisions"
           onPress={proceed}
           disabled={selected.length === 0}
-          subtitle={selected.length === 0 ? 'Sign at least one crew member' : undefined}
+          subtitle={selected.length === 0 ? 'Sign a crew, or tap an auto-crew above' : undefined}
         />
       </View>
     </View>
@@ -115,6 +173,61 @@ const styles = StyleSheet.create({
     color: colors.brassLight,
     fontSize: fontSize.md,
     fontWeight: fontWeight.bold,
+  },
+  bannerSub: {
+    color: colors.slate,
+    fontSize: fontSize.xs,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginTop: 2,
+  },
+  autoBar: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.deepSea,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.hull,
+  },
+  autoLabel: {
+    color: colors.slate,
+    fontSize: fontSize.xs,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: spacing.sm,
+  },
+  autoRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  preset: {
+    flex: 1,
+    backgroundColor: colors.card,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.brass,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.xs,
+    alignItems: 'center',
+  },
+  presetLabel: {
+    color: colors.foam,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.bold,
+    textAlign: 'center',
+  },
+  presetHint: {
+    color: colors.slate,
+    fontSize: fontSize.xs,
+    textAlign: 'center',
+    marginTop: 2,
+  },
+  clear: {
+    color: colors.brassLight,
+    fontSize: fontSize.xs,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginTop: spacing.sm,
+    alignSelf: 'flex-end',
   },
   content: {
     padding: spacing.lg,
