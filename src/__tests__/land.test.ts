@@ -9,6 +9,7 @@ import {
   raceDivision,
   stepRace,
 } from '../engine/gameEngine';
+import { planRoute } from '../engine/router';
 import { haversineNm } from '../engine/geo';
 import { mulberry32, resetRng, setRng } from '../engine/rng';
 import { BoatCondition, GameState } from '../types';
@@ -97,6 +98,34 @@ describe('routed tracks stay off land (all races)', () => {
         return !nearMark;
       });
 
+      expect(onLand).toEqual([]);
+    });
+  });
+});
+
+// The displayed course preview (briefing + in-race forward route) is the full
+// planned route, not just the sailed trail. Guard that it, too, stays in the
+// water — a rhumb line straight through an island was the original defect.
+describe('the planned course preview stays off land (all races)', () => {
+  const MARGIN_NM = 6;
+
+  RACES.filter((r) => LANDMASSES[r.id]?.length).forEach((race) => {
+    it(`${race.name} previews a route in the water`, () => {
+      setRng(mulberry32(7));
+      const land = LANDMASSES[race.id];
+      const boat = getBoatById('boat-mistral')!;
+      const field = createWindField(race);
+      const start = { lat: race.waypoints[0].lat, lon: race.waypoints[0].lon };
+      const route = planRoute(boat, field, start, race.waypoints, 1, 0, 0, land);
+      expect(route.length).toBeGreaterThan(2);
+
+      const onLand = route.filter((p) => {
+        if (!pointInLand(land, p.lat, p.lon)) return false;
+        const nearMark = race.waypoints.some(
+          (w) => haversineNm(p.lat, p.lon, w.lat, w.lon) <= MARGIN_NM
+        );
+        return !nearMark;
+      });
       expect(onLand).toEqual([]);
     });
   });

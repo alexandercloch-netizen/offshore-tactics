@@ -124,33 +124,67 @@ export function isochroneLeg(
   return bestNode ? backtrack(bestNode, to) : [from, to];
 }
 
-// Plan the remaining route: isochrone-route the active leg (current position to
-// the next mark), then run rhumb lines through the remaining mandatory marks
-// (those refine when the boat reaches them). Marks stay fixed by the rules.
-//
-// `bias` lets the player commit to a side of the course: the active leg is then
-// routed via a strategic waypoint offset perpendicular to the rhumb line, so
-// the boat banks left (-1) or right (+1) and lives with the wind it finds there.
-export function planRoute(
+// A cheap detour anchor that clears land between `from` and `to`: probe points
+// perpendicular to the rhumb line at a few positions and offsets, both sides,
+// and return the first that puts both halves of the leg in open water.
+function findClearDetour(
+  from: GeoPoint,
+  to: GeoPoint,
+  land: LandPolygon[]
+): GeoPoint | null {
+  const legDist = haversineNm(from.lat, from.lon, to.lat, to.lon);
+  const brg = bearing(from.lat, from.lon, to.lat, to.lon);
+  for (const t of [0.5, 0.4, 0.6, 0.3, 0.7]) {
+    const aLat = from.lat + (to.lat - from.lat) * t;
+    const aLon = from.lon + (to.lon - from.lon) * t;
+    for (let off = legDist * 0.12; off <= legDist * 0.9; off += legDist * 0.12) {
+      for (const side of [1, -1]) {
+        const c = movePoint(aLat, aLon, (brg + side * 90 + 360) % 360, off);
+        if (
+          !pointInLand(land, c.lat, c.lon) &&
+          !segmentCrossesLand(land, from, c) &&
+          !segmentCrossesLand(land, c, to)
+        ) {
+          return c;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+// A light, land-aware connector for an onward leg (one the boat hasn't reached
+// yet): a rhumb line, detoured around any land it would cross. Cheaper than a
+// full isochrone search — fine for the course *preview*, since each onward leg
+// is re-routed properly (isochrone) once the boat rounds into it. Returns the
+// points after `from`, up to and including `to`.
+function coastalLeg(
+  from: GeoPoint,
+  to: GeoPoint,
+  land: LandPolygon[] | undefined,
+  depth = 0
+): GeoPoint[] {
+  if (!land || !segmentCrossesLand(land, from, to)) return [to];
+  if (depth >= 3) return [to]; // give up rather than loop on awkward geometry
+  const cand = findClearDetour(from, to, land);
+  if (!cand) return [to];
+  return [...coastalLeg(from, cand, land, depth + 1), ...coastalLeg(cand, to, land, depth + 1)];
+}
+
+// The active leg: weather-route from the current position to the next mark.
+// `bias` lets the player commit to a side of the course — the leg is then routed
+// via a strategic waypoint offset perpendicular to the rhumb line (kept in open
+// water), so the boat banks left (-1) or right (+1) and lives with the wind it
+// finds there. Returns the polyline from `from` through to `dest`.
+function activeLeg(
   boat: Boat,
   field: WindField,
   from: GeoPoint,
-  marks: Waypoint[],
-  nextMarkIndex: number,
+  dest: GeoPoint,
   startHours: number,
-  bias: RoutingBias = 0,
+  bias: RoutingBias,
   land?: LandPolygon[]
 ): GeoPoint[] {
-  if (nextMarkIndex >= marks.length) return [from];
-  const next = marks[nextMarkIndex];
-  const dest = { lat: next.lat, lon: next.lon };
-  const rest: GeoPoint[] = marks
-    .slice(nextMarkIndex + 1)
-    .map((m) => ({ lat: m.lat, lon: m.lon }));
-
-  // Find a strategic waypoint to the chosen side that is still in open water:
-  // start at the full offset and pull it in until it (and the line to it) clears
-  // land. If no clear offset is found, fall through to a plain optimal route.
   let strategic: GeoPoint | null = null;
   if (bias !== 0) {
     const legDist = haversineNm(from.lat, from.lon, dest.lat, dest.lon);
@@ -166,12 +200,42 @@ export function planRoute(
       }
     }
   }
-
-  if (!strategic) {
-    return [...isochroneLeg(boat, field, from, dest, startHours, land), ...rest];
-  }
-
+  if (!strategic) return isochroneLeg(boat, field, from, dest, startHours, land);
   const toStrategic = isochroneLeg(boat, field, from, strategic, startHours, land);
   const toMark = isochroneLeg(boat, field, strategic, dest, startHours, land);
-  return [...toStrategic, ...toMark.slice(1), ...rest];
+  return [...toStrategic, ...toMark.slice(1)];
+}
+
+// Plan the remaining route: weather-route the active leg (current position to
+// the next mark, banked by `bias`), then weather-route each remaining mandatory
+// leg too, so the whole course preview stays in navigable water rather than
+// rhumb-lining straight across headlands and islands. Onward legs route on a
+// rough forward estimate of the clock and refine as the boat reaches them. Marks
+// stay fixed by the rules. Re-routing is throttled by the caller, so routing
+// every leg here stays cheap in real time.
+export function planRoute(
+  boat: Boat,
+  field: WindField,
+  from: GeoPoint,
+  marks: Waypoint[],
+  nextMarkIndex: number,
+  startHours: number,
+  bias: RoutingBias = 0,
+  land?: LandPolygon[]
+): GeoPoint[] {
+  if (nextMarkIndex >= marks.length) return [from];
+  const next = marks[nextMarkIndex];
+  const dest = { lat: next.lat, lon: next.lon };
+
+  const pts = activeLeg(boat, field, from, dest, startHours, bias, land);
+
+  // Onward legs are a land-aware preview (cheap), refined to a full isochrone
+  // when the boat actually rounds into them.
+  let cur = dest;
+  for (let i = nextMarkIndex + 1; i < marks.length; i += 1) {
+    const to = { lat: marks[i].lat, lon: marks[i].lon };
+    pts.push(...coastalLeg(cur, to, land));
+    cur = to;
+  }
+  return pts;
 }
