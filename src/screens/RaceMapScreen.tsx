@@ -79,6 +79,9 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
   // Keep imperative helpers fresh for the auto-play interval.
   const tickRef = useRef(tick);
   tickRef.current = tick;
+  // Scroll the chart back into view when a decision docks over the screen, so
+  // the player can read their position behind the sheet/panel.
+  const scrollRef = useRef<ScrollView>(null);
   const stateRef = useRef<GameState>(state);
   stateRef.current = state;
   const eventActiveRef = useRef(false);
@@ -131,6 +134,7 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
           );
         }
         setActiveEvent(outcome.event);
+        scrollRef.current?.scrollTo({ y: 0, animated: true });
       }
       if (outcome.finished || outcome.retired) {
         clearInterval(id);
@@ -211,7 +215,10 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
 
   return (
     <View style={styles.screen}>
-      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: spacing.xxl }]}>
+      <ScrollView
+        ref={scrollRef}
+        contentContainerStyle={[styles.content, { paddingBottom: spacing.xxl }]}
+      >
         <View style={{ width: columnWidth }}>
         <View style={styles.headerRow}>
           <View style={{ flex: 1 }}>
