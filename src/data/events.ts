@@ -672,27 +672,21 @@ function pickFresh(pool: GameEvent[], seen: Set<string>): GameEvent {
   return rndPick(fresh.length > 0 ? fresh : pool);
 }
 
-// Chooses which decision to present during a race. The signature hazard is a
-// once-per-race set-piece (not a recurring prompt), a man-overboard is a rare
-// one-off drama, and the everyday tactical/weather/crew calls are drawn without
-// repeating until the pool is exhausted — so consecutive decisions feel varied
-// rather than the same prompt over and over. `shown` is the ids already
-// presented this race.
-export function pickEventForRace(hazard?: HazardKey, shown: string[] = []): GameEvent {
+// Chooses an everyday decision to present during a race. The signature hazard
+// is handled separately by the engine (it fires at its mark), so this picker
+// covers the rare man-overboard drama plus the everyday tactical/weather/crew
+// calls — drawn without repeating until the pool is exhausted, so consecutive
+// decisions feel varied. `shown` is the ids already presented this race.
+export function pickEventForRace(shown: string[] = []): GameEvent {
   const seen = new Set(shown);
   const roll = rnd();
 
-  // The signature hazard, exactly once per race (~30% roll → almost certain to
-  // appear across a full race, but never twice).
-  if (hazard && !seen.has(HAZARD_EVENTS[hazard].id) && roll < 0.3) {
-    return HAZARD_EVENTS[hazard];
-  }
   // A rare man-overboard drama, at most once.
-  if (!seen.has(MOB_EVENTS[0].id) && roll < 0.1) {
+  if (!seen.has(MOB_EVENTS[0].id) && roll < 0.08) {
     return MOB_EVENTS[0];
   }
   // Everyday tactical/weather/crew calls drawn from the combined pool, never
-  // repeating until all of them have been seen — so decisions stay varied.
+  // repeating until all of them have been seen.
   const everyday = [...WEATHER_EVENTS, ...MORALE_EVENTS, ...GENERIC_EVENTS];
   return pickFresh(everyday, seen);
 }

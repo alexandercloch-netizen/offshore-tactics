@@ -290,6 +290,35 @@ describe('stepRace (weather-routed model)', () => {
     expect(terminal!.finished || terminal!.retired).toBe(true);
   });
 
+  it('fires the signature hazard once, as the boat reaches its mark', () => {
+    setRng(mulberry32(123));
+    const race = getRaceById('race-round-island')!; // tidal_gate at The Needles
+    let state = baseState();
+    const shown: string[] = [];
+
+    for (let i = 0; i < 6000; i += 1) {
+      const out = stepRace(state, defaultStepNm(race));
+      state = {
+        ...state,
+        progress: out.progress,
+        condition: out.condition,
+        weather: out.weather,
+        fleet: out.fleet,
+      };
+      if (out.event) {
+        shown.push(out.event.id);
+        const safe = out.event.choices.reduce((a, b) => (b.risk < a.risk ? b : a));
+        const decision = applyDecision(state, safe);
+        state = { ...state, progress: decision.progress, condition: decision.condition, fleet: decision.fleet };
+        if (decision.finished || decision.retired) break;
+      }
+      if (out.finished || out.retired) break;
+    }
+
+    const tidalGate = shown.filter((id) => id === 'evt-hz-tidal');
+    expect(tidalGate).toHaveLength(1); // exactly once, and only because we reached The Needles
+  });
+
   it('finishes a heavy-weather race when sailed sensibly (cruise + safe calls)', () => {
     // Difficulty guard: a normally-sailed race should be completable, not a
     // forced retirement. Sail Fastnet (a heavy celtic-weather course) on cruise
@@ -410,6 +439,12 @@ describe('data integrity', () => {
       expect(race.prevailingWind.speedKn).toBeGreaterThan(0);
       expect(race.prevailingWind.fromDeg).toBeGreaterThanOrEqual(0);
       expect(race.prevailingWind.fromDeg).toBeLessThan(360);
+    });
+  });
+
+  it('every race anchors its signature hazard to a real waypoint', () => {
+    RACES.forEach((race) => {
+      expect(race.waypoints.some((w) => w.name === race.hazardWaypoint)).toBe(true);
     });
   });
 
