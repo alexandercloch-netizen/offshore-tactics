@@ -209,14 +209,26 @@ export interface PlayerProfile {
 
 export type CrewRole = 'Skipper' | 'Navigator' | 'Tactician' | 'Trimmer' | 'Bowman';
 
+// A sailor is either a paid professional or a Corinthian (amateur). Corinthian
+// races are amateur-only and unpaid, so the tier both gates the pool you can
+// sign from and decides whether wages are owed.
+export type CrewTier = 'pro' | 'corinthian';
+
+// Presets for the one-tap auto-crew: stack the deck with veterans, run a
+// balanced watch, or blood a boatful of young guns.
+export type AutoCrewPreset = 'veteran' | 'balanced' | 'novice';
+
 export interface CrewMember {
   id: string;
   name: string;
+  tier: CrewTier;
   role: CrewRole;
-  skill: number; // 0-100
+  age: number; // years — flavour, and a tiebreak for the auto-crew presets
+  homePort: string; // where they sail out of
+  skill: number; // 0-100 — now feeds boat speed and steadies decisions
   stamina: number; // 0-100
   morale: number; // 0-100
-  wage: number; // cost to sign for the campaign
+  wage: number; // cost to sign for a pro campaign; 0 for Corinthian amateurs
   bio: string;
 }
 

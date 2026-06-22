@@ -22,8 +22,8 @@ test('a full race can be played from start to finish', async ({ page }) => {
   await page.getByText('Sea Sprite', { exact: true }).first().click();
   await page.getByRole('button', { name: 'Continue to Crew' }).click();
 
-  // Sign one crew member and continue.
-  await page.getByText('Captain Mara Vega', { exact: true }).first().click();
+  // Auto-crew the boat (Corinthian, so the crew is amateur and unpaid) and continue.
+  await page.getByText('Seasoned Salts', { exact: true }).first().click();
   await page.getByRole('button', { name: 'Continue to Provisions' }).click();
 
   // Set sail → the pre-start briefing.

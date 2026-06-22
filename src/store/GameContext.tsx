@@ -78,6 +78,7 @@ type Action =
   | { type: 'SELECT_RACE'; payload: { raceId: string; division: DivisionKey } }
   | { type: 'SELECT_BOAT'; payload: string }
   | { type: 'TOGGLE_CREW'; payload: { crewId: string; capacity: number } }
+  | { type: 'SET_CREW'; payload: string[] }
   | { type: 'SET_PROVISION'; payload: { provisionId: string; quantity: number } }
   | { type: 'SET_STRATEGY'; payload: Partial<PlayerStrategy> }
   | { type: 'SET_TUTORIAL_SEEN' }
@@ -149,6 +150,11 @@ function reducer(state: GameState, action: Action): GameState {
       }
       return { ...state, selectedCrewIds: [...state.selectedCrewIds, crewId] };
     }
+
+    // Set the whole crew at once (auto-crew presets, or sanitizing the roster
+    // when the eligible pool changes).
+    case 'SET_CREW':
+      return { ...state, selectedCrewIds: action.payload };
 
     case 'SET_PROVISION': {
       const { provisionId, quantity } = action.payload;
@@ -309,6 +315,7 @@ export interface GameContextValue {
   selectRace: (raceId: string, division: DivisionKey) => void;
   selectBoat: (boatId: string) => void;
   toggleCrew: (crewId: string) => void;
+  setCrew: (crewIds: string[]) => void;
   setProvisionQuantity: (provisionId: string, quantity: number) => void;
   setStrategy: (partial: Partial<PlayerStrategy>) => void;
   markTutorialSeen: () => void;
@@ -469,6 +476,10 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
     const boat = resolveBoatById(stateRef.current, stateRef.current.selectedBoatId);
     const capacity = boat ? boat.crewCapacity : CREW.length;
     dispatch({ type: 'TOGGLE_CREW', payload: { crewId, capacity } });
+  }, []);
+
+  const setCrew = useCallback((crewIds: string[]) => {
+    dispatch({ type: 'SET_CREW', payload: crewIds });
   }, []);
 
   const setProvisionQuantity = useCallback(
@@ -643,6 +654,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
       selectRace,
       selectBoat,
       toggleCrew,
+      setCrew,
       setProvisionQuantity,
       setStrategy,
       markTutorialSeen,
@@ -669,6 +681,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
       selectRace,
       selectBoat,
       toggleCrew,
+      setCrew,
       setProvisionQuantity,
       setStrategy,
       markTutorialSeen,

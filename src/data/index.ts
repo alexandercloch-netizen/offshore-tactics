@@ -6,7 +6,7 @@ import { PROVISIONS } from './provisions';
 
 export { RACES } from './races';
 export { BOATS } from './boats';
-export { CREW } from './crew';
+export { CREW, crewForTier } from './crew';
 export { PROVISIONS } from './provisions';
 export { WEATHER, pickWeather, pickWeatherForHazard } from './weather';
 export {

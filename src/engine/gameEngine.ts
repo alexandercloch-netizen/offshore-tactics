@@ -1,7 +1,10 @@
 import {
+  AutoCrewPreset,
   Boat,
   BoatCondition,
   CrewMember,
+  CrewRole,
+  CrewTier,
   DivisionKey,
   FleetBoat,
   GameEvent,
@@ -25,6 +28,7 @@ import {
   WindSample,
 } from '../types';
 import {
+  crewForTier,
   getBoatById,
   getCrewById,
   getProvisionById,
@@ -139,6 +143,90 @@ export function crewWageTotal(crewIds: string[]): number {
   }, 0);
 }
 
+// Which sailors are eligible for a division: Corinthian races are amateur-only,
+// the Pro division hires professionals.
+export function tierForDivision(division: DivisionKey): CrewTier {
+  return division === 'pro' ? 'pro' : 'corinthian';
+}
+
+export function crewPoolForDivision(division: DivisionKey): CrewMember[] {
+  return crewForTier(tierForDivision(division));
+}
+
+// Corinthian crews sail unpaid, so wages are only owed in the Pro division.
+export function crewWageForDivision(crewIds: string[], division: DivisionKey): number {
+  return division === 'pro' ? crewWageTotal(crewIds) : 0;
+}
+
+const DEFAULT_CREW_SKILL = 60; // a thin, anonymous crew sails like a club average
+
+// Mean skill of the signed crew (used to scale boat speed and steady decisions).
+export function crewSkillAverage(crewIds: string[]): number {
+  const skills = crewIds
+    .map((id) => getCrewById(id)?.skill)
+    .filter((s): s is number => s !== undefined);
+  return average(skills, DEFAULT_CREW_SKILL);
+}
+
+// Crew skill as a multiplier on boat speed: a green crew (skill 0) sails at 0.9,
+// a flawless crew (skill 100) at 1.1, with the club average sitting near 1.0.
+export function crewSkillFactor(skill: number): number {
+  return 0.9 + 0.2 * (clamp(skill) / 100);
+}
+
+// One-tap crew: fill the boat's berths from the division's pool, biased by the
+// preset, and prefer one sailor per role before doubling up — so you get a
+// crewed boat, not five bowmen. Pure & deterministic for a given pool/capacity.
+export function rankCrewForPreset(pool: CrewMember[], preset: AutoCrewPreset): CrewMember[] {
+  const ranked = [...pool];
+  if (preset === 'veteran') {
+    // Grizzled hands first: highest skill, oldest as the tiebreak.
+    ranked.sort((a, b) => b.skill - a.skill || b.age - a.age);
+    return ranked;
+  }
+  if (preset === 'novice') {
+    // Young guns: youngest first, freshest legs as the tiebreak.
+    ranked.sort((a, b) => a.age - b.age || b.stamina - a.stamina);
+    return ranked;
+  }
+  // Balanced watch: comb the skill-sorted list from both ends so a truncated
+  // crew mixes seasoned salts with hungry youth.
+  ranked.sort((a, b) => b.skill - a.skill || a.age - b.age);
+  const comb: CrewMember[] = [];
+  let lo = 0;
+  let hi = ranked.length - 1;
+  while (lo <= hi) {
+    comb.push(ranked[lo]);
+    if (lo !== hi) comb.push(ranked[hi]);
+    lo += 1;
+    hi -= 1;
+  }
+  return comb;
+}
+
+const CREW_ROLE_ORDER: CrewRole[] = ['Skipper', 'Navigator', 'Tactician', 'Trimmer', 'Bowman'];
+
+export function autoSelectCrew(state: GameState, preset: AutoCrewPreset): string[] {
+  const boat = resolveBoatById(state, state.selectedBoatId);
+  const capacity = boat ? boat.crewCapacity : 0;
+  if (capacity <= 0) return [];
+  const ranked = rankCrewForPreset(crewPoolForDivision(state.selectedDivision), preset);
+
+  const picked: CrewMember[] = [];
+  // First pass: best available sailor for each role, in race-deck order.
+  for (const role of CREW_ROLE_ORDER) {
+    if (picked.length >= capacity) break;
+    const best = ranked.find((m) => m.role === role && !picked.includes(m));
+    if (best) picked.push(best);
+  }
+  // Second pass: fill any remaining berths with the next-best sailors.
+  for (const m of ranked) {
+    if (picked.length >= capacity) break;
+    if (!picked.includes(m)) picked.push(m);
+  }
+  return picked.slice(0, capacity).map((m) => m.id);
+}
+
 export interface CampaignCost {
   entryFee: number;
   charter: number;
@@ -153,7 +241,8 @@ export function campaignCost(state: GameState): CampaignCost {
   const entryFee = race ? raceDivision(race, state.selectedDivision).entryFee : 0;
   // Boats are bought once and then owned; no charter the next time you race one.
   const charter = boat && !isBoatOwned(state, boat) ? boat.price : 0;
-  const wages = crewWageTotal(state.selectedCrewIds);
+  // Corinthian crews are amateurs sailing unpaid — only the Pro division owes wages.
+  const wages = crewWageForDivision(state.selectedCrewIds, state.selectedDivision);
   const provisions = provisionCost(state.provisions);
   return {
     entryFee,
@@ -284,13 +373,18 @@ export function boatSpeedFor(
   condition: BoatCondition,
   heading: number,
   wind: WindSample,
-  effortMul = 1
+  effortMul = 1,
+  skillMul = 1
 ): number {
   const twa = angularDelta(heading, wind.fromDeg);
-  return Math.max(polarSpeed(boat, twa, wind.speedKn) * conditionFactor(condition) * effortMul, 0.4);
+  return Math.max(
+    polarSpeed(boat, twa, wind.speedKn) * conditionFactor(condition) * effortMul * skillMul,
+    0.4
+  );
 }
 
-// Boat speed right now, from the live progress + condition + effort dial.
+// Boat speed right now, from the live progress + condition + effort dial + the
+// edge a skilled crew brings.
 export function currentSpeed(state: GameState): number {
   const boat = resolveBoatById(state, state.selectedBoatId);
   if (!boat || !state.progress) return 0;
@@ -300,7 +394,8 @@ export function currentSpeed(state: GameState): number {
     state.condition,
     p.heading,
     { fromDeg: p.windDir, speedKn: p.windSpeedKn },
-    EFFORT_SPEED[strategyOf(state).effort]
+    EFFORT_SPEED[strategyOf(state).effort],
+    crewSkillFactor(crewSkillAverage(state.selectedCrewIds))
   );
 }
 
@@ -390,7 +485,15 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
   const wearMul = EFFORT_WEAR[strategy.effort];
 
   const wind = sampleWind(field, prev.lat, prev.lon, prev.elapsedHours);
-  const speed = boatSpeedFor(boat, state.condition, prev.heading, wind, EFFORT_SPEED[strategy.effort]);
+  const skillMul = crewSkillFactor(crewSkillAverage(state.selectedCrewIds));
+  const speed = boatSpeedFor(
+    boat,
+    state.condition,
+    prev.heading,
+    wind,
+    EFFORT_SPEED[strategy.effort],
+    skillMul
+  );
   const dtHours = stepNm / speed;
 
   const adv = advanceAlongRoute(prev.route, stepNm);
@@ -545,10 +648,13 @@ export function applyDecision(state: GameState, choice: TacticalChoice): StepRes
   let hull = state.condition.hullIntegrity + choice.hullDelta;
   let extraHours = choice.timeDelta;
 
-  // A demoralized crew — or a boat being pushed hard — is more likely to bungle.
+  // A demoralized crew — or a boat being pushed hard — is more likely to bungle;
+  // a skilled crew is steadier and shaves the odds (±0.06 across the skill range).
   const moralePenalty = state.condition.crewMorale < 40 ? 0.1 : 0;
   const pushPenalty = strategyOf(state).effort === 'push' ? 0.05 : 0;
-  if (rnd() < choice.risk + moralePenalty + pushPenalty) {
+  const skillRelief = (crewSkillAverage(state.selectedCrewIds) - 50) / 100 * 0.12;
+  const bungleChance = Math.max(0, choice.risk + moralePenalty + pushPenalty - skillRelief);
+  if (rnd() < bungleChance) {
     extraHours += 0.6 + state.weather.riskModifier;
     hull -= 8;
     morale -= 5;

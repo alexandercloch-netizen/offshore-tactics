@@ -62,7 +62,10 @@ export const BoatSelectScreen: React.FC<Props> = ({ navigation }) => {
                 <StatBar label="Downwind" value={boat.downwind} />
                 <StatBar label="Stability" value={boat.stability} />
               </View>
-              <Text style={styles.berths}>Berths: {boat.crewCapacity} crew</Text>
+              <View style={styles.crewNeed}>
+                <Text style={styles.crewNeedValue}>{boat.crewCapacity}</Text>
+                <Text style={styles.crewNeedLabel}>crew berths to fill</Text>
+              </View>
               {selected ? <Text style={styles.selectedTag}>Selected</Text> : null}
             </Pressable>
           );
@@ -131,12 +134,25 @@ const styles = StyleSheet.create({
   stats: {
     marginTop: spacing.sm,
   },
-  berths: {
+  crewNeed: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: spacing.xs,
+    marginTop: spacing.md,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.hull,
+  },
+  crewNeedValue: {
+    color: colors.brassLight,
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.bold,
+  },
+  crewNeedLabel: {
     color: colors.slate,
     fontSize: fontSize.xs,
     textTransform: 'uppercase',
     letterSpacing: 1,
-    marginTop: spacing.sm,
   },
   selectedTag: {
     color: colors.brass,
