@@ -40,7 +40,11 @@ The simulation is a **pure, deterministic engine** with a thin React UI on top.
     seasonal baseline (from the baked `data/weatherClimatology.ts`), multiple
     drifting puffs/holes, a travelling front, a diurnal cycle and fine texture.
     Also the chart grid (`sampleWindGrid`), the headline feature (`featureState`),
-    forecast (`weatherOutlook`), and pressure hints.
+    forecast (`weatherOutlook`), and pressure hints. The **forecast model**
+    (`forecastConfidence`/`sampleForecast`) blurs the *displayed* forecast away
+    from the true field as you look further ahead — a sharp Navigator
+    (`navigatorSkill`) keeps it trustworthy longer; the race still sails the true
+    field, so it stays fair and deterministic.
   - `polar.ts` / `polarTable.ts` / `polarImport.ts` — boat speed from polar
     diagrams (parametric for catalogue boats, real tables for custom boats).
   - `sails.ts` — specialist-sail wardrobe → effective polar.

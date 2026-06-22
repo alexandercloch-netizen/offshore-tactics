@@ -297,6 +297,16 @@ export function crewSkillAverage(crewIds: string[]): number {
   return average(skills, DEFAULT_CREW_SKILL);
 }
 
+// The skill that drives forecast confidence: the boat's Navigator(s) if one is
+// aboard, else the crew's general nous. Rewards signing a strong Navigator.
+export function navigatorSkill(crewIds: string[]): number {
+  const navs = crewIds
+    .map((id) => getCrewById(id))
+    .filter((c): c is NonNullable<typeof c> => !!c && c.role === 'Navigator');
+  if (navs.length) return average(navs.map((n) => n.skill), DEFAULT_CREW_SKILL);
+  return crewSkillAverage(crewIds);
+}
+
 // Crew skill as a multiplier on boat speed: a green crew (skill 0) sails at 0.9,
 // a flawless crew (skill 100) at 1.1, with the club average sitting near 1.0.
 export function crewSkillFactor(skill: number): number {

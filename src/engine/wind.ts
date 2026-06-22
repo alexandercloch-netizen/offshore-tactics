@@ -224,6 +224,77 @@ export function sampleWindGrid(
 
 const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 
+// ---- Forecast model ----
+//
+// A real forecast is certain *now* and grows fuzzier the further ahead you look;
+// a skilled Navigator extends the horizon you can trust. We model the *displayed*
+// forecast as the true field plus a smooth, deterministic error that grows with
+// the lookahead and shrinks with confidence. The race still sails the TRUE field
+// (so it stays fair and deterministic) — the forecast is only what the crew
+// believes, so a better Navigator sees closer to the truth and plans better.
+
+const FORECAST_TAU0 = 15; // base e-folding horizon (hours) before confidence falls
+const FORECAST_DIR_ERR = 42; // max directional error (deg) at zero confidence
+const FORECAST_SPD_ERR = 0.45; // max speed error (fraction) at zero confidence
+
+// Confidence in the forecast `hours` ahead, 0–1. 1.0 now; decays with horizon,
+// and a sharper Navigator (higher skill) decays slower — trusting it for longer.
+export function forecastConfidence(navSkill: number, hours: number): number {
+  const s = Math.max(0, Math.min(100, navSkill)) / 100;
+  const tau = FORECAST_TAU0 * (0.6 + 1.1 * s);
+  return Math.max(0.05, Math.min(1, Math.exp(-Math.max(0, hours) / tau)));
+}
+
+// Smooth, deterministic pseudo-noise in [-1,1] over space and (slowly) time, so
+// the forecast error looks like a plausible-but-wrong field, not random speckle.
+function forecastNoise(lat: number, lon: number, hours: number, salt: number): number {
+  const a = Math.sin(lat * 0.83 + lon * 0.37 + hours * 0.11 + salt * 1.7);
+  const b = Math.cos(lon * 0.61 - lat * 0.29 - hours * 0.08 + salt * 2.3);
+  const c = Math.sin((lat + lon) * 0.45 + hours * 0.05 + salt * 0.9);
+  return Math.max(-1, Math.min(1, (a + b + c) / 2.2));
+}
+
+// The wind as the crew's forecast shows it: the truth, blurred by an error that
+// grows with the lookahead and shrinks with the Navigator's confidence.
+export function sampleForecast(
+  field: WindField,
+  lat: number,
+  lon: number,
+  hours: number,
+  navSkill: number
+): WindSample {
+  const truth = sampleWind(field, lat, lon, hours);
+  const err = 1 - forecastConfidence(navSkill, hours);
+  if (err <= 0) return truth;
+  const dir = truth.fromDeg + FORECAST_DIR_ERR * err * forecastNoise(lat, lon, hours, 1);
+  const speed = truth.speedKn * (1 + FORECAST_SPD_ERR * err * forecastNoise(lat, lon, hours, 2));
+  return { fromDeg: norm360(dir), speedKn: Math.max(2, Math.min(50, speed)) };
+}
+
+// Forecast field on a grid (the chart's heatmap/arrows), mirroring sampleWindGrid.
+export function sampleForecastGrid(
+  field: WindField,
+  bounds: CourseBounds,
+  cols: number,
+  rows: number,
+  hours: number,
+  navSkill: number
+): WindArrow[] {
+  const arrows: WindArrow[] = [];
+  const latStep = rows > 1 ? (bounds.maxLat - bounds.minLat) / (rows - 1) : 0;
+  const lonStep = cols > 1 ? (bounds.maxLon - bounds.minLon) / (cols - 1) : 0;
+  for (let r = 0; r < rows; r += 1) {
+    for (let c = 0; c < cols; c += 1) {
+      const lat = bounds.minLat + latStep * r;
+      const lon = bounds.minLon + lonStep * c;
+      const s = sampleForecast(field, lat, lon, hours, navSkill);
+      arrows.push({ lat, lon, fromDeg: s.fromDeg, speedKn: s.speedKn });
+    }
+  }
+  return arrows;
+}
+
+
 export interface PressureHint {
   bearing: number; // direction toward stronger wind
   compass: string;
