@@ -30,8 +30,8 @@ import {
   featureState,
   forecastConfidence,
   pressureHint,
+  sampleForecast,
   sampleForecastGrid,
-  sampleWindGrid,
   weatherOutlook,
 } from '../engine/wind';
 import RouteMap from '../components/RouteMap';
@@ -39,6 +39,7 @@ import WindIndicator from '../components/WindIndicator';
 import NauticalButton from '../components/NauticalButton';
 import ForecastScrubber from '../components/ForecastScrubber';
 import WindScaleLegend from '../components/WindScaleLegend';
+import ForecastGraph, { ForecastGraphReadout, ForecastPoint } from '../components/ForecastGraph';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Briefing'>;
 
@@ -122,6 +123,22 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
   const navigator = state.selectedCrewIds
     .map((id) => getCrewById(id))
     .find((c) => c?.role === 'Navigator');
+
+  // Meteogram series: the forecast wind at the start over the planning window,
+  // and the exact sample under the scrubber cursor.
+  const GRAPH_SAMPLES = 25;
+  const forecastSeries: ForecastPoint[] = Array.from({ length: GRAPH_SAMPLES }, (_, i) => {
+    const h = (i / (GRAPH_SAMPLES - 1)) * maxForecastHour;
+    const s = sampleForecast(windField, progress.lat, progress.lon, h, navSkill);
+    return { hour: h, speedKn: s.speedKn, fromDeg: s.fromDeg, confidence: forecastConfidence(navSkill, h) };
+  });
+  const cursorSample = sampleForecast(windField, progress.lat, progress.lon, forecastHour, navSkill);
+  const cursorPoint: ForecastPoint = {
+    hour: forecastHour,
+    speedKn: cursorSample.speedKn,
+    fromDeg: cursorSample.fromDeg,
+    confidence: confidence,
+  };
   // A planning window scaled to the race, capped so the slider stays useful.
   const maxForecastHour = Math.min(48, Math.max(8, Math.ceil(race.recordTimeHours)));
 
@@ -206,6 +223,24 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
                 </Text>
               </View>
             </View>
+          </View>
+
+          <View style={styles.panel}>
+            <View style={styles.forecastHead}>
+              <Text style={styles.panelTitle}>Forecast at the Start</Text>
+              <ForecastGraphReadout point={cursorPoint} />
+            </View>
+            <ForecastGraph
+              series={forecastSeries}
+              hour={forecastHour}
+              maxHour={maxForecastHour}
+              width={mapWidth}
+              onScrub={setForecastHour}
+            />
+            <Text style={styles.planHint}>
+              Wind strength over the passage; arrows show direction. Tap to scrub — the
+              trace fades as the forecast grows less certain.
+            </Text>
           </View>
 
           <View style={styles.panel}>
@@ -422,6 +457,12 @@ const styles = StyleSheet.create({
   },
   confFill: { height: '100%', borderRadius: radius.pill },
   confNav: { color: colors.mist, fontSize: fontSize.xs, marginTop: 4 },
+  forecastHead: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
   etaRow: {
     flexDirection: 'row',
     alignItems: 'center',
