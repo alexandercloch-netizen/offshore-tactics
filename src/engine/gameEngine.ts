@@ -7,6 +7,7 @@ import {
   GameEvent,
   GameState,
   GeoPoint,
+  InstrumentReading,
   EffortMode,
   PlayerStrategy,
   Provision,
@@ -247,7 +248,24 @@ export function initialProgress(
     nextDecisionAtNm: firstDecision,
     decisionsTaken: 0,
     shownEventIds: [],
+    readings: [],
+    legStartNm: 0,
   };
+}
+
+// Cap on the per-leg instrument buffer; downsampled when exceeded so a long leg
+// (e.g. after the last scheduled decision) can't grow it without bound.
+const READINGS_CAP = 40;
+
+function appendReading(
+  readings: InstrumentReading[],
+  reading: InstrumentReading
+): InstrumentReading[] {
+  const next = [...readings, reading];
+  if (next.length <= READINGS_CAP) return next;
+  const downsampled: InstrumentReading[] = [];
+  for (let i = 0; i < next.length; i += 2) downsampled.push(next[i]);
+  return downsampled;
 }
 
 // ---- Speed model ----
@@ -456,6 +474,16 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
     nextDecisionAtNm: prev.nextDecisionAtNm,
     decisionsTaken: prev.decisionsTaken,
     shownEventIds: prev.shownEventIds ?? [],
+    // Record this tick's instruments so a decision can show the leg's trend.
+    readings: appendReading(prev.readings ?? [], {
+      atNm: distanceCoveredNm,
+      hours: elapsedHours,
+      windDir: wind.fromDeg,
+      windSpeedKn: wind.speedKn,
+      speedKn: speed,
+      position: prev.position,
+    }),
+    legStartNm: prev.legStartNm ?? 0,
   };
 
   // Advance the AI fleet through the same elapsed time and wind, then rank.
@@ -537,6 +565,10 @@ export function applyDecision(state: GameState, choice: TacticalChoice): StepRes
   const progress: RaceProgress = {
     ...state.progress,
     elapsedHours: state.progress.elapsedHours + lostHours,
+    // Start a fresh leg from here, keeping the latest sample as its baseline so
+    // the next decision's "this leg" trend measures from this point.
+    legStartNm: state.progress.distanceCoveredNm,
+    readings: (state.progress.readings ?? []).slice(-1),
   };
 
   // While the player handles the decision, the fleet sails on — a costly call

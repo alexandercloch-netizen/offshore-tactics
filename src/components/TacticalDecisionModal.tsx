@@ -2,13 +2,39 @@ import React from 'react';
 import { Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
 import { GameEvent, TacticalChoice, VmgPreview } from '../types';
+import { InstrumentReport } from '../engine/instruments';
 import NauticalButton from './NauticalButton';
+import Sparkline from './Sparkline';
 
 interface TacticalDecisionModalProps {
   visible: boolean;
   event: GameEvent | null;
   vmg?: VmgPreview | null;
+  instruments?: InstrumentReport | null;
   onSelect: (choice: TacticalChoice) => void;
+}
+
+const round = (n: number): number => Math.round(n);
+
+// A signed shift like "veered 8°" / "backed 5°" / "steady".
+function shiftText(deg: number): string {
+  const r = Math.round(deg);
+  if (r > 2) return `veered ${r}°`;
+  if (r < -2) return `backed ${Math.abs(r)}°`;
+  return 'steady';
+}
+
+function buildText(deltaKn: number): string {
+  const r = Math.round(deltaKn);
+  if (r > 1) return `building +${r} kn`;
+  if (r < -1) return `easing ${r} kn`;
+  return 'holding';
+}
+
+function placesText(gained: number): string {
+  if (gained > 0) return `▲ gained ${gained}`;
+  if (gained < 0) return `▼ lost ${Math.abs(gained)}`;
+  return 'held station';
 }
 
 function formatDelta(value: number, suffix = ''): string {
@@ -50,6 +76,7 @@ export const TacticalDecisionModal: React.FC<TacticalDecisionModalProps> = ({
   visible,
   event,
   vmg,
+  instruments,
   onSelect,
 }) => {
   const isMob = event?.kind === 'mob';
@@ -68,10 +95,44 @@ export const TacticalDecisionModal: React.FC<TacticalDecisionModalProps> = ({
                 {event.title}
               </Text>
               <Text style={styles.prompt}>{event.prompt}</Text>
-              {vmg ? (
-                <Text style={styles.vmgNow}>
-                  Current VMG: <Text style={styles.vmgNowValue}>{vmg.before.toFixed(1)} kn</Text>
-                </Text>
+
+              {instruments ? (
+                <View style={styles.instruments}>
+                  <Text style={styles.instrTitle}>Instruments</Text>
+                  <View style={styles.instrGrid}>
+                    <Metric label="Boat" value={`${instruments.now.speedKn.toFixed(1)} kn`} />
+                    {vmg ? <Metric label="VMG" value={`${vmg.before.toFixed(1)} kn`} /> : null}
+                    <Metric label="Wind" value={`${round(instruments.now.windSpeedKn)} kn`} />
+                    <Metric label="From" value={`${round(instruments.now.windDir)}°`} />
+                    <Metric label="Sail" value={instruments.now.pointOfSail} />
+                    <Metric
+                      label="Place"
+                      value={`${instruments.now.position}/${instruments.now.fleetSize}`}
+                    />
+                    <Metric label="To go" value={`${round(instruments.now.distanceToGoNm)} nm`} />
+                    <Metric label="Hull" value={`${round(instruments.now.hull)}`} />
+                    <Metric label="Crew" value={`${round(instruments.now.stamina)}`} />
+                    <Metric label="Morale" value={`${round(instruments.now.morale)}`} />
+                  </View>
+                  <Text style={styles.legLine}>
+                    This leg: {round(instruments.leg.nm)} nm · wind{' '}
+                    {shiftText(instruments.leg.windShiftDeg)},{' '}
+                    {buildText(instruments.leg.windDeltaKn)} ·{' '}
+                    {placesText(instruments.leg.placesGained)}
+                  </Text>
+                  {instruments.windSeries.length >= 2 ? (
+                    <View style={styles.sparkRow}>
+                      <Text style={styles.sparkLabel}>Wind trend</Text>
+                      <Sparkline values={instruments.windSeries} />
+                    </View>
+                  ) : null}
+                  {instruments.outlook.warn ? (
+                    <Text style={styles.outlookLine}>
+                      ⚠ {instruments.outlook.headline} · {round(instruments.outlook.peakKn)} kn
+                      {instruments.outlook.trend === 'building' ? ' ahead' : ''}
+                    </Text>
+                  ) : null}
+                </View>
               ) : null}
               <View style={styles.choices}>
                 {event.choices.map((choice) => {
@@ -109,6 +170,13 @@ export const TacticalDecisionModal: React.FC<TacticalDecisionModalProps> = ({
   );
 };
 
+const Metric: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+  <View style={styles.metric}>
+    <Text style={styles.metricValue}>{value}</Text>
+    <Text style={styles.metricLabel}>{label}</Text>
+  </View>
+);
+
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
@@ -141,14 +209,61 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     marginBottom: spacing.sm,
   },
-  vmgNow: {
-    color: colors.mist,
-    fontSize: fontSize.sm,
-    marginBottom: spacing.md,
+  instruments: {
+    backgroundColor: colors.navy,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.hull,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
   },
-  vmgNowValue: {
-    color: colors.signalGreen,
+  instrTitle: {
+    color: colors.slate,
+    fontSize: fontSize.xs,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: spacing.sm,
+  },
+  instrGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.md,
+  },
+  metric: {
+    minWidth: 56,
+  },
+  metricValue: {
+    color: colors.foam,
+    fontSize: fontSize.sm,
     fontWeight: fontWeight.bold,
+  },
+  metricLabel: {
+    color: colors.slate,
+    fontSize: fontSize.xs,
+    textTransform: 'uppercase',
+  },
+  legLine: {
+    color: colors.mist,
+    fontSize: fontSize.xs,
+    lineHeight: 17,
+    marginTop: spacing.md,
+  },
+  sparkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  sparkLabel: {
+    color: colors.slate,
+    fontSize: fontSize.xs,
+    textTransform: 'uppercase',
+  },
+  outlookLine: {
+    color: colors.warning,
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.bold,
+    marginTop: spacing.sm,
   },
   vmgAfter: {
     fontSize: fontSize.xs,
