@@ -1,4 +1,4 @@
-import { createWindField, sampleWind, weatherFromWind } from '../engine/wind';
+import { createWindField, sampleWind, sampleWindGrid, weatherFromWind } from '../engine/wind';
 import { mulberry32, resetRng, setRng } from '../engine/rng';
 import { getRaceById } from '../data';
 import { WindField } from '../types';
@@ -82,5 +82,39 @@ describe('weatherFromWind', () => {
     expect(w.windDirection).toBe(137);
     expect(w.windSpeedKts).toBe(28);
     expect(w.label).toBeTruthy();
+  });
+});
+
+describe('sampleWindGrid', () => {
+  const bounds = { minLat: 50, maxLat: 51, minLon: -2, maxLon: -1 };
+
+  it('returns cols*rows samples spanning the bounds inclusively', () => {
+    const grid = sampleWindGrid(field(), bounds, 4, 3, 0);
+    expect(grid).toHaveLength(12);
+    const lats = grid.map((g) => g.lat);
+    const lons = grid.map((g) => g.lon);
+    expect(Math.min(...lats)).toBeCloseTo(50, 6);
+    expect(Math.max(...lats)).toBeCloseTo(51, 6);
+    expect(Math.min(...lons)).toBeCloseTo(-2, 6);
+    expect(Math.max(...lons)).toBeCloseTo(-1, 6);
+  });
+
+  it('matches sampleWind at each grid point', () => {
+    const f = field({ gradientPerNm: 0.04 });
+    const grid = sampleWindGrid(f, bounds, 3, 3, 2);
+    grid.forEach((g) => {
+      const s = sampleWind(f, g.lat, g.lon, 2);
+      expect(g.fromDeg).toBeCloseTo(s.fromDeg, 6);
+      expect(g.speedKn).toBeCloseTo(s.speedKn, 6);
+    });
+  });
+
+  it('produces finite, bounded wind speeds across the grid', () => {
+    const grid = sampleWindGrid(field(), bounds, 5, 5, 5);
+    grid.forEach((g) => {
+      expect(Number.isFinite(g.speedKn)).toBe(true);
+      expect(g.speedKn).toBeGreaterThanOrEqual(2);
+      expect(g.speedKn).toBeLessThanOrEqual(50);
+    });
   });
 });

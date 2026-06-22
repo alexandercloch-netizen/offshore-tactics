@@ -124,3 +124,33 @@ export function pointOfSailFor(heading: number, windFrom: number): PointOfSail {
   if (delta < 120) return 'Reach';
   return 'Downwind';
 }
+
+export interface CourseBounds {
+  minLat: number;
+  maxLat: number;
+  minLon: number;
+  maxLon: number;
+}
+
+// Lat/lon bounding box of a course's marks.
+export function courseBounds(waypoints: Waypoint[]): CourseBounds {
+  const lats = waypoints.map((w) => w.lat);
+  const lons = waypoints.map((w) => w.lon);
+  return {
+    minLat: Math.min(...lats),
+    maxLat: Math.max(...lats),
+    minLon: Math.min(...lons),
+    maxLon: Math.max(...lons),
+  };
+}
+
+// Height-to-width ratio of a course in the chart's equirectangular projection
+// (longitude scaled by cos(mean latitude)). Used to size the race map to the
+// shape of the course rather than a fixed letterbox.
+export function courseAspect(waypoints: Waypoint[]): number {
+  const b = courseBounds(waypoints);
+  const k = Math.cos((((b.minLat + b.maxLat) / 2) * Math.PI) / 180) || 1;
+  const spanX = (b.maxLon - b.minLon) * k || 1e-6;
+  const spanY = b.maxLat - b.minLat || 1e-6;
+  return spanY / spanX;
+}

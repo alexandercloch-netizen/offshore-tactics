@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Pressable,
@@ -30,7 +30,8 @@ import {
   vmgPreview,
 } from '../engine/gameEngine';
 import { competitorPoints } from '../engine/fleet';
-import { pressureHint } from '../engine/wind';
+import { courseAspect, courseBounds } from '../engine/geo';
+import { pressureHint, sampleWindGrid } from '../engine/wind';
 import { EffortMode, RoutingBias } from '../types';
 import RouteMap from '../components/RouteMap';
 import TutorialOverlay from '../components/TutorialOverlay';
@@ -45,7 +46,7 @@ const TICK_MS = 150;
 
 export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const { state, beginRace, tick, decide, retireRace, setStrategy, markTutorialSeen } = useGame();
   const [activeEvent, setActiveEvent] = useState<GameEvent | null>(null);
   const [activeVmg, setActiveVmg] = useState<VmgPreview | null>(null);
@@ -54,6 +55,17 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
 
   const race = getRaceById(state.selectedRaceId);
   const boat = resolveBoatById(state, state.selectedBoatId);
+
+  // Live wind field sampled across the course for the chart overlay. Recomputed
+  // each in-race hour (and when the field changes), not every animation tick.
+  const windField = state.windField;
+  const elapsedHourBucket = state.progress ? Math.floor(state.progress.elapsedHours) : 0;
+  const windArrows = useMemo(() => {
+    if (!race || !windField) return [];
+    const cols = 7;
+    const rows = Math.max(4, Math.min(9, Math.round(cols * courseAspect(race.waypoints))));
+    return sampleWindGrid(windField, courseBounds(race.waypoints), cols, rows, elapsedHourBucket);
+  }, [race, windField, elapsedHourBucket]);
 
   // If we landed here without an active race but with a full loadout, start it.
   useEffect(() => {
@@ -147,6 +159,18 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
     );
   }
 
+  // Responsive layout: centre the content in a max-width column on wide
+  // screens, and size the chart to the course's shape and the viewport so it
+  // fills the space instead of sitting in a fixed letterbox.
+  const CONTENT_MAX = 760;
+  const columnWidth = Math.min(width - spacing.lg * 2, CONTENT_MAX);
+  const mapWidth = columnWidth - spacing.sm * 2;
+  const mapAspect = Math.max(0.55, Math.min(courseAspect(race.waypoints), 1.3));
+  const mapHeight = Math.max(
+    300,
+    Math.min(Math.round(mapWidth * mapAspect), Math.round(height * 0.6))
+  );
+
   const { progress, condition, weather } = state;
   const total = progress.totalDistanceNm;
   const covered = progress.distanceCoveredNm;
@@ -166,6 +190,7 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
   return (
     <View style={styles.screen}>
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: spacing.xxl }]}>
+        <View style={{ width: columnWidth }}>
         <View style={styles.headerRow}>
           <View style={{ flex: 1 }}>
             <Text style={styles.raceName}>{race.name}</Text>
@@ -183,9 +208,11 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
           trail={progress.trail}
           boat={{ lat: progress.lat, lon: progress.lon }}
           competitors={state.fleet ? competitorPoints(state.fleet, race) : []}
+          wind={windArrows}
           nextMarkIndex={progress.nextMarkIndex}
           land={LANDMASSES[race.id]}
-          width={width - spacing.lg * 2 - spacing.sm * 2}
+          width={mapWidth}
+          height={mapHeight}
         />
 
         <View style={styles.progressTrack}>
@@ -265,6 +292,7 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
             ))}
           </View>
         ) : null}
+        </View>
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
@@ -344,6 +372,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: spacing.lg,
+    alignItems: 'center',
   },
   headerRow: {
     flexDirection: 'row',
