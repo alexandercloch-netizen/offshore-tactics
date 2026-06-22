@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -12,6 +12,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
 import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
 import { useAuth } from '../store/AuthContext';
+import { updateDisplayName } from '../services/profile';
 import NauticalButton from '../components/NauticalButton';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Auth'>;
@@ -19,7 +20,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Auth'>;
 type Mode = 'signin' | 'signup';
 
 export const AuthScreen: React.FC<Props> = ({ navigation }) => {
-  const { configured, signIn, signUp } = useAuth();
+  const { configured, user, displayName, signIn, signUp, signOut } = useAuth();
   const [mode, setMode] = useState<Mode>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -54,6 +55,29 @@ export const AuthScreen: React.FC<Props> = ({ navigation }) => {
     navigation.goBack();
   };
 
+  // Keep the editable name field seeded with the live display name.
+  useEffect(() => {
+    if (user && displayName) setName(displayName);
+  }, [user, displayName]);
+
+  const saveName = async () => {
+    if (!user) return;
+    setError(null);
+    setNotice(null);
+    if (!name.trim()) {
+      setError('Enter a display name.');
+      return;
+    }
+    setBusy(true);
+    const result = await updateDisplayName(user.id, name);
+    setBusy(false);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    setNotice('Display name updated.');
+  };
+
   if (!configured) {
     return (
       <View style={styles.notConfigured}>
@@ -65,6 +89,47 @@ export const AuthScreen: React.FC<Props> = ({ navigation }) => {
         </Text>
         <NauticalButton label="Back" variant="secondary" onPress={() => navigation.goBack()} />
       </View>
+    );
+  }
+
+  if (user) {
+    return (
+      <KeyboardAvoidingView
+        style={styles.screen}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView contentContainerStyle={styles.content}>
+          <Text style={styles.title}>Your account</Text>
+          <Text style={styles.body}>
+            Signed in as {user.email}. Your campaign syncs across every device you
+            sign in on. Your display name is what appears on the global leaderboard.
+          </Text>
+
+          <Field
+            label="Display name"
+            value={name}
+            onChangeText={setName}
+            placeholder="Skipper name"
+            autoCapitalize="words"
+          />
+
+          {error ? <Text style={styles.error}>{error}</Text> : null}
+          {notice ? <Text style={styles.notice}>{notice}</Text> : null}
+
+          <View style={styles.actions}>
+            <NauticalButton label="Save Display Name" onPress={saveName} loading={busy} />
+            <NauticalButton
+              label="Sign Out"
+              variant="secondary"
+              onPress={async () => {
+                await signOut();
+                navigation.goBack();
+              }}
+            />
+            <NauticalButton label="Back" variant="ghost" onPress={() => navigation.goBack()} />
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     );
   }
 

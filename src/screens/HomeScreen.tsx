@@ -20,7 +20,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 export const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const { state, prepareNextRace, resetCampaign } = useGame();
-  const { configured, user, displayName, signOut } = useAuth();
+  const { configured, user, displayName } = useAuth();
   const raceInProgress = !!state.progress;
   const best = state.history.find((r) => r.finished && r.position === 1);
   const wins = state.history.filter((r) => r.finished && r.position === 1).length;
@@ -58,18 +58,12 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={styles.accountText}>
             {user ? `Signed in as ${displayName}` : 'Playing as guest'}
           </Text>
-          {user ? (
-            <Text style={styles.accountAction} onPress={() => signOut()}>
-              Sign out
-            </Text>
-          ) : (
-            <Text
-              style={styles.accountAction}
-              onPress={() => navigation.navigate('Auth')}
-            >
-              Sign in
-            </Text>
-          )}
+          <Text
+            style={styles.accountAction}
+            onPress={() => navigation.navigate('Auth')}
+          >
+            {user ? 'Account' : 'Sign in'}
+          </Text>
         </View>
       ) : null}
 
