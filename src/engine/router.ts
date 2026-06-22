@@ -2,6 +2,8 @@ import { Boat, GeoPoint, RoutingBias, Waypoint, WindField } from '../types';
 import { angularDelta, bearing, haversineNm, movePoint } from './geo';
 import { polarSpeed } from './polar';
 import { sampleWind } from './wind';
+import { LandPolygon } from '../data/landmasses';
+import { pointInLand, segmentCrossesLand } from './land';
 
 interface RNode {
   lat: number;
@@ -63,7 +65,8 @@ export function isochroneLeg(
   field: WindField,
   from: GeoPoint,
   to: GeoPoint,
-  startHours: number
+  startHours: number,
+  land?: LandPolygon[]
 ): GeoPoint[] {
   const direct = haversineNm(from.lat, from.lon, to.lat, to.lon);
   if (direct < 2) return [from, to];
@@ -85,6 +88,10 @@ export function isochroneLeg(
         const sp = polarSpeed(boat, twa, wind.speedKn);
         if (sp <= 0.2) continue;
         const p = movePoint(node.lat, node.lon, heading, sp * dt);
+        // Stay in navigable water: reject a hop that ends on, or crosses, land.
+        if (land && (pointInLand(land, p.lat, p.lon) || segmentCrossesLand(land, node, p))) {
+          continue;
+        }
         next.push({ lat: p.lat, lon: p.lon, parent: node });
       }
     }
@@ -98,7 +105,7 @@ export function isochroneLeg(
       const wind = sampleWind(field, node.lat, node.lon, startHours);
       const brg = bearing(node.lat, node.lon, to.lat, to.lon);
       const sp = polarSpeed(boat, angularDelta(brg, wind.fromDeg), wind.speedKn);
-      if (sp > 0.2 && d <= sp * dt * 1.1) {
+      if (sp > 0.2 && d <= sp * dt * 1.1 && !segmentCrossesLand(land, node, to)) {
         return backtrack(node, to);
       }
     }
@@ -131,7 +138,8 @@ export function planRoute(
   marks: Waypoint[],
   nextMarkIndex: number,
   startHours: number,
-  bias: RoutingBias = 0
+  bias: RoutingBias = 0,
+  land?: LandPolygon[]
 ): GeoPoint[] {
   if (nextMarkIndex >= marks.length) return [from];
   const next = marks[nextMarkIndex];
@@ -140,19 +148,30 @@ export function planRoute(
     .slice(nextMarkIndex + 1)
     .map((m) => ({ lat: m.lat, lon: m.lon }));
 
-  if (bias === 0) {
-    return [...isochroneLeg(boat, field, from, dest, startHours), ...rest];
+  // Find a strategic waypoint to the chosen side that is still in open water:
+  // start at the full offset and pull it in until it (and the line to it) clears
+  // land. If no clear offset is found, fall through to a plain optimal route.
+  let strategic: GeoPoint | null = null;
+  if (bias !== 0) {
+    const legDist = haversineNm(from.lat, from.lon, dest.lat, dest.lon);
+    const courseBearing = bearing(from.lat, from.lon, dest.lat, dest.lon);
+    const midLat = from.lat + (dest.lat - from.lat) * 0.45;
+    const midLon = from.lon + (dest.lon - from.lon) * 0.45;
+    const maxOffset = Math.max(5, Math.min(legDist * 0.18, 60));
+    for (let off = maxOffset; off >= 5; off -= maxOffset / 4) {
+      const cand = movePoint(midLat, midLon, courseBearing + bias * 90, off);
+      if (!pointInLand(land, cand.lat, cand.lon) && !segmentCrossesLand(land, { lat: midLat, lon: midLon }, cand)) {
+        strategic = cand;
+        break;
+      }
+    }
   }
 
-  const legDist = haversineNm(from.lat, from.lon, dest.lat, dest.lon);
-  const offsetNm = Math.max(5, Math.min(legDist * 0.18, 60));
-  const courseBearing = bearing(from.lat, from.lon, dest.lat, dest.lon);
-  // A point ~45% up the leg, shoved out to the chosen side.
-  const midLat = from.lat + (dest.lat - from.lat) * 0.45;
-  const midLon = from.lon + (dest.lon - from.lon) * 0.45;
-  const strategic = movePoint(midLat, midLon, courseBearing + bias * 90, offsetNm);
+  if (!strategic) {
+    return [...isochroneLeg(boat, field, from, dest, startHours, land), ...rest];
+  }
 
-  const toStrategic = isochroneLeg(boat, field, from, strategic, startHours);
-  const toMark = isochroneLeg(boat, field, strategic, dest, startHours);
+  const toStrategic = isochroneLeg(boat, field, from, strategic, startHours, land);
+  const toMark = isochroneLeg(boat, field, strategic, dest, startHours, land);
   return [...toStrategic, ...toMark.slice(1), ...rest];
 }
