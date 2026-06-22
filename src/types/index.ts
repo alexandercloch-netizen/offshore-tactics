@@ -395,19 +395,24 @@ export interface LeaderboardEntry {
   created_at?: string;
 }
 
-// React Navigation route map
-export type RootStackParamList = {
-  Home: undefined;
-  Auth: undefined;
+// React Navigation route maps
+export type MainTabParamList = {
+  Race: undefined;
+  Fleet: undefined;
   Leaderboard: undefined;
+  Profile: undefined;
+};
+
+export type RootStackParamList = {
+  Main: { screen?: keyof MainTabParamList } | undefined;
+  Onboarding: undefined;
+  Auth: undefined;
   RaceSelect: undefined;
   BoatSelect: undefined;
   CrewSelect: undefined;
   Provisioning: undefined;
   RaceMap: undefined;
   Results: undefined;
-  Fleet: undefined;
   BoatBuilder: undefined;
   SailLocker: { boatId: string };
-  Onboarding: undefined;
 };

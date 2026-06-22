@@ -23,12 +23,12 @@ export const ResultsScreen: React.FC<Props> = ({ navigation }) => {
 
   const goHome = () => {
     prepareNextRace();
-    navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
+    navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
   };
 
   const raceAgain = () => {
     prepareNextRace();
-    navigation.reset({ index: 0, routes: [{ name: 'Home' }, { name: 'RaceSelect' }] });
+    navigation.reset({ index: 0, routes: [{ name: 'Main' }, { name: 'RaceSelect' }] });
   };
 
   if (!result) {

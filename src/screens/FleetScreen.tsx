@@ -1,14 +1,19 @@
 import React from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { CompositeScreenProps } from '@react-navigation/native';
+import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { FleetBoat, RootStackParamList } from '../types';
+import { FleetBoat, MainTabParamList, RootStackParamList } from '../types';
 import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
 import { useGame } from '../store/GameContext';
 import NauticalButton from '../components/NauticalButton';
 import PolarViewer from '../components/PolarViewer';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Fleet'>;
+type Props = CompositeScreenProps<
+  BottomTabScreenProps<MainTabParamList, 'Fleet'>,
+  NativeStackScreenProps<RootStackParamList>
+>;
 
 // Median-column target angles, for a quick performance summary.
 function summary(boat: FleetBoat): string {

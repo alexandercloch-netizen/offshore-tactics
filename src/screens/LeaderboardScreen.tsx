@@ -8,15 +8,20 @@ import {
   View,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { CompositeScreenProps } from '@react-navigation/native';
+import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LeaderboardEntry, RootStackParamList } from '../types';
+import { LeaderboardEntry, MainTabParamList, RootStackParamList } from '../types';
 import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
 import { RACES } from '../data';
 import { useAuth } from '../store/AuthContext';
 import { fetchLeaderboard } from '../services/leaderboard';
 import { formatDuration } from '../engine/gameEngine';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Leaderboard'>;
+type Props = CompositeScreenProps<
+  BottomTabScreenProps<MainTabParamList, 'Leaderboard'>,
+  NativeStackScreenProps<RootStackParamList>
+>;
 
 export const LeaderboardScreen: React.FC<Props> = () => {
   const insets = useSafeAreaInsets();
