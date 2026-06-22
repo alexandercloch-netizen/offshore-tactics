@@ -1,10 +1,14 @@
 import React from 'react';
 import { DefaultTheme, NavigationContainer, Theme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../types';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { MainTabParamList, RootStackParamList } from '../types';
 import { colors, fontWeight } from '../theme';
+import { isSupabaseConfigured } from '../lib/supabase';
+import TabBarIcon from './TabBarIcon';
 import HomeScreen from '../screens/HomeScreen';
 import OnboardingScreen from '../screens/OnboardingScreen';
+import ProfileScreen from '../screens/ProfileScreen';
 import AuthScreen from '../screens/AuthScreen';
 import LeaderboardScreen from '../screens/LeaderboardScreen';
 import RaceSelectScreen from '../screens/RaceSelectScreen';
@@ -18,6 +22,7 @@ import BoatBuilderScreen from '../screens/BoatBuilderScreen';
 import SailLockerScreen from '../screens/SailLockerScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+const Tab = createBottomTabNavigator<MainTabParamList>();
 
 const navTheme: Theme = {
   ...DefaultTheme,
@@ -33,24 +38,46 @@ const navTheme: Theme = {
   },
 };
 
+const headerOptions = {
+  headerStyle: { backgroundColor: colors.deepSea },
+  headerTintColor: colors.brassLight,
+  headerTitleStyle: { fontWeight: fontWeight.bold, color: colors.foam },
+  headerShadowVisible: false,
+  contentStyle: { backgroundColor: colors.abyss },
+};
+
+// The app's main surface: a bottom-tab bar. Race is the personalised launchpad;
+// the rest are the fleet, the global board and the player's profile/settings.
+const MainTabs: React.FC = () => (
+  <Tab.Navigator
+    initialRouteName="Race"
+    screenOptions={({ route }) => ({
+      ...headerOptions,
+      tabBarIcon: ({ focused, size }) => (
+        <TabBarIcon route={route.name} focused={focused} size={size} />
+      ),
+      tabBarActiveTintColor: colors.brassLight,
+      tabBarInactiveTintColor: colors.slate,
+      tabBarStyle: {
+        backgroundColor: colors.deepSea,
+        borderTopColor: colors.hull,
+      },
+    })}
+  >
+    <Tab.Screen name="Race" component={HomeScreen} options={{ headerShown: false }} />
+    <Tab.Screen name="Fleet" component={FleetScreen} options={{ title: 'My Fleet' }} />
+    {isSupabaseConfigured ? (
+      <Tab.Screen name="Leaderboard" component={LeaderboardScreen} options={{ title: 'Leaderboard' }} />
+    ) : null}
+    <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'Profile' }} />
+  </Tab.Navigator>
+);
+
 export const AppNavigator: React.FC = () => {
   return (
     <NavigationContainer theme={navTheme}>
-      <Stack.Navigator
-        initialRouteName="Home"
-        screenOptions={{
-          headerStyle: { backgroundColor: colors.deepSea },
-          headerTintColor: colors.brassLight,
-          headerTitleStyle: { fontWeight: fontWeight.bold, color: colors.foam },
-          headerShadowVisible: false,
-          contentStyle: { backgroundColor: colors.abyss },
-        }}
-      >
-        <Stack.Screen
-          name="Home"
-          component={HomeScreen}
-          options={{ headerShown: false }}
-        />
+      <Stack.Navigator initialRouteName="Main" screenOptions={headerOptions}>
+        <Stack.Screen name="Main" component={MainTabs} options={{ headerShown: false }} />
         <Stack.Screen
           name="Onboarding"
           component={OnboardingScreen}
@@ -60,11 +87,6 @@ export const AppNavigator: React.FC = () => {
           name="Auth"
           component={AuthScreen}
           options={{ title: 'Account', presentation: 'modal' }}
-        />
-        <Stack.Screen
-          name="Leaderboard"
-          component={LeaderboardScreen}
-          options={{ title: 'Leaderboard' }}
         />
         <Stack.Screen
           name="RaceSelect"
@@ -95,11 +117,6 @@ export const AppNavigator: React.FC = () => {
           name="Results"
           component={ResultsScreen}
           options={{ title: 'Race Result', headerBackVisible: false }}
-        />
-        <Stack.Screen
-          name="Fleet"
-          component={FleetScreen}
-          options={{ title: 'My Fleet' }}
         />
         <Stack.Screen
           name="BoatBuilder"

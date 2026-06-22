@@ -82,7 +82,7 @@ export const BoatBuilderScreen: React.FC<Props> = ({ navigation }) => {
       sails: [],
     };
     addFleetBoat(boat, cost);
-    navigation.navigate('Fleet');
+    navigation.navigate('Main', { screen: 'Fleet' });
   };
 
   const sampleHint = useMemo(

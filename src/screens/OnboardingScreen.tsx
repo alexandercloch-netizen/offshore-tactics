@@ -61,7 +61,13 @@ export const OnboardingScreen: React.FC<Props> = ({ navigation }) => {
       onboardedAt: Date.now(),
     };
     setPlayerProfile(profile);
-    navigation.replace('Home');
+    // Pop back to the tabs (first run pushes Onboarding over them); fall back to
+    // replacing onto Main if there's nothing to go back to.
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigation.replace('Main');
+    }
   };
 
   // Record a choice for the current step, then advance (or finish on the last).
