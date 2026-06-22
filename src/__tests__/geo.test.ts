@@ -1,6 +1,8 @@
 import {
   angularDelta,
   bearing,
+  courseAspect,
+  courseBounds,
   courseLengthNm,
   cumulativeDistances,
   haversineNm,
@@ -73,5 +75,31 @@ describe('course geometry', () => {
     expect(mid.lon).toBeCloseTo(1, 1);
     expect(finish.lon).toBeCloseTo(2, 5);
     expect(finish.segmentIndex).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe('course bounds & aspect', () => {
+  const wps: Waypoint[] = [
+    { name: 'A', lat: 50, lon: -2, type: 'start' },
+    { name: 'B', lat: 51, lon: -1, type: 'finish' },
+  ];
+
+  it('bounds the marks', () => {
+    expect(courseBounds(wps)).toEqual({ minLat: 50, maxLat: 51, minLon: -2, maxLon: -1 });
+  });
+
+  it('reports height-to-width ratio in the cos-lat projection', () => {
+    // spanLat = 1, spanLon = 1 * cos(~50.5°) ≈ 0.636, so aspect = 1 / 0.636 > 1.
+    const k = Math.cos((50.5 * Math.PI) / 180);
+    expect(courseAspect(wps)).toBeCloseTo(1 / k, 2);
+  });
+
+  it('is positive even for a degenerate (single-point span) course', () => {
+    const flat: Waypoint[] = [
+      { name: 'A', lat: 10, lon: 0, type: 'start' },
+      { name: 'B', lat: 10, lon: 5, type: 'finish' },
+    ];
+    expect(courseAspect(flat)).toBeGreaterThan(0);
+    expect(Number.isFinite(courseAspect(flat))).toBe(true);
   });
 });

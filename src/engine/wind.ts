@@ -1,6 +1,6 @@
 import { HazardKey, Race, WeatherCondition, WindField, WindSample } from '../types';
 import { WEATHER } from '../data/weather';
-import { haversineNm, movePoint } from './geo';
+import { CourseBounds, haversineNm, movePoint } from './geo';
 import { rnd, rndRange } from './rng';
 
 const toRad = (deg: number): number => (deg * Math.PI) / 180;
@@ -98,6 +98,38 @@ export function sampleWind(field: WindField, lat: number, lon: number, hours: nu
   const speed = field.baseSpeed + field.gradientPerNm * along + featTerm;
 
   return { fromDeg: norm360(dir), speedKn: Math.max(2, Math.min(50, speed)) };
+}
+
+// A wind sample at a position, for drawing the field on the chart.
+export interface WindArrow {
+  lat: number;
+  lon: number;
+  fromDeg: number;
+  speedKn: number;
+}
+
+// Sample the wind field on a regular lat/lon grid spanning the given bounds, so
+// the chart can show the weather (direction & strength) across the course and
+// how it varies — the puffs, holes and gradient the router is playing.
+export function sampleWindGrid(
+  field: WindField,
+  bounds: CourseBounds,
+  cols: number,
+  rows: number,
+  hours: number
+): WindArrow[] {
+  const arrows: WindArrow[] = [];
+  const latStep = rows > 1 ? (bounds.maxLat - bounds.minLat) / (rows - 1) : 0;
+  const lonStep = cols > 1 ? (bounds.maxLon - bounds.minLon) / (cols - 1) : 0;
+  for (let r = 0; r < rows; r += 1) {
+    for (let c = 0; c < cols; c += 1) {
+      const lat = bounds.minLat + latStep * r;
+      const lon = bounds.minLon + lonStep * c;
+      const s = sampleWind(field, lat, lon, hours);
+      arrows.push({ lat, lon, fromDeg: s.fromDeg, speedKn: s.speedKn });
+    }
+  }
+  return arrows;
 }
 
 const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];

@@ -13,6 +13,7 @@ import Svg, {
 } from 'react-native-svg';
 import { colors, radius, spacing } from '../theme';
 import { GeoPoint, Waypoint } from '../types';
+import type { WindArrow } from '../engine/wind';
 import { LandPolygon } from '../data/landmasses';
 
 interface RouteMapProps {
@@ -21,10 +22,20 @@ interface RouteMapProps {
   trail?: GeoPoint[]; // track sailed so far
   boat?: GeoPoint; // current boat position
   competitors?: GeoPoint[]; // AI fleet positions
+  wind?: WindArrow[]; // sampled wind field, drawn as arrows
   nextMarkIndex?: number; // for shading rounded marks
   land?: LandPolygon[];
   width?: number;
   height?: number;
+}
+
+// Colour a wind arrow by strength, from light slate through to gale red.
+function windColor(speedKn: number): string {
+  if (speedKn <= 8) return colors.slate;
+  if (speedKn <= 14) return colors.signalGreen;
+  if (speedKn <= 20) return colors.brassLight;
+  if (speedKn <= 28) return colors.warning;
+  return colors.signalRed;
 }
 
 interface XY {
@@ -82,6 +93,7 @@ export const RouteMap: React.FC<RouteMapProps> = ({
   trail,
   boat,
   competitors,
+  wind,
   nextMarkIndex = 0,
   land,
   width = 320,
@@ -97,6 +109,31 @@ export const RouteMap: React.FC<RouteMapProps> = ({
   const trailPts = (trail ?? []).map((p) => project(p.lat, p.lon));
   const boatXY = boat ? project(boat.lat, boat.lon) : null;
   const competitorXY = (competitors ?? []).map((c) => project(c.lat, c.lon));
+
+  // Wind arrows: each is centred on its grid point, points the way the wind
+  // blows TO, with length and colour scaled by strength.
+  const windArrows = (wind ?? []).map((w) => {
+    const p = project(w.lat, w.lon);
+    const toDeg = w.fromDeg + 180;
+    const a = (toDeg * Math.PI) / 180;
+    const dx = Math.sin(a);
+    const dy = -Math.cos(a);
+    const len = 9 + Math.max(0, Math.min((w.speedKn - 4) / 26, 1)) * 13;
+    const tip = { x: p.x + dx * len * 0.5, y: p.y + dy * len * 0.5 };
+    const tail = { x: p.x - dx * len * 0.5, y: p.y - dy * len * 0.5 };
+    // Arrowhead: two short barbs swept back from the tip.
+    const hl = 5;
+    const left = (toDeg + 150) * (Math.PI / 180);
+    const right = (toDeg - 150) * (Math.PI / 180);
+    return {
+      key: `${w.lat.toFixed(3)},${w.lon.toFixed(3)}`,
+      tail,
+      tip,
+      barbL: { x: tip.x + Math.sin(left) * hl, y: tip.y - Math.cos(left) * hl },
+      barbR: { x: tip.x + Math.sin(right) * hl, y: tip.y - Math.cos(right) * hl },
+      color: windColor(w.speedKn),
+    };
+  });
 
   return (
     <View style={styles.container}>
@@ -126,6 +163,20 @@ export const RouteMap: React.FC<RouteMapProps> = ({
               stroke={colors.coastline}
               strokeWidth={0.8}
               fillRule="evenodd"
+            />
+          ))}
+
+          {/* Live wind field: direction & strength across the course. */}
+          {windArrows.map((w) => (
+            <Path
+              key={`wind-${w.key}`}
+              d={`M ${w.tail.x.toFixed(1)} ${w.tail.y.toFixed(1)} L ${w.tip.x.toFixed(1)} ${w.tip.y.toFixed(1)} M ${w.barbL.x.toFixed(1)} ${w.barbL.y.toFixed(1)} L ${w.tip.x.toFixed(1)} ${w.tip.y.toFixed(1)} L ${w.barbR.x.toFixed(1)} ${w.barbR.y.toFixed(1)}`}
+              stroke={w.color}
+              strokeWidth={1.5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              fill="none"
+              opacity={0.7}
             />
           ))}
 
