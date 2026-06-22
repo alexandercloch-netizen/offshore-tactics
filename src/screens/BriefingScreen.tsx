@@ -11,7 +11,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EffortMode, RootStackParamList, RoutingBias } from '../types';
 import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
-import { getRaceById } from '../data';
+import { getCrewById, getRaceById } from '../data';
 import { LANDMASSES } from '../data/landmasses';
 import { useGame } from '../store/GameContext';
 import {
@@ -20,12 +20,20 @@ import {
   crewSkillFactor,
   estimateRouteHours,
   formatDuration,
+  navigatorSkill,
   raceDivision,
   resolveBoatById,
 } from '../engine/gameEngine';
 import { planRoute } from '../engine/router';
 import { courseAspect, courseBounds } from '../engine/geo';
-import { featureState, pressureHint, sampleWindGrid, weatherOutlook } from '../engine/wind';
+import {
+  featureState,
+  forecastConfidence,
+  pressureHint,
+  sampleForecastGrid,
+  sampleWindGrid,
+  weatherOutlook,
+} from '../engine/wind';
 import RouteMap from '../components/RouteMap';
 import WindIndicator from '../components/WindIndicator';
 import NauticalButton from '../components/NauticalButton';
@@ -104,9 +112,16 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
   const bounds = courseBounds(race.waypoints);
   const heatCols = 22;
   const heatRows = Math.max(10, Math.min(30, Math.round(heatCols * courseAspect(race.waypoints))));
-  const windArrows = sampleWindGrid(windField, bounds, 7, 6, forecastHour);
-  const heat = sampleWindGrid(windField, bounds, heatCols, heatRows, forecastHour);
+  // The chart shows the crew's *forecast*, not ground truth: it grows fuzzier the
+  // further out you scrub, and a sharp Navigator keeps it trustworthy for longer.
+  const navSkill = navigatorSkill(state.selectedCrewIds);
+  const confidence = forecastConfidence(navSkill, forecastHour);
+  const windArrows = sampleForecastGrid(windField, bounds, 7, 6, forecastHour, navSkill);
+  const heat = sampleForecastGrid(windField, bounds, heatCols, heatRows, forecastHour, navSkill);
   const feature = featureState(windField, forecastHour);
+  const navigator = state.selectedCrewIds
+    .map((id) => getCrewById(id))
+    .find((c) => c?.role === 'Navigator');
   // A planning window scaled to the race, capped so the slider stays useful.
   const maxForecastHour = Math.min(48, Math.max(8, Math.ceil(race.recordTimeHours)));
 
@@ -158,6 +173,11 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
                 hour={forecastHour}
                 maxHour={maxForecastHour}
                 onChange={setForecastHour}
+              />
+              <ConfidenceBar
+                confidence={confidence}
+                navName={navigator?.name}
+                navSkill={navSkill}
               />
             </View>
           </View>
@@ -259,6 +279,34 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
 const sideName = (bias: RoutingBias): string =>
   bias < 0 ? 'Banking left' : bias > 0 ? 'Banking right' : 'The optimal line';
 
+// How far the forecast on screen can be trusted at the scrubbed hour — falls off
+// with the lookahead, held up by a strong Navigator.
+const ConfidenceBar: React.FC<{ confidence: number; navName?: string; navSkill: number }> = ({
+  confidence,
+  navName,
+  navSkill,
+}) => {
+  const pct = Math.round(confidence * 100);
+  const colour =
+    confidence >= 0.75 ? colors.signalGreen : confidence >= 0.45 ? colors.warning : colors.signalRed;
+  return (
+    <View style={styles.confWrap}>
+      <View style={styles.confHead}>
+        <Text style={styles.confLabel}>Forecast confidence</Text>
+        <Text style={[styles.confPct, { color: colour }]}>{pct}%</Text>
+      </View>
+      <View style={styles.confTrack}>
+        <View style={[styles.confFill, { width: `${pct}%`, backgroundColor: colour }]} />
+      </View>
+      <Text style={styles.confNav}>
+        {navName
+          ? `Navigator ${navName} (skill ${Math.round(navSkill)}) reads it this far`
+          : `No navigator aboard — relying on crew nous (${Math.round(navSkill)})`}
+      </Text>
+    </View>
+  );
+};
+
 const Fact: React.FC<{ label: string; value: string }> = ({ label, value }) => (
   <View style={styles.fact}>
     <Text style={styles.factValue}>{value}</Text>
@@ -354,6 +402,26 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   planHint: { color: colors.slate, fontSize: fontSize.xs, marginTop: spacing.sm },
+  confWrap: { marginTop: spacing.sm },
+  confHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  confLabel: {
+    color: colors.slate,
+    fontSize: fontSize.xs,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  confPct: { fontSize: fontSize.sm, fontWeight: fontWeight.bold },
+  confTrack: {
+    height: 6,
+    borderRadius: radius.pill,
+    backgroundColor: colors.navy,
+    borderWidth: 1,
+    borderColor: colors.hull,
+    overflow: 'hidden',
+    marginTop: 4,
+  },
+  confFill: { height: '100%', borderRadius: radius.pill },
+  confNav: { color: colors.mist, fontSize: fontSize.xs, marginTop: 4 },
   etaRow: {
     flexDirection: 'row',
     alignItems: 'center',
