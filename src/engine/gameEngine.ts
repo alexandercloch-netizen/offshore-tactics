@@ -245,6 +245,7 @@ export function initialProgress(
     windSpeedKn: wind.speedKn,
     nextDecisionAtNm: firstDecision,
     decisionsTaken: 0,
+    shownEventIds: [],
   };
 }
 
@@ -391,14 +392,23 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
   const df = total > 0 ? dGeom / total : 0;
   const elapsedHours = prev.elapsedHours + dtHours;
 
+  // Wear accrues with geometric progress, so `df` sums to ~1 over a whole race
+  // regardless of its length. The coefficients are therefore "points lost over a
+  // full race" at this weather/effort. They're tuned so a sensibly sailed race
+  // (cruise, conservative calls) comfortably finishes even in heavy weather —
+  // wear bites, but it's the player's risky decisions (below) that actually
+  // threaten the boat. Tiredness slows the boat (conditionFactor) rather than
+  // ending the race; only a destroyed hull forces a retirement.
   const weather = weatherFromWind(wind);
   const condition: BoatCondition = {
-    crewStamina: clamp(state.condition.crewStamina - df * (40 + weather.riskModifier * 120) * wearMul),
-    crewMorale: clamp(state.condition.crewMorale - df * (10 + weather.riskModifier * 60)),
-    hullIntegrity: clamp(state.condition.hullIntegrity - df * (8 + weather.riskModifier * 120) * wearMul),
+    crewStamina: clamp(state.condition.crewStamina - df * (28 + weather.riskModifier * 45) * wearMul),
+    crewMorale: clamp(state.condition.crewMorale - df * (10 + weather.riskModifier * 40)),
+    hullIntegrity: clamp(state.condition.hullIntegrity - df * (6 + weather.riskModifier * 40) * wearMul),
   };
 
-  const retired = condition.hullIntegrity <= 0 || condition.crewStamina <= 0;
+  // A retirement is a broken boat, not an exhausted crew — baseline wear alone
+  // can't end a race, but compounding hull damage from gambles can.
+  const retired = condition.hullIntegrity <= 0;
   const finished = !retired && (nextMarkIndex >= marks.length || remaining < 0.5);
 
   // Re-route on a mark rounding or a spent route immediately; otherwise only
@@ -444,6 +454,7 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
     windSpeedKn: wind.speedKn,
     nextDecisionAtNm: prev.nextDecisionAtNm,
     decisionsTaken: prev.decisionsTaken,
+    shownEventIds: prev.shownEventIds ?? [],
   };
 
   // Advance the AI fleet through the same elapsed time and wind, then rank.
@@ -463,7 +474,9 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
     progress.decisionsTaken = prev.decisionsTaken + 1;
     progress.nextDecisionAtNm =
       distanceCoveredNm + rndRange(DECISION_MIN, DECISION_MAX) * total;
-    event = pickEventForRace(race.hazard);
+    // Avoid repeats by passing the decisions already seen this race.
+    event = pickEventForRace(race.hazard, progress.shownEventIds);
+    progress.shownEventIds = [...progress.shownEventIds, event.id];
   }
 
   let log: string | undefined;
@@ -522,7 +535,9 @@ export function applyDecision(state: GameState, choice: TacticalChoice): StepRes
     : (state.fleet ?? []);
   progress.position = livePosition(fleet, progress.distanceCoveredNm);
 
-  const retired = condition.hullIntegrity <= 0 || condition.crewStamina <= 0;
+  // Only a destroyed hull ends the race (see stepRace); an exhausted crew just
+  // sails slowly.
+  const retired = condition.hullIntegrity <= 0;
   return {
     progress,
     condition,

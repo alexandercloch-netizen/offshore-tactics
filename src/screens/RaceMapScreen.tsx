@@ -31,7 +31,7 @@ import {
 } from '../engine/gameEngine';
 import { competitorPoints } from '../engine/fleet';
 import { courseAspect, courseBounds } from '../engine/geo';
-import { pressureHint, sampleWindGrid } from '../engine/wind';
+import { pressureHint, sampleWindGrid, weatherOutlook } from '../engine/wind';
 import { EffortMode, RoutingBias } from '../types';
 import RouteMap from '../components/RouteMap';
 import TutorialOverlay from '../components/TutorialOverlay';
@@ -186,6 +186,11 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
     state.windField !== undefined
       ? pressureHint(state.windField, progress.lat, progress.lon, progress.elapsedHours)
       : null;
+  // What the breeze is about to do — drives the on-chart weather warning.
+  const outlook =
+    state.windField !== undefined
+      ? weatherOutlook(state.windField, progress.lat, progress.lon, progress.elapsedHours)
+      : null;
 
   return (
     <View style={styles.screen}>
@@ -201,6 +206,20 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
             <Text style={styles.positionLabel}>of {fleetSize}</Text>
           </View>
         </View>
+
+        {outlook?.warn ? (
+          <View
+            style={[
+              styles.weatherWarning,
+              outlook.peakKn >= 34 && styles.weatherWarningSevere,
+            ]}
+          >
+            <Text style={styles.weatherWarningText}>
+              ⚠ {outlook.headline} · {Math.round(outlook.peakKn)} kn
+              {outlook.trend === 'building' ? ` within ${outlook.lookaheadH}h` : ''}
+            </Text>
+          </View>
+        ) : null}
 
         <RouteMap
           waypoints={race.waypoints}
@@ -405,6 +424,25 @@ const styles = StyleSheet.create({
   positionLabel: {
     color: colors.mist,
     fontSize: fontSize.xs,
+  },
+  weatherWarning: {
+    backgroundColor: 'rgba(201, 162, 39, 0.18)',
+    borderColor: colors.warning,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.md,
+  },
+  weatherWarningSevere: {
+    backgroundColor: 'rgba(215, 38, 61, 0.18)',
+    borderColor: colors.signalRed,
+  },
+  weatherWarningText: {
+    color: colors.foam,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.bold,
+    textAlign: 'center',
   },
   progressTrack: {
     height: 8,

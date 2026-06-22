@@ -167,6 +167,54 @@ export function pressureHint(field: WindField, lat: number, lon: number, hours: 
   };
 }
 
+export interface WeatherOutlook {
+  nowKn: number;
+  soonKn: number;
+  peakKn: number;
+  trend: 'building' | 'easing' | 'steady';
+  warn: boolean; // worth flagging prominently to the player
+  headline: string; // short banner text, e.g. "Gale building"
+  lookaheadH: number;
+}
+
+// Wind strength descriptor for a speed, matching the WEATHER bands.
+function strengthWord(kn: number): string {
+  if (kn >= 34) return 'Gale';
+  if (kn >= 26) return 'Strong winds';
+  if (kn >= 20) return 'Fresh breeze';
+  if (kn >= 11) return 'Steady breeze';
+  if (kn >= 6) return 'Light airs';
+  return 'Calm';
+}
+
+// What the weather is about to do at the boat: compares the wind now with the
+// field a few hours ahead (the field veers/backs, rotates and drifts its
+// puff/hole over time), so the UI can warn of building breeze on the horizon
+// before it arrives. Flags a warning when it's building into fresh+ or it's
+// already strong.
+export function weatherOutlook(
+  field: WindField,
+  lat: number,
+  lon: number,
+  hours: number,
+  lookaheadH = 2
+): WeatherOutlook {
+  const nowKn = sampleWind(field, lat, lon, hours).speedKn;
+  const soonKn = sampleWind(field, lat, lon, hours + lookaheadH).speedKn;
+  const peakKn = Math.max(nowKn, soonKn);
+  const delta = soonKn - nowKn;
+  const trend: WeatherOutlook['trend'] =
+    delta > 3 ? 'building' : delta < -3 ? 'easing' : 'steady';
+  const warn = (trend === 'building' && peakKn >= 20) || peakKn >= 28;
+  const headline =
+    trend === 'building'
+      ? `${strengthWord(peakKn)} building`
+      : trend === 'easing'
+        ? 'Wind easing'
+        : strengthWord(nowKn);
+  return { nowKn, soonKn, peakKn, trend, warn, headline, lookaheadH };
+}
+
 // Map a wind sample onto the nearest descriptive WeatherCondition (for the
 // compass, wear and decision risk), keeping the field's exact local direction.
 export function weatherFromWind(sample: WindSample): WeatherCondition {

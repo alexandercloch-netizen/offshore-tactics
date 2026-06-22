@@ -94,6 +94,94 @@ export const GENERIC_EVENTS: GameEvent[] = [
       },
     ],
   },
+  {
+    id: 'evt-layline',
+    title: 'Layline Decision',
+    prompt:
+      'You are closing on the layline to the next mark. Send it now and risk overstanding, or hold for one more shift and round tight?',
+    kind: 'tactical',
+    pointOfSail: 'Upwind',
+    choices: [
+      {
+        id: 'evt-layline-send',
+        label: 'Tack now and foot fast',
+        description: 'Lock in the corner — clean air all the way to the mark.',
+        timeDelta: -0.5,
+        staminaDelta: -4,
+        moraleDelta: 3,
+        hullDelta: 0,
+        risk: 0.22,
+      },
+      {
+        id: 'evt-layline-hold',
+        label: 'Hold for the shift',
+        description: 'Squeeze a few more boatlengths and round tight, if it comes.',
+        timeDelta: 0.3,
+        staminaDelta: -2,
+        moraleDelta: 0,
+        hullDelta: 0,
+        risk: 0.07,
+      },
+    ],
+  },
+  {
+    id: 'evt-lane',
+    title: 'Defending Your Lane',
+    prompt:
+      'A rival is rolling over the top of you, dirtying your air. Dig low to hold your lane, or duck behind and look for a clear road?',
+    kind: 'tactical',
+    choices: [
+      {
+        id: 'evt-lane-fight',
+        label: 'Fight for the lane',
+        description: 'Trim hard and refuse to be rolled — taxing on the crew.',
+        timeDelta: -0.4,
+        staminaDelta: -7,
+        moraleDelta: 3,
+        hullDelta: 0,
+        risk: 0.2,
+      },
+      {
+        id: 'evt-lane-duck',
+        label: 'Duck and find clear air',
+        description: 'Concede a touch now to sail your own race in clean breeze.',
+        timeDelta: 0.4,
+        staminaDelta: -1,
+        moraleDelta: -1,
+        hullDelta: 0,
+        risk: 0.05,
+      },
+    ],
+  },
+  {
+    id: 'evt-kelp',
+    title: 'Weed on the Keel',
+    prompt:
+      'The boat feels sticky — there is weed snagged on the keel or rudder. Back down to clear it, or grind on and live with the drag?',
+    kind: 'tactical',
+    choices: [
+      {
+        id: 'evt-kelp-clear',
+        label: 'Back down to clear it',
+        description: 'Stop briefly to shed the weed and get the foils clean again.',
+        timeDelta: 0.5,
+        staminaDelta: -3,
+        moraleDelta: 1,
+        hullDelta: 0,
+        risk: 0.04,
+      },
+      {
+        id: 'evt-kelp-ignore',
+        label: 'Grind on with the drag',
+        description: 'Keep racing and hope it sheds itself — slower until it does.',
+        timeDelta: 0.6,
+        staminaDelta: -1,
+        moraleDelta: -2,
+        hullDelta: 0,
+        risk: 0.05,
+      },
+    ],
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -158,6 +246,35 @@ export const MORALE_EVENTS: GameEvent[] = [
       },
     ],
   },
+  {
+    id: 'evt-rally',
+    title: 'Spirits Flagging',
+    prompt:
+      'The fleet has stretched away and the crew has gone quiet. The skipper can call everyone aft for a rallying word, or just let them work.',
+    kind: 'tactical',
+    choices: [
+      {
+        id: 'evt-rally-speak',
+        label: 'Rally the troops',
+        description: 'A few honest words to refocus the boat and lift heads.',
+        timeDelta: 0.2,
+        staminaDelta: 2,
+        moraleDelta: 9,
+        hullDelta: 0,
+        risk: 0.03,
+      },
+      {
+        id: 'evt-rally-grind',
+        label: 'Let them grind it out',
+        description: 'Say nothing and keep racing — heads-down, no distraction.',
+        timeDelta: -0.2,
+        staminaDelta: -3,
+        moraleDelta: -3,
+        hullDelta: 0,
+        risk: 0.05,
+      },
+    ],
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -217,6 +334,35 @@ export const WEATHER_EVENTS: GameEvent[] = [
         timeDelta: 0.6,
         staminaDelta: -2,
         moraleDelta: 0,
+        hullDelta: 0,
+        risk: 0.05,
+      },
+    ],
+  },
+  {
+    id: 'evt-fog',
+    title: 'Fog Bank Rolling In',
+    prompt:
+      'Visibility is dropping fast as a fog bank swallows the fleet. Hold racing pace on instruments, or back off and post a lookout?',
+    kind: 'weather',
+    choices: [
+      {
+        id: 'evt-fog-press',
+        label: 'Race on the instruments',
+        description: 'Trust the electronics and keep the hammer down in the murk.',
+        timeDelta: -0.6,
+        staminaDelta: -6,
+        moraleDelta: 2,
+        hullDelta: -2,
+        risk: 0.3,
+      },
+      {
+        id: 'evt-fog-careful',
+        label: 'Ease off, post a lookout',
+        description: 'Slow down and keep everyone safe until it clears.',
+        timeDelta: 0.6,
+        staminaDelta: -2,
+        moraleDelta: 1,
         hullDelta: 0,
         risk: 0.05,
       },
@@ -519,21 +665,34 @@ export function pickEvent(): GameEvent {
   return rndPick(EVENTS);
 }
 
-// Chooses which event to present during a race, weighted toward the race's
-// signature hazard, with a rare chance of a man-overboard drama.
-export function pickEventForRace(hazard?: HazardKey): GameEvent {
+// Pick from a pool, preferring entries not yet seen this race; only once every
+// option has been shown does it allow a repeat.
+function pickFresh(pool: GameEvent[], seen: Set<string>): GameEvent {
+  const fresh = pool.filter((e) => !seen.has(e.id));
+  return rndPick(fresh.length > 0 ? fresh : pool);
+}
+
+// Chooses which decision to present during a race. The signature hazard is a
+// once-per-race set-piece (not a recurring prompt), a man-overboard is a rare
+// one-off drama, and the everyday tactical/weather/crew calls are drawn without
+// repeating until the pool is exhausted — so consecutive decisions feel varied
+// rather than the same prompt over and over. `shown` is the ids already
+// presented this race.
+export function pickEventForRace(hazard?: HazardKey, shown: string[] = []): GameEvent {
+  const seen = new Set(shown);
   const roll = rnd();
-  if (roll < 0.07) {
-    return rndPick(MOB_EVENTS);
-  }
-  if (hazard && roll < 0.4) {
+
+  // The signature hazard, exactly once per race (~30% roll → almost certain to
+  // appear across a full race, but never twice).
+  if (hazard && !seen.has(HAZARD_EVENTS[hazard].id) && roll < 0.3) {
     return HAZARD_EVENTS[hazard];
   }
-  if (roll < 0.62) {
-    return rndPick(WEATHER_EVENTS);
+  // A rare man-overboard drama, at most once.
+  if (!seen.has(MOB_EVENTS[0].id) && roll < 0.1) {
+    return MOB_EVENTS[0];
   }
-  if (roll < 0.8) {
-    return rndPick(MORALE_EVENTS);
-  }
-  return rndPick(GENERIC_EVENTS);
+  // Everyday tactical/weather/crew calls drawn from the combined pool, never
+  // repeating until all of them have been seen — so decisions stay varied.
+  const everyday = [...WEATHER_EVENTS, ...MORALE_EVENTS, ...GENERIC_EVENTS];
+  return pickFresh(everyday, seen);
 }
