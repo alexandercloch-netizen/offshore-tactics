@@ -1,7 +1,7 @@
 import { polarSpeed, noGoAngle, bestVmgAngles } from '../engine/polar';
 import { isBoatOwned, resolveBoatById } from '../engine/gameEngine';
 import { CLASS_LIBRARY, getClassOption } from '../data/polarLibrary';
-import { BOATS } from '../data';
+import { BOATS, getBoatById } from '../data';
 import { FleetBoat, GameState } from '../types';
 
 function buildFleetBoat(overrides: Partial<FleetBoat> = {}): FleetBoat {
@@ -72,5 +72,13 @@ describe('ownership & resolution', () => {
   it('does not treat an unbought catalogue boat as owned', () => {
     expect(isBoatOwned(state, BOATS[0])).toBe(false);
     expect(resolveBoatById(state, BOATS[0].id)).toBe(BOATS[0]);
+  });
+
+  it('exposes a custom boat berth count only via resolveBoatById (not getBoatById)', () => {
+    // Regression: the crew screen must resolve against the fleet, or a custom
+    // boat reports 0 berths and blocks signing crew.
+    expect(getBoatById('fleet-test')).toBeUndefined();
+    expect(resolveBoatById(state, 'fleet-test')?.crewCapacity).toBe(boat.crewCapacity);
+    expect(boat.crewCapacity).toBeGreaterThan(0);
   });
 });

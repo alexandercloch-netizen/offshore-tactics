@@ -4,9 +4,9 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CrewMember, RootStackParamList } from '../types';
 import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
-import { CREW, getBoatById } from '../data';
+import { CREW } from '../data';
 import { useGame } from '../store/GameContext';
-import { crewWageTotal } from '../engine/gameEngine';
+import { crewWageTotal, resolveBoatById } from '../engine/gameEngine';
 import NauticalButton from '../components/NauticalButton';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CrewSelect'>;
@@ -14,7 +14,9 @@ type Props = NativeStackScreenProps<RootStackParamList, 'CrewSelect'>;
 export const CrewSelectScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const { state, toggleCrew, money } = useGame();
-  const boat = getBoatById(state.selectedBoatId);
+  // Resolve against the catalogue AND the player's custom fleet, so a
+  // self-built boat reports its real berth count rather than zero.
+  const boat = resolveBoatById(state, state.selectedBoatId);
   const capacity = boat ? boat.crewCapacity : 0;
   const selected = state.selectedCrewIds;
   const wages = crewWageTotal(selected);
