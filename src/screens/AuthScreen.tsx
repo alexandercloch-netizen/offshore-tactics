@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import {
+  Alert,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   ScrollView,
   StyleSheet,
@@ -13,6 +15,7 @@ import { RootStackParamList } from '../types';
 import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
 import { useAuth } from '../store/AuthContext';
 import { updateDisplayName } from '../services/profile';
+import { PRIVACY_URL } from '../lib/authProviders';
 import NauticalButton from '../components/NauticalButton';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Auth'>;
@@ -20,7 +23,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Auth'>;
 type Mode = 'signin' | 'signup';
 
 export const AuthScreen: React.FC<Props> = ({ navigation }) => {
-  const { configured, user, displayName, signIn, signUp, signOut } = useAuth();
+  const { configured, user, displayName, signIn, signUp, signOut, deleteAccount } = useAuth();
   const [mode, setMode] = useState<Mode>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -78,6 +81,28 @@ export const AuthScreen: React.FC<Props> = ({ navigation }) => {
     setNotice('Display name updated.');
   };
 
+  const confirmDelete = () => {
+    if (!user) return;
+    Alert.alert(
+      'Delete Account',
+      'This permanently deletes your account and all your cloud data — fleet, history and saved campaign. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setBusy(true);
+            const result = await deleteAccount();
+            setBusy(false);
+            if (result.error) setError(result.error);
+            // On success the session ends and the navigator swaps to the wall.
+          },
+        },
+      ]
+    );
+  };
+
   if (!configured) {
     return (
       <View style={styles.notConfigured}>
@@ -127,6 +152,15 @@ export const AuthScreen: React.FC<Props> = ({ navigation }) => {
               }}
             />
             <NauticalButton label="Back" variant="ghost" onPress={() => navigation.goBack()} />
+          </View>
+
+          <View style={styles.dangerZone}>
+            <Text style={styles.privacyLink} onPress={() => Linking.openURL(PRIVACY_URL)}>
+              Privacy Policy
+            </Text>
+            <Text style={styles.deleteLink} onPress={confirmDelete}>
+              Delete account
+            </Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -277,6 +311,21 @@ const styles = StyleSheet.create({
   actions: {
     gap: spacing.md,
     marginTop: spacing.md,
+  },
+  dangerZone: {
+    marginTop: spacing.xxl,
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  privacyLink: {
+    color: colors.slate,
+    fontSize: fontSize.sm,
+    textDecorationLine: 'underline',
+  },
+  deleteLink: {
+    color: colors.signalRed,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.medium,
   },
 });
 

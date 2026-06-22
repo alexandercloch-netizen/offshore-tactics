@@ -6,8 +6,10 @@ import React, {
   useMemo,
   useState,
 } from 'react';
+import { Platform } from 'react-native';
 import { Session, User } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
+import { OAuthProvider } from '../lib/authProviders';
 
 export interface AuthContextValue {
   configured: boolean;
@@ -21,7 +23,19 @@ export interface AuthContextValue {
     password: string,
     displayName: string
   ) => Promise<{ error?: string; needsConfirmation?: boolean }>;
+  signInWithMagicLink: (email: string) => Promise<{ error?: string; sent?: boolean }>;
+  signInWithProvider: (provider: OAuthProvider) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
+  deleteAccount: () => Promise<{ error?: string }>;
+}
+
+// Where Supabase should send the user back after a magic link / OAuth round-trip
+// (the web origin; native deep-linking is configured separately).
+function redirectTo(): string | undefined {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    return window.location.origin;
+  }
+  return undefined;
 }
 
 function nameFromUser(user: User | null): string | null {
@@ -86,9 +100,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     []
   );
 
+  const signInWithMagicLink = useCallback(async (email: string) => {
+    if (!supabase) return { error: 'Supabase is not configured.' };
+    const { error } = await supabase.auth.signInWithOtp({
+      email: email.trim(),
+      options: { emailRedirectTo: redirectTo() },
+    });
+    return error ? { error: error.message } : { sent: true };
+  }, []);
+
+  const signInWithProvider = useCallback(async (provider: OAuthProvider) => {
+    if (!supabase) return { error: 'Supabase is not configured.' };
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: redirectTo() },
+    });
+    return error ? { error: error.message } : {};
+  }, []);
+
   const signOut = useCallback(async () => {
     if (!supabase) return;
     await supabase.auth.signOut();
+  }, []);
+
+  // Removes the account and all its data. A SECURITY DEFINER RPC deletes the
+  // auth user, which cascades to saves/profile/leaderboard via their FKs.
+  const deleteAccount = useCallback(async () => {
+    if (!supabase) return { error: 'Supabase is not configured.' };
+    const { error } = await supabase.rpc('delete_account');
+    if (error) return { error: error.message };
+    await supabase.auth.signOut();
+    return {};
   }, []);
 
   const user = session?.user ?? null;
@@ -102,9 +144,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       displayName: nameFromUser(user),
       signIn,
       signUp,
+      signInWithMagicLink,
+      signInWithProvider,
       signOut,
+      deleteAccount,
     }),
-    [loading, session, user, signIn, signUp, signOut]
+    [
+      loading,
+      session,
+      user,
+      signIn,
+      signUp,
+      signInWithMagicLink,
+      signInWithProvider,
+      signOut,
+      deleteAccount,
+    ]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
