@@ -131,12 +131,35 @@ export interface BoatPolar {
   importedFrom?: 'predictwind' | 'expedition' | 'orc' | 'generic';
 }
 
+// ---- Sail inventory: a wardrobe of specialist sails over the base polar ----
+
+// What part of the wind range a sail is cut for.
+export type SailCategory = 'headsail' | 'reacher' | 'spinnaker' | 'stormsail';
+
+// A specialist sail the player can add to a boat's wardrobe. The base polar
+// already represents the boat's standard wardrobe (the working main + jib +
+// all-round kite); a specialist sail lifts boat speed within its operating
+// envelope — its crossover — by `boost`, tapering to nothing outside it.
+export interface Sail {
+  id: string;
+  name: string;
+  category: SailCategory;
+  blurb: string; // human-readable niche, e.g. "light-air reaching"
+  twaMin: number; // operating envelope (true wind angle band, deg)
+  twaMax: number;
+  twsMin: number; // operating envelope (true wind speed band, kn)
+  twsMax: number;
+  boost: number; // peak fractional speed gain inside the envelope (e.g. 0.08)
+  baseCost: number; // price for the cruiser-baseline boat; scaled by class
+}
+
 // A boat the player has built/owns, carrying its own polar.
 export interface FleetBoat extends Boat {
   custom: true;
   boatType: BoatType;
-  polar: BoatPolar;
+  polar: BoatPolar; // base polar = the boat with its standard wardrobe
   speedAdjustment: SpeedAdjustment;
+  sails?: string[]; // ids of specialist sails added to the wardrobe
 }
 
 export interface Profile {
@@ -350,4 +373,5 @@ export type RootStackParamList = {
   Results: undefined;
   Fleet: undefined;
   BoatBuilder: undefined;
+  SailLocker: { boatId: string };
 };

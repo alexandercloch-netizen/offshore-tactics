@@ -39,6 +39,7 @@ import {
   pointOfSailFor,
 } from './geo';
 import { polarSpeed } from './polar';
+import { effectivePolar } from './sails';
 import { createWindField, sampleWind, weatherFromWind } from './wind';
 import { planRoute } from './router';
 import { advanceFleet, finalPosition, livePosition } from './fleet';
@@ -85,9 +86,21 @@ export function raceDivision(race: Race, division: DivisionKey): RaceDivision {
 }
 
 // Resolve a boat id against both the catalogue and the player's custom fleet.
+// A custom boat carrying specialist sails is returned with its effective polar
+// (base lifted by the wardrobe) so the whole engine sails the rigged boat;
+// boats without specialist sails are returned untouched.
 export function resolveBoatById(state: GameState, id?: string): Boat | undefined {
   if (!id) return undefined;
-  return getBoatById(id) ?? state.profile?.fleet.find((b) => b.id === id);
+  const boat = getBoatById(id) ?? state.profile?.fleet.find((b) => b.id === id);
+  const fleetBoat = boat as FleetBoat | undefined;
+  if (fleetBoat?.sails?.length) {
+    const rigged: FleetBoat = {
+      ...fleetBoat,
+      polar: effectivePolar(fleetBoat.polar, fleetBoat.sails),
+    };
+    return rigged;
+  }
+  return boat;
 }
 
 // A boat is owned (no purchase charged) if it's been bought, or it's a custom

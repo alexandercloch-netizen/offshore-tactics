@@ -78,6 +78,8 @@ type Action =
   | { type: 'SET_TUTORIAL_SEEN' }
   | { type: 'ADD_FLEET_BOAT'; payload: { boat: FleetBoat; cost: number } }
   | { type: 'REMOVE_FLEET_BOAT'; payload: string }
+  | { type: 'BUY_SAIL'; payload: { boatId: string; sailId: string; cost: number } }
+  | { type: 'SELL_SAIL'; payload: { boatId: string; sailId: string; refund: number } }
   | {
       type: 'BEGIN_RACE';
       payload: {
@@ -177,6 +179,38 @@ function reducer(state: GameState, action: Action): GameState {
           state.selectedBoatId === action.payload ? undefined : state.selectedBoatId,
       };
 
+    case 'BUY_SAIL': {
+      const { boatId, sailId, cost } = action.payload;
+      return {
+        ...state,
+        funds: state.funds - cost,
+        profile: {
+          ...state.profile,
+          fleet: state.profile.fleet.map((b) =>
+            b.id === boatId && !(b.sails ?? []).includes(sailId)
+              ? { ...b, sails: [...(b.sails ?? []), sailId] }
+              : b
+          ),
+        },
+      };
+    }
+
+    case 'SELL_SAIL': {
+      const { boatId, sailId, refund } = action.payload;
+      return {
+        ...state,
+        funds: state.funds + refund,
+        profile: {
+          ...state.profile,
+          fleet: state.profile.fleet.map((b) =>
+            b.id === boatId
+              ? { ...b, sails: (b.sails ?? []).filter((id) => id !== sailId) }
+              : b
+          ),
+        },
+      };
+    }
+
     case 'BEGIN_RACE':
       return {
         ...state,
@@ -256,6 +290,8 @@ export interface GameContextValue {
   markTutorialSeen: () => void;
   addFleetBoat: (boat: FleetBoat, cost: number) => void;
   removeFleetBoat: (id: string) => void;
+  buySail: (boatId: string, sailId: string, cost: number) => void;
+  sellSail: (boatId: string, sailId: string, refund: number) => void;
   // race lifecycle
   beginRace: () => void;
   tick: () => StepResult;
@@ -385,6 +421,14 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const removeFleetBoat = useCallback((id: string) => {
     dispatch({ type: 'REMOVE_FLEET_BOAT', payload: id });
+  }, []);
+
+  const buySail = useCallback((boatId: string, sailId: string, cost: number) => {
+    dispatch({ type: 'BUY_SAIL', payload: { boatId, sailId, cost } });
+  }, []);
+
+  const sellSail = useCallback((boatId: string, sailId: string, refund: number) => {
+    dispatch({ type: 'SELL_SAIL', payload: { boatId, sailId, refund } });
   }, []);
 
   const campaignTotal = useCallback(() => campaignCost(stateRef.current).total, []);
@@ -520,6 +564,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
       markTutorialSeen,
       addFleetBoat,
       removeFleetBoat,
+      buySail,
+      sellSail,
       beginRace,
       tick,
       decide,
@@ -540,6 +586,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
       markTutorialSeen,
       addFleetBoat,
       removeFleetBoat,
+      buySail,
+      sellSail,
       beginRace,
       tick,
       decide,

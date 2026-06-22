@@ -79,6 +79,7 @@ export const BoatBuilderScreen: React.FC<Props> = ({ navigation }) => {
       boatType,
       polar,
       speedAdjustment: { upwindPct: upPct, downwindPct: downPct, nightPct: 100 },
+      sails: [],
     };
     addFleetBoat(boat, cost);
     navigation.navigate('Fleet');

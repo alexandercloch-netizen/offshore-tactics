@@ -14,6 +14,7 @@ import RaceMapScreen from '../screens/RaceMapScreen';
 import ResultsScreen from '../screens/ResultsScreen';
 import FleetScreen from '../screens/FleetScreen';
 import BoatBuilderScreen from '../screens/BoatBuilderScreen';
+import SailLockerScreen from '../screens/SailLockerScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -98,6 +99,11 @@ export const AppNavigator: React.FC = () => {
           name="BoatBuilder"
           component={BoatBuilderScreen}
           options={{ title: 'Build a Boat' }}
+        />
+        <Stack.Screen
+          name="SailLocker"
+          component={SailLockerScreen}
+          options={{ title: 'Sail Locker' }}
         />
       </Stack.Navigator>
     </NavigationContainer>
