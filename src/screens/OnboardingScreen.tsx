@@ -3,41 +3,33 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  BoatType,
   ExperienceLevel,
   PlayerProfile,
   RootStackParamList,
   SailingGoal,
   SailingRegion,
-  SailorRole,
 } from '../types';
 import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
 import {
-  BOAT_CHOICES,
   Choice,
   EXPERIENCE_OPTIONS,
   GOAL_OPTIONS,
   REGION_OPTIONS,
-  ROLE_OPTIONS,
 } from '../data/onboarding';
 import { useGame } from '../store/GameContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Onboarding'>;
 
-const STEPS = ['role', 'boat', 'region', 'goal', 'experience'] as const;
+const STEPS = ['region', 'goal', 'experience'] as const;
 type Step = (typeof STEPS)[number];
 
 const PROMPTS: Record<Step, { title: string; subtitle: string }> = {
-  role: { title: 'How do you sail?', subtitle: 'So we can pitch the game to you.' },
-  boat: { title: 'What do you sail?', subtitle: 'We’ll set up a boat to match.' },
-  region: { title: 'Your home waters', subtitle: 'We’ll suggest races you’ll know.' },
-  goal: { title: 'What brings you here?', subtitle: 'We’ll lead with what you want.' },
-  experience: { title: 'How much racing?', subtitle: 'We’ll pitch the challenge right.' },
+  region: { title: 'Where do you sail?', subtitle: 'We’ll line up a race you’ll know.' },
+  goal: { title: 'What’s the mission?', subtitle: 'We’ll set the mood.' },
+  experience: { title: 'How salty are you?', subtitle: 'We’ll pitch the challenge.' },
 };
 
 interface Draft {
-  role?: SailorRole;
-  boat?: BoatType | 'none';
   region?: SailingRegion;
   goal?: SailingGoal;
   experience?: ExperienceLevel;
@@ -53,11 +45,9 @@ export const OnboardingScreen: React.FC<Props> = ({ navigation }) => {
 
   const complete = (final: Draft) => {
     const profile: PlayerProfile = {
-      role: final.role ?? 'fan',
       region: final.region ?? 'other',
       goal: final.goal ?? 'destress',
       experience: final.experience ?? 'club',
-      boatType: final.boat && final.boat !== 'none' ? final.boat : undefined,
       onboardedAt: Date.now(),
     };
     setPlayerProfile(profile);
@@ -86,15 +76,7 @@ export const OnboardingScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const options: Choice<string>[] =
-    step === 'role'
-      ? ROLE_OPTIONS
-      : step === 'boat'
-        ? BOAT_CHOICES
-        : step === 'region'
-          ? REGION_OPTIONS
-          : step === 'goal'
-            ? GOAL_OPTIONS
-            : EXPERIENCE_OPTIONS;
+    step === 'region' ? REGION_OPTIONS : step === 'goal' ? GOAL_OPTIONS : EXPERIENCE_OPTIONS;
 
   const selected = draft[step];
   const prompt = PROMPTS[step];
