@@ -5,6 +5,32 @@ and **TypeScript**. Pick an offshore race, charter a boat, sign a crew, provisio
 for the passage, then sail leg by leg — reading the weather and making the
 tactical calls that decide whether you take line honours or limp home.
 
+> 🤖 **Designed and built by Claude.** If you're a Claude session (or a developer)
+> working on this repo, start with **[CLAUDE.md](./CLAUDE.md)** — it has the
+> architecture, conventions and workflow. New here? Jump to
+> [Quick start](#quick-start).
+
+## Quick start
+
+You need [Node.js 20](https://nodejs.org) (the `.nvmrc` pins it). Then, from the
+project folder:
+
+```bash
+npm install      # 1. install everything (once)
+npm run web      # 2. play the game in your browser
+```
+
+That's it — the game opens in a browser tab. To check everything is healthy:
+
+```bash
+npm test         # run the test suite
+npm run tsc      # type-check the code
+```
+
+No accounts or keys are needed to run and play locally; cloud features (sign-in,
+saved progress across devices, the global leaderboard) are optional and covered
+under [Backend & deployment](#backend--deployment-supabase--netlify).
+
 ## Gameplay loop
 
 1. **Home** — your harbour. See funds, wins and your logbook of past races.
@@ -176,22 +202,22 @@ src/
     RaceMapScreen.tsx ResultsScreen.tsx
 ```
 
-## Getting started
+## More commands
 
 ```bash
-npm install
-npm start          # start the Expo dev server
-# then press i (iOS simulator), a (Android), or w (web)
-```
-
-Other scripts:
-
-```bash
+npm start          # Expo dev server — then press i (iOS), a (Android), w (web)
 npm run ios        # open in the iOS simulator
 npm run android    # open on an Android device/emulator
 npm run web        # run in the browser
 npm run tsc        # type-check the project
+npm test           # run the unit tests
+npm run build:web  # production web bundle
+npm run e2e        # Playwright end-to-end playthrough
 ```
+
+Developing with **Claude Code on the web**? A `SessionStart` hook
+(`.claude/hooks/session-start.sh`) installs dependencies automatically, so each
+session can run the tests and type-checker immediately — no manual setup.
 
 ## Backend & deployment (Supabase + Netlify)
 
