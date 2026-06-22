@@ -63,7 +63,8 @@ The simulation is a **pure, deterministic engine** with a thin React UI on top.
   Profile) live under `Main`, with setup/race screens pushed over them.
 - **`src/components/`** — `RouteMap` (the SVG chart, incl. the wind-speed
   heatmap), `PolarViewer`, `WindIndicator`, `TacticalDecisionModal`,
-  `ForecastScrubber` (briefing forecast timeline), `WindScaleLegend`,
+  `ForecastScrubber` (briefing forecast timeline), `ForecastGraph` (the
+  briefing meteogram — wind over the passage), `WindScaleLegend`,
   `windScale.ts` (the shared kn→colour ramp), etc.
 - **`src/services/`** — Supabase I/O (`cloudSave`, `leaderboard`, `profile`).
 - **`src/navigation/AppNavigator.tsx`** — the navigator + the auth gate.
