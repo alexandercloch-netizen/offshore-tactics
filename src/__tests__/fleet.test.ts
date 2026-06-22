@@ -7,6 +7,7 @@ import {
   madeGoodSpeed,
 } from '../engine/fleet';
 import { mulberry32, resetRng, setRng } from '../engine/rng';
+import { createWindField } from '../engine/wind';
 import { getBoatById, getRaceById } from '../data';
 import { Competitor, WindField } from '../types';
 
@@ -50,6 +51,44 @@ describe('createFleet', () => {
     const pro = createFleet(race, race.divisions.pro);
     const cor = createFleet(race, race.divisions.corinthian);
     expect(spread(pro)).toBeLessThan(spread(cor));
+  });
+
+  it('gives each boat a course-side bias within [-1, 1]', () => {
+    setRng(mulberry32(2));
+    const fleet = createFleet(race, race.divisions.pro);
+    expect(fleet.every((c) => typeof c.bias === 'number')).toBe(true);
+    expect(fleet.every((c) => c.bias! >= -1 && c.bias! <= 1)).toBe(true);
+  });
+});
+
+describe('fleet racing dynamics', () => {
+  it('is deterministic for a given seed', () => {
+    const run = () => {
+      setRng(mulberry32(31));
+      const f = createWindField(race);
+      let fleet = createFleet(race, race.divisions.pro);
+      for (let i = 0; i < 25; i += 1) fleet = advanceFleet(fleet, race, boat, f, i, 1);
+      return fleet.map((c) => Math.round(c.distanceNm));
+    };
+    expect(run()).toEqual(run());
+  });
+
+  it('rewards the side a boat backs — flipping bias changes the result', () => {
+    // Same field, same base fleet, same puff-luck noise; only the boats' chosen
+    // side differs. If side genuinely matters, the standings must diverge.
+    setRng(mulberry32(40));
+    const f = createWindField(race);
+    setRng(mulberry32(41));
+    const base = createFleet(race, race.divisions.pro);
+
+    const sim = (flip: boolean) => {
+      setRng(mulberry32(42));
+      let fleet: Competitor[] = base.map((c) => ({ ...c, bias: (flip ? -1 : 1) * (c.bias ?? 0) }));
+      for (let i = 0; i < 40; i += 1) fleet = advanceFleet(fleet, race, boat, f, i, 1);
+      return fleet.map((c) => Math.round(c.distanceNm * 100));
+    };
+
+    expect(sim(false)).not.toEqual(sim(true));
   });
 });
 

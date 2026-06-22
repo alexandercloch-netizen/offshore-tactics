@@ -30,6 +30,7 @@ import {
   getRaceById,
   pickEventForRace,
 } from '../data';
+import { HAZARD_EVENTS } from '../data/events';
 import { rnd, rndRange } from './rng';
 import {
   angularDelta,
@@ -463,19 +464,29 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
     ? finalPosition(fleet, elapsedHours)
     : livePosition(fleet, distanceCoveredNm);
 
-  // Decision scheduling, by geometric progress.
+  // Decision scheduling. The signature hazard is a set-piece tied to its mark —
+  // it fires as the boat reaches that waypoint, once per race. Everyday calls
+  // are drawn on the usual geometric cadence, never repeating until exhausted.
   let event: GameEvent | null = null;
-  if (
-    !finished &&
-    !retired &&
-    prev.decisionsTaken < MAX_DECISIONS &&
-    distanceCoveredNm >= prev.nextDecisionAtNm
-  ) {
+  const canDecide = !finished && !retired && prev.decisionsTaken < MAX_DECISIONS;
+  const hazardId = HAZARD_EVENTS[race.hazard].id;
+  const hazardMark = marks.find((m) => m.name === race.hazardWaypoint);
+  const nearHazard =
+    hazardMark !== undefined &&
+    haversineNm(adv.pos.lat, adv.pos.lon, hazardMark.lat, hazardMark.lon) <
+      Math.max(total * 0.07, stepNm * 3);
+
+  if (canDecide && nearHazard && !progress.shownEventIds.includes(hazardId)) {
+    event = HAZARD_EVENTS[race.hazard];
+    progress.decisionsTaken = prev.decisionsTaken + 1;
+    progress.shownEventIds = [...progress.shownEventIds, event.id];
+    progress.nextDecisionAtNm =
+      distanceCoveredNm + rndRange(DECISION_MIN, DECISION_MAX) * total;
+  } else if (canDecide && distanceCoveredNm >= prev.nextDecisionAtNm) {
     progress.decisionsTaken = prev.decisionsTaken + 1;
     progress.nextDecisionAtNm =
       distanceCoveredNm + rndRange(DECISION_MIN, DECISION_MAX) * total;
-    // Avoid repeats by passing the decisions already seen this race.
-    event = pickEventForRace(race.hazard, progress.shownEventIds);
+    event = pickEventForRace(progress.shownEventIds);
     progress.shownEventIds = [...progress.shownEventIds, event.id];
   }
 

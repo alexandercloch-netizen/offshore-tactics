@@ -84,6 +84,7 @@ export interface Race {
   recordTimeHours: number; // course record, used as a pace benchmark
   corinthianRating: number; // 1-5, higher = more accessible to amateur crews
   hazard: HazardKey;
+  hazardWaypoint: string; // name of the mark where the signature challenge bites
   signatureHazard: string; // human-readable description of the signature challenge
   season: string; // when the race is traditionally run
   unlockAfter?: string; // race id that must be finished to unlock this one
@@ -321,6 +322,7 @@ export interface Competitor {
   id: string;
   name: string;
   speedMul: number; // skill multiplier on made-good speed
+  bias?: number; // -1..1: which side of the course this boat favours
   distanceNm: number; // geometric distance covered along the course
   finishedHours: number | null; // elapsed time at finish, or null if still racing
   retired: boolean;

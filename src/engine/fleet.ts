@@ -1,8 +1,8 @@
 import { Boat, Competitor, GeoPoint, Race, RaceDivision, WindField } from '../types';
-import { pointAtFraction } from './geo';
+import { bearing, pointAtFraction } from './geo';
 import { bestVmgAngles, polarSpeed } from './polar';
-import { sampleWind } from './wind';
-import { rnd } from './rng';
+import { pressureHint, sampleWind } from './wind';
+import { rnd, rndRange } from './rng';
 
 // Evocative yacht names for the AI fleet.
 const NAMES = [
@@ -35,6 +35,9 @@ export function createFleet(race: Race, division: RaceDivision): Competitor[] {
       id: `ai-${race.id}-${i}`,
       name,
       speedMul: clamp(mean + gaussish() * spread, 0.7, 1.12),
+      // Each boat commits to a side of the course; combined with the live wind
+      // it decides who gains and who loses, so the standings shuffle.
+      bias: rndRange(-1, 1),
       distanceNm: 0,
       finishedHours: null,
       retired: false,
@@ -54,8 +57,28 @@ export function madeGoodSpeed(boat: Boat, legBearing: number, windFromDeg: numbe
   return Math.max(straight, vmg.downVmg);
 }
 
+// Which side of the course the breeze favours at a point, as a signed scalar in
+// roughly [-1, 1] (positive = the right of the rhumb line, negative = left),
+// scaled by how pronounced the pressure gradient is. A boat whose bias matches
+// this gains; a boat on the wrong side loses.
+function favouredSide(
+  field: WindField,
+  lat: number,
+  lon: number,
+  hours: number,
+  courseAxisDeg: number
+): number {
+  const hint = pressureHint(field, lat, lon, hours);
+  const rel = (((hint.bearing - courseAxisDeg) % 360) + 540) % 360; // 0..360
+  const cross = Math.sin((rel - 180) * (Math.PI / 180)); // -1 left .. +1 right
+  return cross * (hint.strong ? 1 : 0.5);
+}
+
 // Advance every competitor by the time elapsed this step, reading the same wind
-// field as the player. Pure given the RNG (only retirements roll).
+// field as the player. Each boat's made-good speed is its skill (speedMul),
+// times a bonus for being on the favoured side of the course, times a little
+// puff-luck variance — so positions change through the race rather than staying
+// frozen in skill order. Pure given the RNG (variance + retirement rolls).
 export function advanceFleet(
   fleet: Competitor[],
   race: Race,
@@ -65,13 +88,21 @@ export function advanceFleet(
   dtHours: number
 ): Competitor[] {
   const total = race.distanceNm;
+  const start = race.waypoints[0];
+  const finish = race.waypoints[race.waypoints.length - 1];
+  const axisDeg = bearing(start.lat, start.lon, finish.lat, finish.lon);
   return fleet.map((c) => {
     if (c.retired || c.finishedHours !== null) return c;
 
     const fraction = clamp(c.distanceNm / total, 0, 1);
     const tp = pointAtFraction(race.waypoints, fraction);
     const wind = sampleWind(field, tp.lat, tp.lon, startHours);
-    const smg = Math.max(madeGoodSpeed(boat, tp.bearing, wind.fromDeg, wind.speedKn) * c.speedMul, 0.2);
+    const base = madeGoodSpeed(boat, tp.bearing, wind.fromDeg, wind.speedKn);
+    // Reward backing the right side, and add a small element of luck.
+    const align = (c.bias ?? 0) * favouredSide(field, tp.lat, tp.lon, startHours, axisDeg);
+    const sideBonus = 1 + 0.07 * align;
+    const variance = 1 + gaussish() * 0.04;
+    const smg = Math.max(base * c.speedMul * sideBonus * variance, 0.2);
 
     // Rare retirement, more likely when it is blowing hard.
     if (rnd() < 0.00025 * dtHours * (1 + wind.speedKn / 20)) {
