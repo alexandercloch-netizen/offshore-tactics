@@ -15,6 +15,7 @@ import { colors, radius, spacing } from '../theme';
 import { GeoPoint, Waypoint } from '../types';
 import type { WindArrow } from '../engine/wind';
 import { isLoopCourse } from '../engine/geo';
+import { windHeatColor } from './windScale';
 import { LandPolygon } from '../data/landmasses';
 
 interface RouteMapProps {
@@ -24,6 +25,9 @@ interface RouteMapProps {
   boat?: GeoPoint; // current boat position
   competitors?: GeoPoint[]; // AI fleet positions
   wind?: WindArrow[]; // sampled wind field, drawn as arrows
+  heat?: WindArrow[]; // denser wind grid, drawn as a colour heatmap under the arrows
+  heatCols?: number; // grid width of `heat`, to size the cells
+  heatRows?: number; // grid height of `heat`
   windFeature?: { lat: number; lon: number; radiusNm: number; puff: boolean }; // puff/hole to shade
   nextMarkIndex?: number; // for shading rounded marks
   land?: LandPolygon[];
@@ -96,6 +100,9 @@ export const RouteMap: React.FC<RouteMapProps> = ({
   boat,
   competitors,
   wind,
+  heat,
+  heatCols,
+  heatRows,
   windFeature,
   nextMarkIndex = 0,
   land,
@@ -153,6 +160,25 @@ export const RouteMap: React.FC<RouteMapProps> = ({
     };
   });
 
+  // Wind-speed heatmap: one soft colour cell per grid point, sized to tile the
+  // chart. Drawn under the land and arrows so the coast and direction read on top.
+  const heatCells =
+    heat && heatCols && heatRows && heatCols > 1 && heatRows > 1
+      ? heat.map((h) => {
+          const p = project(h.lat, h.lon);
+          const cw = (width / (heatCols - 1)) * 1.08;
+          const ch = (height / (heatRows - 1)) * 1.08;
+          return {
+            key: `${h.lat.toFixed(3)},${h.lon.toFixed(3)}`,
+            x: p.x - cw / 2,
+            y: p.y - ch / 2,
+            w: cw,
+            h: ch,
+            fill: windHeatColor(h.speedKn),
+          };
+        })
+      : [];
+
   return (
     <View style={styles.container}>
       <Svg width={width} height={height}>
@@ -173,6 +199,19 @@ export const RouteMap: React.FC<RouteMapProps> = ({
         <Rect x={0} y={0} width={width} height={height} fill="url(#sea)" rx={radius.sm} />
 
         <G clipPath="url(#frame)">
+          {/* Wind-speed heatmap (under land + arrows). */}
+          {heatCells.map((cell) => (
+            <Rect
+              key={`heat-${cell.key}`}
+              x={cell.x}
+              y={cell.y}
+              width={cell.w}
+              height={cell.h}
+              fill={cell.fill}
+              opacity={0.5}
+            />
+          ))}
+
           {(land ?? []).map((polygon, i) => (
             <Path
               key={`land-${i}`}

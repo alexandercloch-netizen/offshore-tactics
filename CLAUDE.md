@@ -53,8 +53,10 @@ The simulation is a **pure, deterministic engine** with a thin React UI on top.
   (AsyncStorage), `reconcile.ts` (local↔cloud save merge).
 - **`src/screens/`** — one per screen; bottom tabs (Race/Fleet/Leaderboard/
   Profile) live under `Main`, with setup/race screens pushed over them.
-- **`src/components/`** — `RouteMap` (the SVG chart), `PolarViewer`,
-  `WindIndicator`, `TacticalDecisionModal`, etc.
+- **`src/components/`** — `RouteMap` (the SVG chart, incl. the wind-speed
+  heatmap), `PolarViewer`, `WindIndicator`, `TacticalDecisionModal`,
+  `ForecastScrubber` (briefing forecast timeline), `WindScaleLegend`,
+  `windScale.ts` (the shared kn→colour ramp), etc.
 - **`src/services/`** — Supabase I/O (`cloudSave`, `leaderboard`, `profile`).
 - **`src/navigation/AppNavigator.tsx`** — the navigator + the auth gate.
 - **`supabase/schema.sql`** — the backend schema (tables, RLS, RPCs). Idempotent.

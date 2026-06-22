@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -20,6 +20,8 @@ import { featureState, pressureHint, sampleWindGrid, weatherOutlook } from '../e
 import RouteMap from '../components/RouteMap';
 import WindIndicator from '../components/WindIndicator';
 import NauticalButton from '../components/NauticalButton';
+import ForecastScrubber from '../components/ForecastScrubber';
+import WindScaleLegend from '../components/WindScaleLegend';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Briefing'>;
 
@@ -30,6 +32,8 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const { state, beginRace, setStrategy } = useGame();
+  // Forecast offset (hours from the start) the player is scrubbing through.
+  const [forecastHour, setForecastHour] = useState(0);
 
   const race = getRaceById(state.selectedRaceId);
   const boat = resolveBoatById(state, state.selectedBoatId);
@@ -63,8 +67,17 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
   const mapAspect = Math.max(0.55, Math.min(courseAspect(race.waypoints), 1.3));
   const mapHeight = Math.max(280, Math.min(Math.round(mapWidth * mapAspect), Math.round(height * 0.5)));
 
-  const windArrows = sampleWindGrid(windField, courseBounds(race.waypoints), 7, 6, 0);
-  const feature = featureState(windField, 0);
+  // The wind chart reflects the scrubbed forecast hour: arrows for direction, a
+  // dense grid for the speed heatmap, and the drifting pressure feature. (Plain
+  // calls — they must sit after the loading guard, so no hooks here.)
+  const bounds = courseBounds(race.waypoints);
+  const heatCols = 22;
+  const heatRows = Math.max(10, Math.min(30, Math.round(heatCols * courseAspect(race.waypoints))));
+  const windArrows = sampleWindGrid(windField, bounds, 7, 6, forecastHour);
+  const heat = sampleWindGrid(windField, bounds, heatCols, heatRows, forecastHour);
+  const feature = featureState(windField, forecastHour);
+  // A planning window scaled to the race, capped so the slider stays useful.
+  const maxForecastHour = Math.min(48, Math.max(8, Math.ceil(race.recordTimeHours)));
 
   const start = () => {
     navigation.reset({ index: 0, routes: [{ name: 'RaceMap' }] });
@@ -86,11 +99,22 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
               route={progress.route}
               boat={{ lat: progress.lat, lon: progress.lon }}
               wind={windArrows}
+              heat={heat}
+              heatCols={heatCols}
+              heatRows={heatRows}
               windFeature={feature}
               land={LANDMASSES[race.id]}
               width={mapWidth}
               height={mapHeight}
             />
+            <View style={{ width: mapWidth }}>
+              <WindScaleLegend />
+              <ForecastScrubber
+                hour={forecastHour}
+                maxHour={maxForecastHour}
+                onChange={setForecastHour}
+              />
+            </View>
           </View>
 
           <View style={styles.panel}>

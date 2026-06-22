@@ -35,6 +35,7 @@ import { featureState, pressureHint, sampleWindGrid, weatherOutlook } from '../e
 import { buildInstrumentReport, InstrumentReport } from '../engine/instruments';
 import { EffortMode, RoutingBias } from '../types';
 import RouteMap from '../components/RouteMap';
+import WindScaleLegend from '../components/WindScaleLegend';
 import TutorialOverlay from '../components/TutorialOverlay';
 import WindIndicator from '../components/WindIndicator';
 import StatBar from '../components/StatBar';
@@ -68,6 +69,16 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
     const rows = Math.max(4, Math.min(9, Math.round(cols * courseAspect(race.waypoints))));
     return sampleWindGrid(windField, courseBounds(race.waypoints), cols, rows, elapsedHourBucket);
   }, [race, windField, elapsedHourBucket]);
+
+  // Denser grid for the wind-speed heatmap, refreshed each in-race hour.
+  const heatCols = 22;
+  const heatRows = race
+    ? Math.max(10, Math.min(30, Math.round(heatCols * courseAspect(race.waypoints))))
+    : 0;
+  const windHeat = useMemo(() => {
+    if (!race || !windField) return [];
+    return sampleWindGrid(windField, courseBounds(race.waypoints), heatCols, heatRows, elapsedHourBucket);
+  }, [race, windField, heatRows, elapsedHourBucket]);
 
   // If we landed here without an active race but with a full loadout, start it.
   useEffect(() => {
@@ -252,6 +263,9 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
           boat={{ lat: progress.lat, lon: progress.lon }}
           competitors={state.fleet ? competitorPoints(state.fleet, race) : []}
           wind={windArrows}
+          heat={windHeat}
+          heatCols={heatCols}
+          heatRows={heatRows}
           windFeature={
             state.windField ? featureState(state.windField, progress.elapsedHours) : undefined
           }
@@ -260,6 +274,9 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
           width={mapWidth}
           height={mapHeight}
         />
+        <View style={{ width: mapWidth, alignSelf: 'center' }}>
+          <WindScaleLegend />
+        </View>
 
         <View style={styles.progressTrack}>
           <View style={[styles.progressFill, { width: `${pct}%` }]} />
