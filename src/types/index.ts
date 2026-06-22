@@ -178,6 +178,10 @@ export type SailorRole =
   | 'crew'
   | 'fan';
 
+// Display currency for the (abstract, game) money. Symbol only — amounts don't
+// convert. Auto-detected from locale, overridable by the player.
+export type Currency = 'USD' | 'EUR';
+
 export type SailingRegion =
   | 'uk'
   | 'med'
@@ -198,6 +202,7 @@ export interface PlayerProfile {
   experience: ExperienceLevel;
   role?: SailorRole; // optional; not asked in the quick quiz
   boatType?: BoatType; // the class they sail, if any
+  currency?: Currency; // preferred money symbol; auto-detected, overridable
   onboardedAt: number; // epoch ms the quiz was completed
 }
 

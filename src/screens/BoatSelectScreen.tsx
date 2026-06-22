@@ -14,7 +14,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'BoatSelect'>;
 
 export const BoatSelectScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
-  const { state, selectBoat } = useGame();
+  const { state, selectBoat, money } = useGame();
   const selectedId = state.selectedBoatId;
 
   const proceed = () => {
@@ -29,7 +29,7 @@ export const BoatSelectScreen: React.FC<Props> = ({ navigation }) => {
       >
         <Text style={styles.intro}>
           Buy the boat that suits the course — you keep it for future races.
-          Funds: £{state.funds.toLocaleString()}
+          Funds: {money(state.funds)}
         </Text>
         {[...state.profile.fleet, ...BOATS].map((boat: Boat) => {
           const selected = boat.id === selectedId;
@@ -52,7 +52,7 @@ export const BoatSelectScreen: React.FC<Props> = ({ navigation }) => {
                   <Text style={styles.className}>{boat.className}</Text>
                 </View>
                 <Text style={styles.price}>
-                  {owned ? 'Owned' : `£${boat.price.toLocaleString()}`}
+                  {owned ? 'Owned' : money(boat.price)}
                 </Text>
               </View>
               <Text style={styles.description}>{boat.description}</Text>

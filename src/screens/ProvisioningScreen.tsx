@@ -15,7 +15,7 @@ const MAX_QTY = 9;
 
 export const ProvisioningScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
-  const { state, setProvisionQuantity, beginRace } = useGame();
+  const { state, setProvisionQuantity, beginRace, money } = useGame();
 
   const quantityFor = (id: string): number =>
     state.provisions.find((p) => p.provisionId === id)?.quantity ?? 0;
@@ -47,7 +47,7 @@ export const ProvisioningScreen: React.FC<Props> = ({ navigation }) => {
                   <Text style={styles.name}>{item.name}</Text>
                   <Text style={styles.category}>{item.category}</Text>
                 </View>
-                <Text style={styles.unit}>£{item.unitCost}</Text>
+                <Text style={styles.unit}>{money(item.unitCost)}</Text>
               </View>
               <Text style={styles.description}>{item.description}</Text>
               <View style={styles.effects}>
@@ -81,7 +81,7 @@ export const ProvisioningScreen: React.FC<Props> = ({ navigation }) => {
                   disabled={qty >= MAX_QTY}
                 />
                 <Text style={styles.lineCost}>
-                  £{(qty * item.unitCost).toLocaleString()}
+                  {money(qty * item.unitCost)}
                 </Text>
               </View>
             </View>
@@ -90,15 +90,15 @@ export const ProvisioningScreen: React.FC<Props> = ({ navigation }) => {
       </ScrollView>
       <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
         <View style={styles.ledger}>
-          <LedgerRow label="Entry fee" value={cost.entryFee} />
-          <LedgerRow label={cost.charter > 0 ? 'Boat (purchase)' : 'Boat (owned)'} value={cost.charter} />
-          <LedgerRow label="Crew wages" value={cost.wages} />
-          <LedgerRow label="Provisions" value={cost.provisions} />
+          <LedgerRow label="Entry fee" value={money(cost.entryFee)} />
+          <LedgerRow label={cost.charter > 0 ? 'Boat (purchase)' : 'Boat (owned)'} value={money(cost.charter)} />
+          <LedgerRow label="Crew wages" value={money(cost.wages)} />
+          <LedgerRow label="Provisions" value={money(cost.provisions)} />
           <View style={styles.divider} />
-          <LedgerRow label="Total" value={cost.total} bold />
+          <LedgerRow label="Total" value={money(cost.total)} bold />
           <LedgerRow
             label="Remaining"
-            value={remaining}
+            value={money(remaining)}
             bold
             danger={overBudget}
           />
@@ -139,7 +139,7 @@ const StepButton: React.FC<{
 
 const LedgerRow: React.FC<{
   label: string;
-  value: number;
+  value: string; // already formatted with the player's currency
   bold?: boolean;
   danger?: boolean;
 }> = ({ label, value, bold, danger }) => (
@@ -152,7 +152,7 @@ const LedgerRow: React.FC<{
         danger && { color: colors.signalRed },
       ]}
     >
-      £{value.toLocaleString()}
+      {value}
     </Text>
   </View>
 );

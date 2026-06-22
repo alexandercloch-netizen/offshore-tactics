@@ -17,6 +17,7 @@ import {
   REGION_OPTIONS,
 } from '../data/onboarding';
 import { useGame } from '../store/GameContext';
+import { detectCurrency } from '../lib/currency';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Onboarding'>;
 
@@ -48,6 +49,7 @@ export const OnboardingScreen: React.FC<Props> = ({ navigation }) => {
       region: final.region ?? 'other',
       goal: final.goal ?? 'destress',
       experience: final.experience ?? 'club',
+      currency: detectCurrency(),
       onboardedAt: Date.now(),
     };
     setPlayerProfile(profile);

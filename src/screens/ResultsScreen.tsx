@@ -18,7 +18,7 @@ function ordinal(n: number): string {
 
 export const ResultsScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
-  const { state, prepareNextRace } = useGame();
+  const { state, prepareNextRace, money } = useGame();
   const result = state.lastResult;
 
   const goHome = () => {
@@ -98,7 +98,7 @@ export const ResultsScreen: React.FC<Props> = ({ navigation }) => {
               { color: result.prizeMoney > 0 ? colors.signalGreen : colors.mist },
             ]}
           >
-            £{result.prizeMoney.toLocaleString()}
+            {money(result.prizeMoney)}
           </Text>
           <Text style={styles.statLabel}>Prize Money</Text>
         </View>
@@ -110,7 +110,7 @@ export const ResultsScreen: React.FC<Props> = ({ navigation }) => {
 
       <View style={styles.fundsCard}>
         <Text style={styles.fundsLabel}>Campaign Funds</Text>
-        <Text style={styles.fundsValue}>£{state.funds.toLocaleString()}</Text>
+        <Text style={styles.fundsValue}>{money(state.funds)}</Text>
       </View>
 
       {state.eventLog.length > 0 ? (
