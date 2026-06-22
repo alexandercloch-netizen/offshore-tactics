@@ -1,5 +1,5 @@
 import React from 'react';
-import { Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
 import { GameEvent, TacticalChoice, VmgPreview } from '../types';
 import { InstrumentReport } from '../engine/instruments';
@@ -80,10 +80,24 @@ export const TacticalDecisionModal: React.FC<TacticalDecisionModalProps> = ({
   onSelect,
 }) => {
   const isMob = event?.kind === 'mob';
+  const { width } = useWindowDimensions();
+  // Dock the call to a right-hand panel only when the screen is wide enough that
+  // the panel clears the centred race column (≈760px) beside it; otherwise use a
+  // bottom sheet, which works at any width. Either way the backdrop stays clear
+  // so the chart, fleet and wind behind it remain readable while the player
+  // decides (the sim is frozen meanwhile).
+  const wide = width >= 1672;
   return (
-    <Modal visible={visible && !!event} transparent animationType="fade">
-      <View style={styles.backdrop}>
-        <View style={[styles.card, isMob && styles.cardMob]}>
+    <Modal visible={visible && !!event} transparent animationType={wide ? 'fade' : 'slide'}>
+      <View style={[styles.backdrop, wide ? styles.backdropWide : styles.backdropNarrow]}>
+        <View
+          style={[
+            styles.card,
+            wide ? styles.cardWide : styles.cardNarrow,
+            wide ? { width: Math.min(440, width - spacing.lg * 2) } : null,
+            isMob && styles.cardMob,
+          ]}
+        >
           {event ? (
             <ScrollView showsVerticalScrollIndicator={false}>
               {isMob ? (
@@ -180,17 +194,42 @@ const Metric: React.FC<{ label: string; value: string }> = ({ label, value }) =>
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: colors.overlay,
-    justifyContent: 'center',
-    padding: spacing.lg,
+    // Only a whisper of dimming, so the race chart behind stays legible.
+    backgroundColor: 'rgba(4, 12, 22, 0.25)',
+  },
+  backdropNarrow: {
+    justifyContent: 'flex-end',
+  },
+  backdropWide: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
   },
   card: {
     backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    borderWidth: 1,
     borderColor: colors.cardBorder,
     padding: spacing.xl,
-    maxHeight: '85%',
+    // Lift the panel off the chart so it reads as a docked sheet, not an overlay.
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 12,
+  },
+  cardNarrow: {
+    width: '100%',
+    maxHeight: '74%',
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+  },
+  cardWide: {
+    maxHeight: '92%',
+    marginRight: spacing.lg,
+    borderWidth: 1,
+    borderRadius: radius.lg,
   },
   cardMob: {
     borderColor: colors.signalRed,
