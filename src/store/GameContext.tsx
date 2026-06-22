@@ -19,6 +19,7 @@ import {
   FleetBoat,
   PlayerProfile,
   PlayerStrategy,
+  ProvisionSelection,
   TacticalChoice,
   WeatherCondition,
   WindField,
@@ -80,6 +81,7 @@ type Action =
   | { type: 'TOGGLE_CREW'; payload: { crewId: string; capacity: number } }
   | { type: 'SET_CREW'; payload: string[] }
   | { type: 'SET_PROVISION'; payload: { provisionId: string; quantity: number } }
+  | { type: 'SET_PROVISIONS'; payload: ProvisionSelection[] }
   | { type: 'SET_STRATEGY'; payload: Partial<PlayerStrategy> }
   | { type: 'SET_TUTORIAL_SEEN' }
   | { type: 'ADD_FLEET_BOAT'; payload: { boat: FleetBoat; cost: number } }
@@ -167,6 +169,9 @@ function reducer(state: GameState, action: Action): GameState {
         provisions: [...others, { provisionId, quantity }],
       };
     }
+
+    case 'SET_PROVISIONS':
+      return { ...state, provisions: action.payload.filter((p) => p.quantity > 0) };
 
     case 'SET_STRATEGY':
       return { ...state, strategy: { ...state.strategy, ...action.payload } };
@@ -317,6 +322,7 @@ export interface GameContextValue {
   toggleCrew: (crewId: string) => void;
   setCrew: (crewIds: string[]) => void;
   setProvisionQuantity: (provisionId: string, quantity: number) => void;
+  setProvisions: (selections: ProvisionSelection[]) => void;
   setStrategy: (partial: Partial<PlayerStrategy>) => void;
   markTutorialSeen: () => void;
   addFleetBoat: (boat: FleetBoat, cost: number) => void;
@@ -489,6 +495,10 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
     []
   );
 
+  const setProvisions = useCallback((selections: ProvisionSelection[]) => {
+    dispatch({ type: 'SET_PROVISIONS', payload: selections });
+  }, []);
+
   const setStrategy = useCallback((partial: Partial<PlayerStrategy>) => {
     dispatch({ type: 'SET_STRATEGY', payload: partial });
   }, []);
@@ -550,7 +560,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
       type: 'BEGIN_RACE',
       payload: {
         progress: initialProgress(race, boat, current.selectedDivision, windField),
-        condition: initialCondition(crew, current.provisions),
+        condition: initialCondition(crew, current.provisions, race),
         weather,
         windField,
         fleet,
@@ -656,6 +666,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
       toggleCrew,
       setCrew,
       setProvisionQuantity,
+      setProvisions,
       setStrategy,
       markTutorialSeen,
       addFleetBoat,
@@ -683,6 +694,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
       toggleCrew,
       setCrew,
       setProvisionQuantity,
+      setProvisions,
       setStrategy,
       markTutorialSeen,
       addFleetBoat,

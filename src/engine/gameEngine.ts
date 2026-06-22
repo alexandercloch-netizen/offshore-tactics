@@ -1,5 +1,6 @@
 import {
   AutoCrewPreset,
+  AutoProvisionPreset,
   Boat,
   BoatCondition,
   CrewMember,
@@ -14,6 +15,7 @@ import {
   EffortMode,
   PlayerStrategy,
   Provision,
+  ProvisionCategory,
   ProvisionSelection,
   Race,
   RaceDivision,
@@ -134,6 +136,133 @@ function sumProvisionEffect(
     const provision = getProvisionById(sel.provisionId);
     return total + (provision ? provision[key] * sel.quantity : 0);
   }, 0);
+}
+
+// How long the passage takes for provisioning purposes: the course record at a
+// club-fleet pace, in days. Anchors how much food & water the crew will need.
+export function estimatePassageDays(race: Race): number {
+  return Math.max(0.25, (race.recordTimeHours * 1.5) / 24);
+}
+
+// How under/over-provisioned a campaign is, and the resulting effects. Pure and
+// deterministic. Consumables (food, water) must cover the crew for the passage;
+// short rations sap starting condition. Equipment (spares, safety/medical) is a
+// one-off fit-out: spares resist hull wear, safety gear cuts incident risk —
+// both with saturating returns, so one good kit is enough.
+export interface ProvisioningPlan {
+  passageDays: number;
+  crewDays: number; // crew × passage days — the food/water need
+  foodRatio: number; // provided ÷ needed crew-days (food)
+  waterRatio: number;
+  sustenance: number; // min(food, water), the binding constraint (0 = starved)
+  staminaStart: number; // signed delta to starting crew stamina
+  moraleStart: number; // signed delta to starting crew morale
+  hullWearResist: number; // 0–0.45 fraction less hull wear (spares)
+  safety: number; // 0–0.5 fraction less incident/retirement risk (safety gear)
+}
+
+const SUSTENANCE_STAMINA_SWING = 36; // stamina lost when fully out of food/water
+const SUSTENANCE_MORALE_SWING = 30;
+
+function consumableCrewDays(selections: ProvisionSelection[], category: ProvisionCategory): number {
+  return selections.reduce((total, sel) => {
+    const p = getProvisionById(sel.provisionId);
+    if (!p || p.category !== category || p.kind !== 'consumable') return total;
+    return total + (p.crewDaysPerUnit ?? 0) * sel.quantity;
+  }, 0);
+}
+
+export function provisioningPlan(
+  selections: ProvisionSelection[],
+  crewCount: number,
+  race: Race
+): ProvisioningPlan {
+  const passageDays = estimatePassageDays(race);
+  const crewDays = Math.max(1, crewCount) * passageDays;
+
+  const foodRatio = consumableCrewDays(selections, 'Food') / crewDays;
+  const waterRatio = consumableCrewDays(selections, 'Water') / crewDays;
+  const sustenance = Math.max(0, Math.min(foodRatio, waterRatio));
+  const fed = Math.min(1, sustenance); // quality only counts once the crew is fed
+  const shortfall = Math.max(0, 1 - sustenance);
+
+  // Premium consumables lift condition, but only up to what the passage needs.
+  const qualityStamina = sumConsumableQuality(selections, crewDays, 'staminaBoost');
+  const qualityMorale = sumConsumableQuality(selections, crewDays, 'moraleBoost');
+
+  const staminaStart = qualityStamina * fed - SUSTENANCE_STAMINA_SWING * shortfall;
+  const moraleStart = qualityMorale * fed - SUSTENANCE_MORALE_SWING * shortfall;
+
+  const repair = sumEquipmentEffect(selections, 'repairBoost');
+  const safetyPts = sumEquipmentEffect(selections, 'safetyBoost');
+  const hullWearResist = Math.min(0.45, repair / (repair + 30));
+  const safety = Math.min(0.5, safetyPts / (safetyPts + 24));
+
+  return { passageDays, crewDays, foodRatio, waterRatio, sustenance, staminaStart, moraleStart, hullWearResist, safety };
+}
+
+// Quality (stamina/morale) bonus from consumables, counting each item's quantity
+// only up to the units the passage actually needs (no benefit from stockpiling).
+function sumConsumableQuality(
+  selections: ProvisionSelection[],
+  crewDays: number,
+  key: 'staminaBoost' | 'moraleBoost'
+): number {
+  return selections.reduce((total, sel) => {
+    const p = getProvisionById(sel.provisionId);
+    if (!p || p.kind !== 'consumable' || p[key] <= 0) return total;
+    const recommended = p.crewDaysPerUnit ? Math.ceil(crewDays / p.crewDaysPerUnit) : sel.quantity;
+    return total + p[key] * Math.min(sel.quantity, recommended);
+  }, 0);
+}
+
+function sumEquipmentEffect(
+  selections: ProvisionSelection[],
+  key: 'repairBoost' | 'safetyBoost'
+): number {
+  return selections.reduce((total, sel) => {
+    const p = getProvisionById(sel.provisionId);
+    if (!p || p.kind !== 'equipment') return total;
+    return total + p[key] * sel.quantity;
+  }, 0);
+}
+
+// Auto-provision the boat, mirroring auto-crew: cover the crew for the passage
+// and (beyond 'minimum') fit sensible safety & spares. Returns a tidy selection.
+export function autoProvision(state: GameState, preset: AutoProvisionPreset): ProvisionSelection[] {
+  const race = getRaceById(state.selectedRaceId);
+  const boat = resolveBoatById(state, state.selectedBoatId);
+  if (!race) return [];
+  const crewCount = state.selectedCrewIds.length || boat?.crewCapacity || 1;
+  const crewDays = estimatePassageDays(race) * crewCount;
+
+  const sel: ProvisionSelection[] = [];
+  const add = (id: string, quantity: number) => {
+    if (quantity > 0) sel.push({ provisionId: id, quantity });
+  };
+  const unitsToCover = (id: string, factor: number): number => {
+    const p = getProvisionById(id);
+    return p?.crewDaysPerUnit ? Math.ceil((crewDays * factor) / p.crewDaysPerUnit) : 0;
+  };
+
+  // Margin of food & water over the bare need.
+  const factor = preset === 'bluewater' ? 1.25 : preset === 'balanced' ? 1.05 : 1.0;
+  const foodId = preset === 'minimum' ? 'prov-rations' : 'prov-galley';
+  add(foodId, unitsToCover(foodId, factor));
+  add('prov-water', unitsToCover('prov-water', factor));
+
+  if (preset === 'balanced') {
+    add('prov-spares', 1);
+    add('prov-safety', 1);
+    add('prov-medkit', 1);
+  } else if (preset === 'bluewater') {
+    add('prov-rigging', 1);
+    add('prov-spares', 1);
+    add('prov-safety', 1);
+    add('prov-foulies', 1);
+    add('prov-medkit', 1);
+  }
+  return sel;
 }
 
 export function crewWageTotal(crewIds: string[]): number {
@@ -270,12 +399,23 @@ export function isRaceUnlocked(race: Race, history: RaceResult[]): boolean {
 
 export function initialCondition(
   crew: CrewMember[],
-  provisions: ProvisionSelection[]
+  provisions: ProvisionSelection[],
+  race?: Race
 ): BoatCondition {
   const stamina = average(crew.map((c) => c.stamina), 65);
   const morale = average(crew.map((c) => c.morale), 65);
+  // With a race in hand, scale provisioning to the crew & passage; without one
+  // (legacy callers), fall back to the flat per-unit boosts.
+  if (race) {
+    const plan = provisioningPlan(provisions, crew.length, race);
+    return {
+      hullIntegrity: 100,
+      crewStamina: clamp(stamina + plan.staminaStart),
+      crewMorale: clamp(morale + plan.moraleStart),
+    };
+  }
   return {
-    hullIntegrity: clamp(100 + sumProvisionEffect(provisions, 'repairBoost') * 0.4),
+    hullIntegrity: 100,
     crewStamina: clamp(stamina + sumProvisionEffect(provisions, 'staminaBoost')),
     crewMorale: clamp(morale + sumProvisionEffect(provisions, 'moraleBoost')),
   };
@@ -518,6 +658,9 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
   const total = prev.totalDistanceNm;
   const strategy = strategyOf(state);
   const wearMul = EFFORT_WEAR[strategy.effort];
+  // Provisioning resilience: spares blunt hull wear, safety gear softens the
+  // weather's bite (and, in decisions, the odds of a mishap).
+  const prov = provisioningPlan(state.provisions, state.selectedCrewIds.length, race);
 
   const wind = sampleWind(field, prev.lat, prev.lon, prev.elapsedHours);
   const skillMul = crewSkillFactor(crewSkillAverage(state.selectedCrewIds));
@@ -558,10 +701,16 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
   // threaten the boat. Tiredness slows the boat (conditionFactor) rather than
   // ending the race; only a destroyed hull forces a retirement.
   const weather = weatherFromWind(wind);
+  // Safety gear takes the edge off the weather-driven wear; spares specifically
+  // protect the hull.
+  const riskMul = 1 - prov.safety;
   const condition: BoatCondition = {
-    crewStamina: clamp(state.condition.crewStamina - df * (28 + weather.riskModifier * 45) * wearMul),
-    crewMorale: clamp(state.condition.crewMorale - df * (10 + weather.riskModifier * 40)),
-    hullIntegrity: clamp(state.condition.hullIntegrity - df * (6 + weather.riskModifier * 40) * wearMul),
+    crewStamina: clamp(state.condition.crewStamina - df * (28 + weather.riskModifier * 45 * riskMul) * wearMul),
+    crewMorale: clamp(state.condition.crewMorale - df * (10 + weather.riskModifier * 40 * riskMul)),
+    hullIntegrity: clamp(
+      state.condition.hullIntegrity -
+        df * (6 + weather.riskModifier * 40 * riskMul) * wearMul * (1 - prov.hullWearResist)
+    ),
   };
 
   // A retirement is a broken boat, not an exhausted crew — baseline wear alone
@@ -685,13 +834,16 @@ export function applyDecision(state: GameState, choice: TacticalChoice): StepRes
 
   // A demoralized crew — or a boat being pushed hard — is more likely to bungle;
   // a skilled crew is steadier and shaves the odds (±0.06 across the skill range).
+  // Safety gear & a medical kit aboard further steady the hands.
+  const prov = provisioningPlan(state.provisions, state.selectedCrewIds.length, race);
   const moralePenalty = state.condition.crewMorale < 40 ? 0.1 : 0;
   const pushPenalty = strategyOf(state).effort === 'push' ? 0.05 : 0;
   const skillRelief = (crewSkillAverage(state.selectedCrewIds) - 50) / 100 * 0.12;
-  const bungleChance = Math.max(0, choice.risk + moralePenalty + pushPenalty - skillRelief);
+  const safetyRelief = prov.safety * 0.2;
+  const bungleChance = Math.max(0, choice.risk + moralePenalty + pushPenalty - skillRelief - safetyRelief);
   if (rnd() < bungleChance) {
     extraHours += 0.6 + state.weather.riskModifier;
-    hull -= 8;
+    hull -= 8 * (1 - prov.hullWearResist);
     morale -= 5;
   } else if (choice.risk > 0.15) {
     morale += 2;

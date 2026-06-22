@@ -167,6 +167,15 @@ decisions, so rate it honestly. The crew-integrity tests in
 `src/__tests__/crew.test.ts` enforce the roster shape (four sailors per role per
 tier, unpaid Corinthians) — keep them in sync.
 
+**Add a provision** — append a `Provision` to `src/data/provisions.ts`. Set its
+`kind`: a **`consumable`** (Food/Water) needs a `crewDaysPerUnit` (how many
+crew-days one unit feeds) — the boat must be stocked for `crew × passage days`
+(`provisioningPlan`/`estimatePassageDays`), and short rations dent starting crew
+condition. **`equipment`** (Medical/Spares/Safety) is a one-off fit-out:
+`repairBoost` resists hull wear, `safetyBoost` cuts incident/retirement risk,
+both with saturating returns. Auto-provision presets (`autoProvision`) and the
+effects are covered by `src/__tests__/provisioning.test.ts`.
+
 ## Gotchas
 
 - After a squash-merge, your local `main` is behind — re-fetch before the next PR.
