@@ -22,34 +22,33 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SRC_DIR = '/tmp';
 const OUT_FILE = path.join(__dirname, '..', 'src', 'data', 'landmasses.ts');
 
-// Race courses as [lat, lon] so we can derive each map's bounding box. Keep in
-// sync with src/data/races.ts.
-const COURSES = {
-  'race-round-island': [
-    [50.76, -1.3], [50.765, -1.4], [50.72, -1.52], [50.655, -1.6], [50.555, -1.3], [50.68, -1.06], [50.74, -1.09], [50.76, -1.3],
-  ],
-  'race-chicago-mac': [
-    [41.89, -87.59], [43.5, -87.0], [45.05, -86.05], [45.77, -85.5], [45.82, -84.9], [45.85, -84.62],
-  ],
-  'race-middle-sea': [
-    [35.9, 14.52], [36.69, 15.13], [38.27, 15.65], [38.83, 15.25], [37.93, 12.32], [36.84, 11.95], [35.51, 12.61], [35.98, 14.33], [35.9, 14.51],
-  ],
-  'race-newport-bermuda': [
-    [41.45, -71.34], [38.5, -69.5], [32.46, -64.65], [32.36, -64.65],
-  ],
-  'race-fastnet': [
-    [50.76, -1.3], [50.51, -2.46], [50.22, -3.65], [49.96, -5.2], [50.05, -5.8], [51.39, -9.6], [49.87, -6.45], [49.72, -1.94], [49.65, -1.62],
-  ],
-  'race-caribbean-600': [
-    [17.0, -61.75], [17.07, -61.65], [17.55, -61.85], [17.1, -62.62], [17.4, -62.85], [17.63, -63.24], [17.92, -62.83], [18.12, -62.98], [15.85, -61.6], [16.94, -62.35], [17.01, -61.76],
-  ],
-  'race-sydney-hobart': [
-    [-33.83, 151.28], [-36.5, 150.3], [-39.5, 149.5], [-43.24, 148.0], [-43.1, 147.55], [-43.05, 147.42], [-42.89, 147.34],
-  ],
-  'race-transpac': [
-    [33.7, -118.29], [33.3, -118.5], [28.0, -135.0], [23.0, -150.0], [21.25, -157.81],
-  ],
-};
+// Race courses as [lat, lon], parsed straight from src/data/races.ts so the
+// waypoints are the single source of truth — add a race there and its coastline
+// is generated here automatically, with no second list to keep in sync.
+const RACES_FILE = path.join(__dirname, '..', 'src', 'data', 'races.ts');
+
+function loadCourses() {
+  const src = fs.readFileSync(RACES_FILE, 'utf8');
+  // Find each race id and the span of source up to the next one; the only
+  // lat:/lon: pairs inside a race block are its waypoints.
+  const idRe = /id:\s*'(race-[a-z0-9-]+)'/g;
+  const ids = [];
+  let m;
+  while ((m = idRe.exec(src))) ids.push({ id: m[1], index: m.index });
+
+  const courses = {};
+  for (let i = 0; i < ids.length; i += 1) {
+    const chunk = src.slice(ids[i].index, i + 1 < ids.length ? ids[i + 1].index : src.length);
+    const wpRe = /lat:\s*(-?\d+(?:\.\d+)?),\s*lon:\s*(-?\d+(?:\.\d+)?)/g;
+    const course = [];
+    let w;
+    while ((w = wpRe.exec(chunk))) course.push([parseFloat(w[1]), parseFloat(w[2])]);
+    if (course.length >= 2) courses[ids[i].id] = course;
+  }
+  return courses;
+}
+
+const COURSES = loadCourses();
 
 // A square-ish box (in the map's projected space) padded around the course, so
 // the clipped land fills the viewport corners regardless of screen aspect.

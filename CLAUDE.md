@@ -126,9 +126,16 @@ missing piece fails loudly — `npm run tsc` and `npm test` are your checklist.
   (`data/weather.ts`). Optionally add a `hazardProfile` case in
   `engine/wind.ts` (it has a sensible default) and list the race under its
   region in `REGION_RACES` (`data/onboarding.ts`) so onboarding recommends it.
-- Coastline on the chart is **optional** — `RouteMap` draws sea + the route
-  without it; add a `LANDMASSES[raceId]` entry (see `scripts/build-coastlines.mjs`)
-  later if you want land drawn.
+- **Generate the coastline.** Re-run `node scripts/build-coastlines.mjs` (it
+  reads the waypoints straight from `races.ts`, so there's nothing to hand-sync)
+  to regenerate `src/data/landmasses.ts`, then commit it. This both draws land on
+  the chart **and** makes the router route *around* it — a land-locked or coastal
+  course will otherwise sail straight over land. The `coastline coverage` test in
+  `src/__tests__/land.test.ts` fails loudly if a race has no entry, and the
+  per-race land audit there proves the routed track stays in the water. (Sources:
+  Natural Earth files in `/tmp` — see the script header — plus the
+  `polygon-clipping` dev dep. A genuinely open-ocean course can keep an empty
+  `[]` entry, but the key must exist.)
 - See the **Race to Alaska** (`race-r2ak`, hazard `tidal_rapids`) as the worked
   example of a brand-new hazard done end to end.
 

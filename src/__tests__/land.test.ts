@@ -24,9 +24,22 @@ describe('pointInLand', () => {
     expect(pointInLand(land, 43.5, -87.0)).toBe(false); // mid-lake (a real waypoint)
   });
 
-  it('treats races without coastline data as all water', () => {
-    expect(pointInLand(LANDMASSES['race-r2ak'], 50, -125)).toBe(false);
+  it('treats an unknown race as all water', () => {
+    expect(pointInLand(LANDMASSES['race-nonexistent'], 50, -125)).toBe(false);
     expect(pointInLand(undefined, 0, 0)).toBe(false);
+  });
+});
+
+// Coastline data is generated from races.ts by scripts/build-coastlines.mjs, a
+// separate offline step. This guard fails loudly if a race is added without
+// re-running it: every race must have an entry so the audit below can't silently
+// skip a race that actually needs land. (An empty array is allowed for a
+// genuinely open-ocean course — the key just has to exist.)
+describe('coastline coverage', () => {
+  RACES.forEach((race) => {
+    it(`${race.name} has a coastline entry`, () => {
+      expect(Object.prototype.hasOwnProperty.call(LANDMASSES, race.id)).toBe(true);
+    });
   });
 });
 
