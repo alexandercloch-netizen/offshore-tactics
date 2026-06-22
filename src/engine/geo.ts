@@ -144,6 +144,15 @@ export function courseBounds(waypoints: Waypoint[]): CourseBounds {
   };
 }
 
+// True when a course starts and finishes at the same buoy (a loop, e.g. Round
+// the Island). The chart then draws one combined START / FINISH marker instead
+// of stacking both markers and labels illegibly on the same point.
+export function isLoopCourse(waypoints: Waypoint[]): boolean {
+  const start = waypoints.find((w) => w.type === 'start');
+  const finish = waypoints.find((w) => w.type === 'finish');
+  return !!start && !!finish && start.lat === finish.lat && start.lon === finish.lon;
+}
+
 // Height-to-width ratio of a course in the chart's equirectangular projection
 // (longitude scaled by cos(mean latitude)). Used to size the race map to the
 // shape of the course rather than a fixed letterbox.

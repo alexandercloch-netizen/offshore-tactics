@@ -14,6 +14,7 @@ import Svg, {
 import { colors, radius, spacing } from '../theme';
 import { GeoPoint, Waypoint } from '../types';
 import type { WindArrow } from '../engine/wind';
+import { isLoopCourse } from '../engine/geo';
 import { LandPolygon } from '../data/landmasses';
 
 interface RouteMapProps {
@@ -111,6 +112,11 @@ export const RouteMap: React.FC<RouteMapProps> = ({
   const trailPts = (trail ?? []).map((p) => project(p.lat, p.lon));
   const boatXY = boat ? project(boat.lat, boat.lon) : null;
   const competitorXY = (competitors ?? []).map((c) => project(c.lat, c.lon));
+
+  // A loop course (e.g. Round the Island) starts and finishes at the same buoy,
+  // so draw one combined marker rather than stacking the START and FINISH
+  // circles and labels illegibly on top of each other.
+  const loopCourse = isLoopCourse(waypoints);
 
   // Project the drifting puff/hole: its centre, and a radius in pixels derived
   // from projecting a point one feature-radius north of the centre.
@@ -239,6 +245,9 @@ export const RouteMap: React.FC<RouteMapProps> = ({
           const p = markPoints[i];
           const isStart = wp.type === 'start';
           const isFinish = wp.type === 'finish';
+          // On a loop course the finish sits exactly on the start; skip its
+          // marker and fold the label into the start's combined badge below.
+          if (isFinish && loopCourse) return null;
           const passed = i > 0 && i < nextMarkIndex;
           const r = isStart || isFinish ? 6 : wp.type === 'island' ? 5 : 4;
           const fill = isFinish
@@ -248,6 +257,7 @@ export const RouteMap: React.FC<RouteMapProps> = ({
               : passed
                 ? colors.brassLight
                 : colors.hull;
+          const label = isStart ? (loopCourse ? 'START / FINISH' : 'START') : 'FINISH';
           return (
             <React.Fragment key={`${wp.name}-${i}`}>
               <Circle
@@ -260,7 +270,7 @@ export const RouteMap: React.FC<RouteMapProps> = ({
               />
               {isStart || isFinish ? (
                 <SvgText x={p.x} y={p.y - 9} fill={colors.mist} fontSize="9" textAnchor="middle">
-                  {isStart ? 'START' : 'FINISH'}
+                  {label}
                 </SvgText>
               ) : null}
             </React.Fragment>
