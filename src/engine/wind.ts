@@ -25,6 +25,9 @@ function hazardProfile(hazard: HazardKey, baseSpeed: number): HazardProfile {
     case 'med_fickle':
     case 'tidal_gate':
       return { speedMul: 0.9, shiftAmp: 34, rotatePerH: 0.6, featureDeltaMul: -0.3, featureRadiusNm: 45 };
+    case 'tidal_rapids':
+      // Inside-passage sailing: light and fickle, tide-dominated, sheltered.
+      return { speedMul: 0.8, shiftAmp: 30, rotatePerH: 0.7, featureDeltaMul: -0.35, featureRadiusNm: 40 };
     case 'island_accel':
       return { speedMul: 1.0, shiftAmp: 14, rotatePerH: 0.3, featureDeltaMul: 0.5, featureRadiusNm: 22 };
     case 'gulf_stream':

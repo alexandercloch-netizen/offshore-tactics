@@ -622,6 +622,36 @@ export const HAZARD_EVENTS: Record<HazardKey, GameEvent> = {
       },
     ],
   },
+  tidal_rapids: {
+    id: 'evt-hz-rapids',
+    title: 'Seymour Narrows',
+    prompt:
+      'The Narrows runs at up to sixteen knots. Hit the last of the ebb and you shoot through; mistime it and the flood stops you dead — or worse.',
+    kind: 'hazard',
+    hazard: 'tidal_rapids',
+    choices: [
+      {
+        id: 'evt-hz-rapids-send',
+        label: 'Send it on the last of the ebb',
+        description: 'Ride the fair current through before the gate shuts — if your timing holds.',
+        timeDelta: -1.5,
+        staminaDelta: -7,
+        moraleDelta: 5,
+        hullDelta: -2,
+        risk: 0.4,
+      },
+      {
+        id: 'evt-hz-rapids-wait',
+        label: 'Wait for slack water',
+        description: 'Tuck in and wait for the safe window. Slower, but sure.',
+        timeDelta: 0.8,
+        staminaDelta: -2,
+        moraleDelta: 0,
+        hullDelta: 0,
+        risk: 0.08,
+      },
+    ],
+  },
   doldrums: {
     id: 'evt-hz-doldrums',
     title: 'Edge of the Pacific High',

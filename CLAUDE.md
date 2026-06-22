@@ -107,6 +107,36 @@ signature hazard is a set-piece tied to its mark (`Race.hazardWaypoint`).
 - Commit messages: clear and descriptive; end with the required co-author
   trailer.
 
+## Adding content (races & boats)
+
+Content lives in `src/data/`. Additions are validated by the **data-integrity
+tests** in `src/__tests__/engine.test.ts` and by the **type system**, so a
+missing piece fails loudly — `npm run tsc` and `npm test` are your checklist.
+
+**Add a race** — append a `Race` to `src/data/races.ts`:
+- Real `waypoints` (first `type: 'start'`, last `'finish'`), `prevailingWind`,
+  `distanceNm`/`recordTimeHours` (gameplay-tuned), `corinthianRating` (1–5),
+  both `divisions`, a `season`, and an optional `unlockAfter` (an existing race
+  id) to slot it into the ladder.
+- Pick a `hazard` and set `hazardWaypoint` to **one of the race's waypoint
+  names** — the signature decision fires there.
+- **Reusing an existing hazard?** Done. **New hazard?** Add the key to
+  `HazardKey` (`types`) and TypeScript will then *force* you to complete it:
+  an entry in `HAZARD_EVENTS` (`data/events.ts`) and `HAZARD_WEATHER_BIAS`
+  (`data/weather.ts`). Optionally add a `hazardProfile` case in
+  `engine/wind.ts` (it has a sensible default) and list the race under its
+  region in `REGION_RACES` (`data/onboarding.ts`) so onboarding recommends it.
+- Coastline on the chart is **optional** — `RouteMap` draws sea + the route
+  without it; add a `LANDMASSES[raceId]` entry (see `scripts/build-coastlines.mjs`)
+  later if you want land drawn.
+- See the **Race to Alaska** (`race-r2ak`, hazard `tidal_rapids`) as the worked
+  example of a brand-new hazard done end to end.
+
+**Add a boat** — append a `Boat` to `src/data/boats.ts` with a non-zero
+`crewCapacity` (or the crew screen blocks signing), a price, `baseSpeed`, and
+0–100 `upwind`/`downwind`/`stability`. Catalogue boats use the parametric polar;
+players build custom boats (real polars) via the Boat Builder.
+
 ## Gotchas
 
 - After a squash-merge, your local `main` is behind — re-fetch before the next PR.

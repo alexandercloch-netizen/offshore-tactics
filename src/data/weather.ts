@@ -85,6 +85,7 @@ const HAZARD_WEATHER_BIAS: Record<HazardKey, Partial<Record<string, number>>> = 
   island_accel: { 'wx-fresh': 2.5, 'wx-strong': 2 },
   bass_strait: { 'wx-strong': 2.5, 'wx-gale': 2.5, 'wx-calm': 0.3 },
   doldrums: { 'wx-calm': 2.5, 'wx-light': 2, 'wx-fresh': 1.5 },
+  tidal_rapids: { 'wx-calm': 1.5, 'wx-light': 2.5, 'wx-moderate': 2, 'wx-gale': 0.4 },
 };
 
 function weightedPick(weights: Record<string, number>): WeatherCondition {
