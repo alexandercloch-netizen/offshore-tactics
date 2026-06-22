@@ -1,5 +1,6 @@
-import { HazardKey, Race, WeatherCondition, WindField, WindSample } from '../types';
+import { HazardKey, Race, WeatherCondition, WindFeature, WindField, WindSample } from '../types';
 import { WEATHER } from '../data/weather';
+import { WEATHER_CLIMATOLOGY } from '../data/weatherClimatology';
 import { CourseBounds, haversineNm, movePoint } from './geo';
 import { rnd, rndRange } from './rng';
 
@@ -47,20 +48,57 @@ function courseCentre(race: Race): { lat: number; lon: number } {
   return { lat, lon };
 }
 
-// Build a fresh, seeded wind field for a race from its prevailing wind + hazard.
+// Build a fresh, seeded wind field for a race. The realistic seasonal baseline
+// comes from the baked climatology (see data/weatherClimatology.ts) when present,
+// else the race's prevailing wind; the hazard then shapes the variability.
 export function createWindField(race: Race): WindField {
-  const profile = hazardProfile(race.hazard, race.prevailingWind.speedKn);
-  const baseSpeed = Math.max(3, race.prevailingWind.speedKn * profile.speedMul * jitter(1, 0.12));
+  const climate = WEATHER_CLIMATOLOGY[race.id];
+  const baseDirSrc = climate ? climate.fromDeg : race.prevailingWind.fromDeg;
+  const baseSpeedSrc = climate ? climate.speedKn : race.prevailingWind.speedKn;
+  // Directional spread and gustiness from the climatology scale the field's
+  // oscillating shift and its day/night swing (neutral when there's no entry).
+  const variabilityMul = climate ? Math.max(0.6, Math.min(1.8, climate.variabilityDeg / 20)) : 1;
+  const gustMul = climate ? 1 + Math.max(0, Math.min(0.6, climate.gustFactor)) : 1;
+
+  const profile = hazardProfile(race.hazard, baseSpeedSrc);
+  const baseSpeed = Math.max(3, baseSpeedSrc * profile.speedMul * jitter(1, 0.12));
   const centre = courseCentre(race);
 
-  // Place the feature off to one side of the course so favouring a side matters.
-  const featureBearing = rndRange(0, 360);
-  const featurePos = movePoint(centre.lat, centre.lon, featureBearing, rndRange(20, 70));
+  // A handful of drifting pressure systems, not just one: the headline feature
+  // (the hazard's signature puff/hole, off to one side so favouring a side
+  // matters) plus a few smaller, mixed puffs and holes for a textured field.
+  const headlineBearing = rndRange(0, 360);
+  const headlinePos = movePoint(centre.lat, centre.lon, headlineBearing, rndRange(20, 70));
+  const headline: WindFeature = {
+    lat: headlinePos.lat,
+    lon: headlinePos.lon,
+    radiusNm: profile.featureRadiusNm * jitter(1, 0.2),
+    deltaKn: baseSpeed * profile.featureDeltaMul,
+    driftDir: rndRange(0, 360),
+    driftKn: rndRange(2, 9),
+  };
+  const features: WindFeature[] = [headline];
+  const extras = 1 + Math.floor(rnd() * 3); // 1–3 more systems
+  for (let i = 0; i < extras; i += 1) {
+    const pos = movePoint(centre.lat, centre.lon, rndRange(0, 360), rndRange(15, 80));
+    features.push({
+      lat: pos.lat,
+      lon: pos.lon,
+      radiusNm: rndRange(20, 55) * jitter(1, 0.2),
+      deltaKn: baseSpeed * rndRange(-0.4, 0.4),
+      driftDir: rndRange(0, 360),
+      driftKn: rndRange(2, 9),
+    });
+  }
+
+  // A travelling front sweeping the course — fronts veer/build harder where the
+  // hazard already implies frontal weather (high rotatePerH).
+  const frontStrength = 0.6 + profile.rotatePerH * 0.4;
 
   return {
-    baseDir: norm360(jitter(race.prevailingWind.fromDeg, 15)),
+    baseDir: norm360(jitter(baseDirSrc, 15)),
     baseSpeed,
-    shiftAmpDeg: profile.shiftAmp * jitter(1, 0.2),
+    shiftAmpDeg: profile.shiftAmp * jitter(1, 0.2) * variabilityMul,
     shiftPeriodH: rndRange(3, 8),
     shiftPhase: rndRange(0, Math.PI * 2),
     rotateDegPerH: profile.rotatePerH * (rnd() < 0.5 ? -1 : 1),
@@ -68,13 +106,25 @@ export function createWindField(race: Race): WindField {
     gradientPerNm: rndRange(0.01, 0.05) * (rnd() < 0.5 ? -1 : 1),
     refLat: centre.lat,
     refLon: centre.lon,
-    feature: {
-      lat: featurePos.lat,
-      lon: featurePos.lon,
-      radiusNm: profile.featureRadiusNm * jitter(1, 0.2),
-      deltaKn: baseSpeed * profile.featureDeltaMul,
-      driftDir: rndRange(0, 360),
-      driftKn: rndRange(2, 9),
+    feature: headline,
+    features,
+    front: {
+      bearing: rndRange(0, 360),
+      posNmAt0: rndRange(-60, 60),
+      speedKn: rndRange(8, 22),
+      widthNm: rndRange(15, 40),
+      dirShiftDeg: rndRange(12, 35) * (rnd() < 0.5 ? -1 : 1) * frontStrength,
+      speedDeltaKn: rndRange(2, 7) * (rnd() < 0.5 ? -1 : 1) * frontStrength,
+    },
+    diurnalAmpKn: baseSpeed * rndRange(0.06, 0.16) * gustMul,
+    diurnalPhaseH: rndRange(0, 24),
+    texture: {
+      ampKn: baseSpeed * rndRange(0.04, 0.1) * gustMul,
+      scaleANm: rndRange(12, 30),
+      scaleBNm: rndRange(12, 30),
+      phaseA: rndRange(0, Math.PI * 2),
+      phaseB: rndRange(0, Math.PI * 2),
+      dirDeg: rndRange(0, 360),
     },
   };
 }
@@ -87,18 +137,52 @@ export function sampleWind(field: WindField, lat: number, lon: number, hours: nu
   const axis = toRad(field.gradientAxisDeg);
   const along = north * Math.cos(axis) + east * Math.sin(axis); // nm along axis
 
-  // Drifting puff/hole.
-  const featPos = movePoint(field.feature.lat, field.feature.lon, field.feature.driftDir, field.feature.driftKn * hours);
-  const d = haversineNm(lat, lon, featPos.lat, featPos.lon);
-  const featTerm = field.feature.deltaKn * Math.exp(-((d / field.feature.radiusNm) ** 2));
+  // Drifting puffs/holes — sum every system (fall back to the headline feature
+  // for hand-built fields that don't carry the full list).
+  const feats = field.features ?? [field.feature];
+  let featTerm = 0;
+  for (const f of feats) {
+    const fp = movePoint(f.lat, f.lon, f.driftDir, f.driftKn * hours);
+    const fd = haversineNm(lat, lon, fp.lat, fp.lon);
+    featTerm += f.deltaKn * Math.exp(-((fd / f.radiusNm) ** 2));
+  }
+
+  // Travelling front: the wind veers/builds as the line sweeps past. `t` runs
+  // -1 (well pre-frontal) → +1 (post-frontal) across the transition width.
+  let frontDir = 0;
+  let frontSpeed = 0;
+  if (field.front) {
+    const fb = toRad(field.front.bearing);
+    const s = north * Math.cos(fb) + east * Math.sin(fb); // nm along the front normal
+    const linePos = field.front.posNmAt0 + field.front.speedKn * hours;
+    const t = Math.tanh((s - linePos) / Math.max(field.front.widthNm, 1));
+    frontDir = field.front.dirShiftDeg * 0.5 * t;
+    frontSpeed = field.front.speedDeltaKn * 0.5 * t;
+  }
+
+  // Day/night swing and fine spatial texture.
+  const diurnal = field.diurnalAmpKn
+    ? field.diurnalAmpKn * Math.sin((2 * Math.PI * (hours + (field.diurnalPhaseH ?? 0))) / 24)
+    : 0;
+  let texture = 0;
+  if (field.texture) {
+    const td = toRad(field.texture.dirDeg);
+    const u = north * Math.cos(td) + east * Math.sin(td);
+    const v = -north * Math.sin(td) + east * Math.cos(td);
+    texture =
+      field.texture.ampKn *
+      Math.sin((2 * Math.PI * u) / field.texture.scaleANm + field.texture.phaseA) *
+      Math.cos((2 * Math.PI * v) / field.texture.scaleBNm + field.texture.phaseB);
+  }
 
   const dir =
     field.baseDir +
     field.rotateDegPerH * hours +
     field.shiftAmpDeg * Math.sin((2 * Math.PI * hours) / field.shiftPeriodH + field.shiftPhase) +
-    along * 0.02;
+    along * 0.02 +
+    frontDir;
 
-  const speed = field.baseSpeed + field.gradientPerNm * along + featTerm;
+  const speed = field.baseSpeed + field.gradientPerNm * along + featTerm + frontSpeed + diurnal + texture;
 
   return { fromDeg: norm360(dir), speedKn: Math.max(2, Math.min(50, speed)) };
 }

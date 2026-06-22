@@ -56,6 +56,29 @@ export interface WindFeature {
   driftKn: number; // drift speed in knots
 }
 
+// A travelling weather front: a line sweeping across the course, with the wind
+// veering/backing and building/easing as it passes — the banded structure real
+// charts show.
+export interface WindFront {
+  bearing: number; // direction the front line advances toward (its normal)
+  posNmAt0: number; // signed offset of the line from the ref point at t=0, along the normal
+  speedKn: number; // how fast the line propagates along the normal
+  widthNm: number; // transition width across the front
+  dirShiftDeg: number; // total direction change from pre- to post-frontal
+  speedDeltaKn: number; // total speed change from pre- to post-frontal
+}
+
+// Fine, static spatial texture — the small-scale streakiness of real wind, as
+// two crossed sinusoids over the course.
+export interface WindTexture {
+  ampKn: number;
+  scaleANm: number;
+  scaleBNm: number;
+  phaseA: number;
+  phaseB: number;
+  dirDeg: number; // orientation of the texture grid
+}
+
 // Analytic spatial + temporal wind field for a race. Drives both the boat's
 // speed (via the polar) and the isochrone router; it evolves with elapsed hours
 // and varies across the course, so the optimal route changes through the race.
@@ -70,7 +93,12 @@ export interface WindField {
   gradientPerNm: number; // knots gained per nm along that axis
   refLat: number; // gradient reference point (course centre)
   refLon: number;
-  feature: WindFeature;
+  feature: WindFeature; // the headline drifting system (drawn on the chart)
+  features?: WindFeature[]; // all drifting systems (incl. the headline); summed when sampling
+  front?: WindFront; // a travelling front sweeping the course
+  diurnalAmpKn?: number; // day/night swing in strength
+  diurnalPhaseH?: number; // phase of the diurnal cycle, in hours
+  texture?: WindTexture; // fine spatial streakiness
 }
 
 export interface Race {

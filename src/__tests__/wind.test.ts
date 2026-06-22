@@ -7,7 +7,8 @@ import {
   featureState,
 } from '../engine/wind';
 import { mulberry32, resetRng, setRng } from '../engine/rng';
-import { getRaceById } from '../data';
+import { getRaceById, RACES } from '../data';
+import { WEATHER_CLIMATOLOGY } from '../data/weatherClimatology';
 import { WindField } from '../types';
 
 afterEach(() => resetRng());
@@ -40,12 +41,42 @@ describe('createWindField', () => {
     expect(a).toEqual(b);
   });
 
-  it('anchors near the prevailing wind', () => {
+  it('anchors near the seasonal baseline', () => {
     const race = getRaceById('race-caribbean-600')!;
     setRng(mulberry32(7));
     const f = createWindField(race);
-    // within the jitter band of the prevailing direction
-    expect(Math.abs(f.baseDir - race.prevailingWind.fromDeg)).toBeLessThanOrEqual(20);
+    // The baseline is the baked climatology when present, else the prevailing wind.
+    const baseDir = WEATHER_CLIMATOLOGY[race.id]?.fromDeg ?? race.prevailingWind.fromDeg;
+    let diff = Math.abs(f.baseDir - baseDir) % 360;
+    if (diff > 180) diff = 360 - diff;
+    expect(diff).toBeLessThanOrEqual(20); // within the jitter band
+  });
+
+  it('builds a textured field: several systems, a front, diurnal swing', () => {
+    const race = getRaceById('race-fastnet')!;
+    setRng(mulberry32(11));
+    const f = createWindField(race);
+    expect(f.features && f.features.length).toBeGreaterThanOrEqual(2);
+    expect(f.features![0]).toEqual(f.feature); // headline stays first, for the chart
+    expect(f.front).toBeDefined();
+    expect(f.diurnalAmpKn).toBeGreaterThan(0);
+    expect(f.texture).toBeDefined();
+  });
+});
+
+describe('weather climatology coverage', () => {
+  // Every race needs a baked climatology entry (run scripts/build-weather.mjs
+  // after adding a race) — the field degrades gracefully without one, but this
+  // keeps the seasonal baseline in sync, the way coastline coverage does.
+  it('has a sane entry for every race', () => {
+    for (const race of RACES) {
+      const c = WEATHER_CLIMATOLOGY[race.id];
+      expect(c).toBeDefined();
+      expect(c.fromDeg).toBeGreaterThanOrEqual(0);
+      expect(c.fromDeg).toBeLessThan(360);
+      expect(c.speedKn).toBeGreaterThan(0);
+      expect(['open-meteo', 'seed']).toContain(c.source);
+    }
   });
 });
 
@@ -80,6 +111,33 @@ describe('sampleWind', () => {
     const inHole = sampleWind(f, 0, 0, 0).speedKn;
     const outside = sampleWind(f, 5, 0, 0).speedKn;
     expect(inHole).toBeLessThan(outside);
+  });
+
+  it('sums every drifting system when `features` is present', () => {
+    // Two holes on opposite sides; the point between them feels both.
+    const f = field({
+      baseSpeed: 20,
+      features: [
+        { lat: 0.2, lon: 0, radiusNm: 30, deltaKn: -8, driftDir: 0, driftKn: 0 },
+        { lat: -0.2, lon: 0, radiusNm: 30, deltaKn: -8, driftDir: 0, driftKn: 0 },
+      ],
+    });
+    const middle = sampleWind(f, 0, 0, 0).speedKn;
+    const farAway = sampleWind(f, 3, 0, 0).speedKn;
+    expect(middle).toBeLessThan(farAway); // both holes bite at the centre
+  });
+
+  it('veers and shifts strength as a front sweeps past', () => {
+    // A front whose line moves north over time; sampling a fixed point should
+    // see the direction change as the line crosses it.
+    const f = field({
+      baseDir: 200,
+      baseSpeed: 16,
+      front: { bearing: 0, posNmAt0: -120, speedKn: 30, widthNm: 20, dirShiftDeg: 40, speedDeltaKn: 8 },
+    });
+    const before = sampleWind(f, 0, 0, 0);
+    const after = sampleWind(f, 0, 0, 8); // line has swept well past
+    expect(Math.abs(after.fromDeg - before.fromDeg)).toBeGreaterThan(10);
   });
 });
 

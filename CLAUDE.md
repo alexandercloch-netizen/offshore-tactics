@@ -34,8 +34,10 @@ The simulation is a **pure, deterministic engine** with a thin React UI on top.
 - **`src/engine/`** — the game logic, no React. Pure & unit-tested:
   - `gameEngine.ts` — orchestration: race setup, per-tick `stepRace`, decisions
     (`applyDecision`), results, costs, progression/unlocks.
-  - `wind.ts` — the analytic wind field (`createWindField`/`sampleWind`), the
-    chart grid (`sampleWindGrid`), the drifting puff/hole (`featureState`),
+  - `wind.ts` — the analytic wind field (`createWindField`/`sampleWind`): the
+    seasonal baseline (from the baked `data/weatherClimatology.ts`), multiple
+    drifting puffs/holes, a travelling front, a diurnal cycle and fine texture.
+    Also the chart grid (`sampleWindGrid`), the headline feature (`featureState`),
     forecast (`weatherOutlook`), and pressure hints.
   - `polar.ts` / `polarTable.ts` / `polarImport.ts` — boat speed from polar
     diagrams (parametric for catalogue boats, real tables for custom boats).
@@ -138,6 +140,14 @@ missing piece fails loudly — `npm run tsc` and `npm test` are your checklist.
   Natural Earth files in `/tmp` — see the script header — plus the
   `polygon-clipping` dev dep. A genuinely open-ocean course can keep an empty
   `[]` entry, but the key must exist.)
+- **Bake the weather.** Re-run `node scripts/build-weather.mjs` (it also reads
+  `races.ts`) to regenerate `src/data/weatherClimatology.ts` — the realistic
+  seasonal baseline `createWindField` seeds from. With `api.open-meteo.com`
+  reachable it pulls real wind stats for the course's waters in its season;
+  offline it writes a deterministic `seed` baseline from the prevailing wind, so
+  the file is always complete (CI/e2e never touch the network). The `weather
+  climatology coverage` test in `src/__tests__/wind.test.ts` fails loudly if a
+  race has no entry.
 - See the **Race to Alaska** (`race-r2ak`, hazard `tidal_rapids`) as the worked
   example of a brand-new hazard done end to end.
 
