@@ -2,9 +2,15 @@ name: CI
 
 on:
   push:
-    branches: ['**']
+    branches: [main]
   pull_request:
     branches: ['**']
+
+# Validate via the pull_request event (not also push) so a branch with an open
+# PR doesn't run CI twice, and cancel superseded runs when a branch is updated.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-and-test:
