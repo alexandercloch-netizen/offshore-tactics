@@ -44,7 +44,9 @@ import {
 import { createWindField, sampleWind, weatherFromWind } from '../engine/wind';
 import { createFleet } from '../engine/fleet';
 import { clearState, loadState, saveState } from './storage';
+import { reconcileSaves, isNewerSave } from './reconcile';
 import { useAuth } from './AuthContext';
+import { supabase } from '../lib/supabase';
 import { loadCloudSave, saveCloud } from '../services/cloudSave';
 import { submitToLeaderboard } from '../services/leaderboard';
 
@@ -326,9 +328,15 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
   // we reload when the signed-in user changes.
   const loadedScopeRef = useRef<string | null>(null);
   const cloudSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The savedAt of the most recent save we pushed to or adopted from the cloud,
+  // used to ignore our own Realtime echo and stale pushes.
+  const lastSyncedAtRef = useRef<number>(0);
+  // Set when we adopt a Realtime push so the resulting state change isn't
+  // re-uploaded (the cloud already holds it) — prevents a cross-device echo loop.
+  const skipCloudPushRef = useRef(false);
 
   // Load the right save once auth has resolved, and again whenever the user
-  // signs in or out. Cloud save wins for signed-in users; otherwise local.
+  // signs in or out: reconcile local and cloud (newest-wins, assets merged).
   useEffect(() => {
     if (authLoading) return;
     const scope = user && configured ? user.id : 'local';
@@ -338,13 +346,12 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
     let mounted = true;
     setReady(false);
     (async () => {
-      let loaded: GameState | null = null;
-      if (user && configured) {
-        loaded = await loadCloudSave(user.id);
-      }
-      if (!loaded) {
-        loaded = await loadState();
-      }
+      // Reconcile the local and cloud saves newest-wins, folding the older
+      // side's campaign assets into the newer base so signing in never loses
+      // progress made offline (or on another device).
+      const localSave = await loadState();
+      const cloudSave = user && configured ? await loadCloudSave(user.id) : null;
+      const loaded = reconcileSaves(localSave, cloudSave);
       if (!mounted) return;
       let merged = loaded ? { ...INITIAL_STATE, ...loaded } : INITIAL_STATE;
       // Top up a chest that has run dry between sessions.
@@ -375,16 +382,53 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
   // cloud when signed in.
   useEffect(() => {
     if (!ready) return;
-    saveState(state);
+    const savedAt = Date.now();
+    const snapshot: GameState = { ...state, savedAt };
+    saveState(snapshot);
     if (user && configured) {
+      // A change we just adopted from another device is already in the cloud —
+      // cache it locally but don't re-upload it.
+      if (skipCloudPushRef.current) {
+        skipCloudPushRef.current = false;
+        return;
+      }
+      // Mark this stamp as ours so the Realtime echo of this write is ignored.
+      lastSyncedAtRef.current = savedAt;
       if (cloudSaveTimer.current) clearTimeout(cloudSaveTimer.current);
-      const userId = user.id;
-      const snapshot = state;
       cloudSaveTimer.current = setTimeout(() => {
-        saveCloud(userId, snapshot);
+        saveCloud(snapshot);
       }, 1200);
     }
   }, [state, ready, user, configured]);
+
+  // Live multi-device sync: adopt a newer save pushed from another device,
+  // unless a race is in progress here (never interrupt a live race).
+  useEffect(() => {
+    if (!ready || !user || !configured || !supabase) return;
+    const channel = supabase
+      .channel(`saves:${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'saves', filter: `user_id=eq.${user.id}` },
+        (payload) => {
+          const incoming = (payload.new as { state?: GameState } | null)?.state;
+          if (!incoming) return;
+          const current = stateRef.current;
+          if (current.progress) return; // don't disrupt an active race
+          // Compare against the last thing we synced, not just current state,
+          // so our own echo and stale rows are ignored.
+          const baseline = Math.max(current.savedAt ?? 0, lastSyncedAtRef.current);
+          if (!isNewerSave(incoming, { savedAt: baseline } as GameState)) return;
+          lastSyncedAtRef.current = incoming.savedAt ?? Date.now();
+          skipCloudPushRef.current = true; // don't re-upload what we just adopted
+          dispatch({ type: 'LOAD_STATE', payload: { ...INITIAL_STATE, ...incoming } });
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase?.removeChannel(channel);
+    };
+  }, [ready, user, configured]);
 
   const selectRace = useCallback((raceId: string, division: DivisionKey) => {
     dispatch({ type: 'SELECT_RACE', payload: { raceId, division } });

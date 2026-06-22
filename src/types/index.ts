@@ -331,6 +331,7 @@ export interface GameState {
   history: RaceResult[];
   eventLog: string[];
   tutorialSeen?: boolean; // whether the player has seen the race how-to-play
+  savedAt?: number; // epoch ms the save was last written; drives cloud sync reconciliation
 }
 
 // Outcome returned by the engine after a simulation step.

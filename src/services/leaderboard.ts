@@ -12,14 +12,21 @@ export async function submitToLeaderboard(
   }
 }
 
-// Fetches the fastest finishers, optionally filtered to a single race.
+interface LeaderboardRow extends LeaderboardEntry {
+  // Embedded live profile name (PostgREST resource embedding via the FK).
+  profiles?: { display_name: string } | null;
+}
+
+// Fetches the fastest finishers, optionally filtered to a single race. Each
+// row's display name comes from the linked profile (live, editable), falling
+// back to the name denormalized when the result was submitted.
 export async function fetchLeaderboard(
   raceId?: string
 ): Promise<LeaderboardEntry[]> {
   if (!supabase) return [];
   let query = supabase
     .from('leaderboard')
-    .select('*')
+    .select('*, profiles!leaderboard_user_id_profiles_fkey(display_name)')
     .eq('retired', false)
     .order('elapsed_hours', { ascending: true })
     .limit(50);
@@ -28,5 +35,8 @@ export async function fetchLeaderboard(
   }
   const { data, error } = await query;
   if (error || !data) return [];
-  return data as LeaderboardEntry[];
+  return (data as LeaderboardRow[]).map(({ profiles, ...row }) => ({
+    ...row,
+    display_name: profiles?.display_name ?? row.display_name,
+  }));
 }
