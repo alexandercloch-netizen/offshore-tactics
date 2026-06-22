@@ -246,4 +246,35 @@ export const RACES: Race[] = [
       pro: { entryFee: 11000, prizeMoney: 130000, fleetSize: 26, paceTarget: 1.04 },
     },
   },
+  {
+    id: 'race-r2ak',
+    name: 'Race to Alaska',
+    location: 'Port Townsend, WA → Ketchikan, AK',
+    description:
+      'The "R2AK" — 750 engineless miles up the Inside Passage. Wind, oars and grit only; first to the $10,000 nailed to a tree wins, second takes a set of steak knives.',
+    distanceNm: 710,
+    difficulty: 'Offshore',
+    recordTimeHours: 90,
+    corinthianRating: 2,
+    hazard: 'tidal_rapids',
+    hazardWaypoint: 'Seymour Narrows',
+    prevailingWind: { fromDeg: 315, speedKn: 12 },
+    signatureHazard:
+      'Seymour Narrows runs at up to 16 knots of tide — hit the slack-water gate or anchor in place.',
+    season: 'June',
+    unlockAfter: 'race-transpac',
+    waypoints: [
+      { name: 'Port Townsend, WA', lat: 48.11, lon: -122.76, type: 'start' },
+      { name: 'Victoria, BC', lat: 48.42, lon: -123.37, type: 'turn' },
+      { name: 'Seymour Narrows', lat: 50.14, lon: -125.35, type: 'turn' },
+      { name: 'Cape Caution', lat: 51.16, lon: -127.79, type: 'turn' },
+      { name: 'Bella Bella', lat: 52.16, lon: -128.14, type: 'mark' },
+      { name: 'Dixon Entrance', lat: 54.3, lon: -130.7, type: 'turn' },
+      { name: 'Ketchikan, AK', lat: 55.34, lon: -131.65, type: 'finish' },
+    ],
+    divisions: {
+      corinthian: { entryFee: 2400, prizeMoney: 20000, fleetSize: 16, paceTarget: 1.28 },
+      pro: { entryFee: 5500, prizeMoney: 48000, fleetSize: 28, paceTarget: 1.06 },
+    },
+  },
 ];

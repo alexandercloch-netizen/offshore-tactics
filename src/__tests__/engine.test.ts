@@ -17,6 +17,7 @@ import { createFleet } from '../engine/fleet';
 import { mulberry32, resetRng, setRng } from '../engine/rng';
 import {
   BOATS,
+  HAZARD_EVENTS,
   RACES,
   STIPEND_FLOOR,
   STIPEND_TRIGGER,
@@ -442,13 +443,61 @@ describe('data integrity', () => {
     });
   });
 
-  it('every race anchors its signature hazard to a real waypoint', () => {
+  it('every race anchors its signature hazard to a real waypoint with an event', () => {
     RACES.forEach((race) => {
       expect(race.waypoints.some((w) => w.name === race.hazardWaypoint)).toBe(true);
+      // The hazard must have a matching decision (Record<HazardKey> guarantees
+      // this at compile time; assert it too for a clear failure message).
+      expect(HAZARD_EVENTS[race.hazard]).toBeDefined();
     });
   });
 
-  it('boats exist for testing fixtures', () => {
+  it('every race meets the content standard (ids, ratings, divisions, unlocks)', () => {
+    const ids = new Set<string>();
+    RACES.forEach((race) => {
+      expect(ids.has(race.id)).toBe(false); // unique ids
+      ids.add(race.id);
+      expect(race.distanceNm).toBeGreaterThan(0);
+      expect(race.recordTimeHours).toBeGreaterThan(0);
+      expect(race.corinthianRating).toBeGreaterThanOrEqual(1);
+      expect(race.corinthianRating).toBeLessThanOrEqual(5);
+      // Both divisions present and sane.
+      (['corinthian', 'pro'] as const).forEach((key) => {
+        const d = race.divisions[key];
+        expect(d.entryFee).toBeGreaterThan(0);
+        expect(d.prizeMoney).toBeGreaterThan(0);
+        expect(d.fleetSize).toBeGreaterThanOrEqual(2);
+        expect(d.paceTarget).toBeGreaterThan(1);
+      });
+      // Waypoint coordinates are well-formed.
+      race.waypoints.forEach((w) => {
+        expect(Math.abs(w.lat)).toBeLessThanOrEqual(90);
+        expect(Math.abs(w.lon)).toBeLessThanOrEqual(180);
+      });
+    });
+    // Any unlock prerequisite must reference an existing race.
+    RACES.forEach((race) => {
+      if (race.unlockAfter) expect(ids.has(race.unlockAfter)).toBe(true);
+    });
+  });
+
+  it('the Race to Alaska is present and to standard', () => {
+    const r2ak = getRaceById('race-r2ak');
+    expect(r2ak).toBeDefined();
+    expect(r2ak!.hazard).toBe('tidal_rapids');
+    expect(r2ak!.waypoints.some((w) => w.name === 'Seymour Narrows')).toBe(true);
+  });
+
+  it('every catalogue boat is well-formed (crewable, priced, rated)', () => {
     expect(BOATS.length).toBeGreaterThan(0);
+    BOATS.forEach((boat) => {
+      expect(boat.crewCapacity).toBeGreaterThan(0); // or the crew screen blocks
+      expect(boat.price).toBeGreaterThanOrEqual(0);
+      expect(boat.baseSpeed).toBeGreaterThan(0);
+      [boat.upwind, boat.downwind, boat.stability].forEach((r) => {
+        expect(r).toBeGreaterThanOrEqual(0);
+        expect(r).toBeLessThanOrEqual(100);
+      });
+    });
   });
 });

@@ -41,7 +41,7 @@ export const REGION_RACES: Record<SailingRegion, string[]> = {
   med: ['race-middle-sea'],
   caribbean: ['race-caribbean-600'],
   usEast: ['race-newport-bermuda'],
-  usWest: ['race-transpac'],
+  usWest: ['race-r2ak', 'race-transpac'],
   greatLakes: ['race-chicago-mac'],
   ausNz: ['race-sydney-hobart'],
   other: ['race-round-island', 'race-chicago-mac'],

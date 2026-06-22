@@ -23,7 +23,8 @@ export type HazardKey =
   | 'celtic_weather'
   | 'island_accel'
   | 'bass_strait'
-  | 'doldrums';
+  | 'doldrums'
+  | 'tidal_rapids';
 
 export type WaypointType = 'start' | 'turn' | 'island' | 'mark' | 'finish';
 
