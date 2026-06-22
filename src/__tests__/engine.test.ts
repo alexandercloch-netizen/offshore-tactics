@@ -289,6 +289,47 @@ describe('stepRace (weather-routed model)', () => {
     expect(terminal).not.toBeNull();
     expect(terminal!.finished || terminal!.retired).toBe(true);
   });
+
+  it('finishes a heavy-weather race when sailed sensibly (cruise + safe calls)', () => {
+    // Difficulty guard: a normally-sailed race should be completable, not a
+    // forced retirement. Sail Fastnet (a heavy celtic-weather course) on cruise
+    // effort, always taking the lowest-risk option, and expect a finish.
+    setRng(mulberry32(20));
+    const race = getRaceById('race-fastnet')!;
+    let state = baseState({
+      selectedRaceId: 'race-fastnet',
+      strategy: { bias: 0, effort: 'cruise' },
+    });
+    let terminal: StepResult | null = null;
+
+    for (let i = 0; i < 20000; i += 1) {
+      const out = stepRace(state, defaultStepNm(race));
+      state = {
+        ...state,
+        progress: out.progress,
+        condition: out.condition,
+        weather: out.weather,
+        fleet: out.fleet,
+      };
+      if (out.event) {
+        const safe = out.event.choices.reduce((a, b) => (b.risk < a.risk ? b : a));
+        const decision = applyDecision(state, safe);
+        state = { ...state, progress: decision.progress, condition: decision.condition, fleet: decision.fleet };
+        if (decision.retired || decision.finished) {
+          terminal = decision;
+          break;
+        }
+      }
+      if (out.finished || out.retired) {
+        terminal = out;
+        break;
+      }
+    }
+
+    expect(terminal).not.toBeNull();
+    expect(terminal!.retired).toBe(false);
+    expect(terminal!.finished).toBe(true);
+  });
 });
 
 describe('applyDecision', () => {

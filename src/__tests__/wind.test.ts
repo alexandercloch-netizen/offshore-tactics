@@ -1,4 +1,10 @@
-import { createWindField, sampleWind, sampleWindGrid, weatherFromWind } from '../engine/wind';
+import {
+  createWindField,
+  sampleWind,
+  sampleWindGrid,
+  weatherFromWind,
+  weatherOutlook,
+} from '../engine/wind';
 import { mulberry32, resetRng, setRng } from '../engine/rng';
 import { getRaceById } from '../data';
 import { WindField } from '../types';
@@ -116,5 +122,44 @@ describe('sampleWindGrid', () => {
       expect(g.speedKn).toBeGreaterThanOrEqual(2);
       expect(g.speedKn).toBeLessThanOrEqual(50);
     });
+  });
+});
+
+describe('weatherOutlook', () => {
+  // A strong puff that drifts north toward (0,0), arriving in ~2 hours.
+  const approaching = field({
+    baseSpeed: 12,
+    feature: { lat: -1, lon: 0, radiusNm: 30, deltaKn: 16, driftDir: 0, driftKn: 30 },
+  });
+
+  it('flags building breeze on the horizon', () => {
+    const o = weatherOutlook(approaching, 0, 0, 0, 2);
+    expect(o.soonKn).toBeGreaterThan(o.nowKn + 3);
+    expect(o.trend).toBe('building');
+    expect(o.warn).toBe(true);
+    expect(o.headline).toMatch(/building/i);
+  });
+
+  it('reads a steady field as steady, with no warning', () => {
+    const o = weatherOutlook(field({ baseSpeed: 12 }), 0, 0, 0, 2);
+    expect(o.trend).toBe('steady');
+    expect(o.warn).toBe(false);
+  });
+
+  it('detects an easing breeze as the puff drifts away', () => {
+    // Puff sitting on the point now, drifting north away from it.
+    const leaving = field({
+      baseSpeed: 12,
+      feature: { lat: 0, lon: 0, radiusNm: 30, deltaKn: 16, driftDir: 0, driftKn: 30 },
+    });
+    const o = weatherOutlook(leaving, 0, 0, 0, 2);
+    expect(o.soonKn).toBeLessThan(o.nowKn - 3);
+    expect(o.trend).toBe('easing');
+  });
+
+  it('warns when it is already blowing hard even if steady', () => {
+    const o = weatherOutlook(field({ baseSpeed: 32 }), 0, 0, 0, 2);
+    expect(o.peakKn).toBeGreaterThanOrEqual(28);
+    expect(o.warn).toBe(true);
   });
 });

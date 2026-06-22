@@ -125,4 +125,13 @@ describe('competitorPoints', () => {
     expect(pts).toHaveLength(1);
     expect(typeof pts[0].lat).toBe('number');
   });
+
+  it('shows competitors sitting on the start line (distance 0)', () => {
+    // A freshly created fleet is all at distance 0; it must be visible from the
+    // gun, not only once boats have sailed clear of the start.
+    setRng(mulberry32(1));
+    const fresh = createFleet(race, race.divisions.corinthian);
+    expect(fresh.every((c) => c.distanceNm === 0)).toBe(true);
+    expect(competitorPoints(fresh, race)).toHaveLength(fresh.length);
+  });
 });

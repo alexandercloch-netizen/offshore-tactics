@@ -313,6 +313,7 @@ export interface RaceProgress {
   // Internal scheduling, hidden from the UI:
   nextDecisionAtNm: number; // distance at which the next decision fires
   decisionsTaken: number;
+  shownEventIds: string[]; // ids of decisions already presented, to avoid repeats
 }
 
 // An AI competitor sailing the same course & wind field as the player.

@@ -224,7 +224,16 @@ export const RouteMap: React.FC<RouteMapProps> = ({
         })}
 
         {competitorXY.map((c, i) => (
-          <Circle key={`ai-${i}`} cx={c.x} cy={c.y} r={2.5} fill={colors.mist} opacity={0.75} />
+          <Circle
+            key={`ai-${i}`}
+            cx={c.x}
+            cy={c.y}
+            r={4}
+            fill={colors.foam}
+            stroke={colors.steel}
+            strokeWidth={1}
+            opacity={0.9}
+          />
         ))}
 
         {boatXY ? (

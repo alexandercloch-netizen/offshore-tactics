@@ -100,11 +100,13 @@ export function finalPosition(fleet: Competitor[], playerElapsedHours: number): 
   return ahead + 1;
 }
 
-// Map positions of competitors still on the course, for the chart.
+// Map positions of competitors still on the course, for the chart. Boats are
+// shown from the gun (distance 0 = on the start line) so the fleet is visible
+// immediately, not only once it has sailed clear of the start.
 export function competitorPoints(fleet: Competitor[], race: Race): GeoPoint[] {
   const total = race.distanceNm;
   return fleet
-    .filter((c) => !c.retired && c.finishedHours === null && c.distanceNm > 0)
+    .filter((c) => !c.retired && c.finishedHours === null)
     .map((c) => {
       const tp = pointAtFraction(race.waypoints, clamp(c.distanceNm / total, 0, 1));
       return { lat: tp.lat, lon: tp.lon };
