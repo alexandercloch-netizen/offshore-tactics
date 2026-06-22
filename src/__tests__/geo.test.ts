@@ -6,6 +6,7 @@ import {
   courseLengthNm,
   cumulativeDistances,
   haversineNm,
+  isLoopCourse,
   pointAtFraction,
   pointOfSailFor,
 } from '../engine/geo';
@@ -22,6 +23,32 @@ describe('haversineNm', () => {
 
   it('is zero for identical points', () => {
     expect(haversineNm(50, -1, 50, -1)).toBe(0);
+  });
+});
+
+describe('isLoopCourse', () => {
+  const wp = (name: string, type: Waypoint['type'], lat: number, lon: number): Waypoint => ({
+    name,
+    type,
+    lat,
+    lon,
+  });
+
+  it('is true when start and finish share a buoy (Round the Island)', () => {
+    const course = [
+      wp('Cowes', 'start', 50.76, -1.3),
+      wp('The Needles', 'turn', 50.655, -1.6),
+      wp('Cowes', 'finish', 50.76, -1.3),
+    ];
+    expect(isLoopCourse(course)).toBe(true);
+  });
+
+  it('is false for a point-to-point course', () => {
+    const course = [
+      wp('Newport', 'start', 41.45, -71.34),
+      wp('Bermuda', 'finish', 32.36, -64.65),
+    ];
+    expect(isLoopCourse(course)).toBe(false);
   });
 });
 
