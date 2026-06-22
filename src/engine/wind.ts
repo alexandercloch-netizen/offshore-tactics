@@ -57,7 +57,10 @@ export function createWindField(race: Race): WindField {
   const baseSpeedSrc = climate ? climate.speedKn : race.prevailingWind.speedKn;
   // Directional spread and gustiness from the climatology scale the field's
   // oscillating shift and its day/night swing (neutral when there's no entry).
-  const variabilityMul = climate ? Math.max(0.6, Math.min(1.8, climate.variabilityDeg / 20)) : 1;
+  // A real *monthly* circular spread is naturally wide (~50°), so 50° is the
+  // neutral point and the band is gentle — otherwise every course saturates the
+  // ceiling and the swings whip the route onto land on the tightest passages.
+  const variabilityMul = climate ? Math.max(0.7, Math.min(1.3, climate.variabilityDeg / 50)) : 1;
   const gustMul = climate ? 1 + Math.max(0, Math.min(0.6, climate.gustFactor)) : 1;
 
   const profile = hazardProfile(race.hazard, baseSpeedSrc);
