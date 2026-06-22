@@ -9,6 +9,7 @@ import React, {
 } from 'react';
 import {
   BoatCondition,
+  Currency,
   DivisionKey,
   GameState,
   RaceProgress,
@@ -46,6 +47,7 @@ import { createWindField, sampleWind, weatherFromWind } from '../engine/wind';
 import { createFleet } from '../engine/fleet';
 import { clearState, loadState, saveState } from './storage';
 import { reconcileSaves, isNewerSave } from './reconcile';
+import { detectCurrency, formatMoney } from '../lib/currency';
 import { useAuth } from './AuthContext';
 import { supabase } from '../lib/supabase';
 import { loadCloudSave, saveCloud } from '../services/cloudSave';
@@ -82,6 +84,7 @@ type Action =
   | { type: 'ADD_FLEET_BOAT'; payload: { boat: FleetBoat; cost: number } }
   | { type: 'REMOVE_FLEET_BOAT'; payload: string }
   | { type: 'SET_PLAYER_PROFILE'; payload: PlayerProfile }
+  | { type: 'SET_CURRENCY'; payload: Currency }
   | { type: 'BUY_SAIL'; payload: { boatId: string; sailId: string; cost: number } }
   | { type: 'SELL_SAIL'; payload: { boatId: string; sailId: string; refund: number } }
   | {
@@ -221,6 +224,17 @@ function reducer(state: GameState, action: Action): GameState {
         profile: { ...state.profile, player: action.payload },
       };
 
+    case 'SET_CURRENCY':
+      return state.profile.player
+        ? {
+            ...state,
+            profile: {
+              ...state.profile,
+              player: { ...state.profile.player, currency: action.payload },
+            },
+          }
+        : state;
+
     case 'BEGIN_RACE':
       return {
         ...state,
@@ -303,6 +317,10 @@ export interface GameContextValue {
   buySail: (boatId: string, sailId: string, cost: number) => void;
   sellSail: (boatId: string, sailId: string, refund: number) => void;
   setPlayerProfile: (profile: PlayerProfile) => void;
+  setCurrency: (currency: Currency) => void;
+  // formatting
+  currency: Currency;
+  money: (amount: number) => string;
   // race lifecycle
   beginRace: () => void;
   tick: () => StepResult;
@@ -488,6 +506,15 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
     dispatch({ type: 'SET_PLAYER_PROFILE', payload: profile });
   }, []);
 
+  const setCurrency = useCallback((currency: Currency) => {
+    dispatch({ type: 'SET_CURRENCY', payload: currency });
+  }, []);
+
+  // The money symbol to show: the player's choice, else auto-detected from the
+  // device locale. `money` formats any amount with it.
+  const currency: Currency = state.profile.player?.currency ?? detectCurrency();
+  const money = useCallback((amount: number) => formatMoney(amount, currency), [currency]);
+
   const campaignTotal = useCallback(() => campaignCost(stateRef.current).total, []);
 
   const canAffordCampaign = useCallback(
@@ -624,6 +651,9 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
       buySail,
       sellSail,
       setPlayerProfile,
+      setCurrency,
+      currency,
+      money,
       beginRace,
       tick,
       decide,
@@ -647,6 +677,9 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
       buySail,
       sellSail,
       setPlayerProfile,
+      setCurrency,
+      currency,
+      money,
       beginRace,
       tick,
       decide,

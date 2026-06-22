@@ -29,7 +29,7 @@ const CREW_BY_TYPE: Record<BoatType, number> = {
 
 export const BoatBuilderScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
-  const { state, addFleetBoat } = useGame();
+  const { state, addFleetBoat, money } = useGame();
 
   const [mode, setMode] = useState<'class' | 'import'>('class');
   const [boatType, setBoatType] = useState<BoatType>('cruiserRacerIRC');
@@ -120,7 +120,7 @@ export const BoatBuilderScreen: React.FC<Props> = ({ navigation }) => {
                     <Text style={styles.classCardName}>{opt.name}</Text>
                     <Text style={styles.classCardDesc}>{opt.description}</Text>
                   </View>
-                  <Text style={styles.classCardPrice}>£{opt.price.toLocaleString()}</Text>
+                  <Text style={styles.classCardPrice}>{money(opt.price)}</Text>
                 </Pressable>
               );
             })}
@@ -188,7 +188,7 @@ export const BoatBuilderScreen: React.FC<Props> = ({ navigation }) => {
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
         <NauticalButton
-          label={polar ? `Build — £${cost.toLocaleString()}` : 'Build'}
+          label={polar ? `Build — ${money(cost)}` : 'Build'}
           onPress={onBuild}
           disabled={!polar || !affordable}
         />

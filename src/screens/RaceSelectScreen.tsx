@@ -24,7 +24,7 @@ function stars(rating: number): string {
 
 export const RaceSelectScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
-  const { state, selectRace } = useGame();
+  const { state, selectRace, money } = useGame();
 
   const enter = (race: Race, division: DivisionKey) => {
     selectRace(race.id, division);
@@ -40,7 +40,7 @@ export const RaceSelectScreen: React.FC<Props> = ({ navigation }) => {
       ]}
     >
       <Text style={styles.intro}>
-        Funds available: £{state.funds.toLocaleString()}
+        Funds available: {money(state.funds)}
       </Text>
       {RACES.map((race) => {
         const unlocked = isRaceUnlocked(race, state.history);
@@ -120,6 +120,7 @@ const DivisionRow: React.FC<{
   funds: number;
   onEnter: () => void;
 }> = ({ race, division, funds, onEnter }) => {
+  const { money } = useGame();
   const info = race.divisions[division];
   const affordable = funds >= info.entryFee;
   const label = division === 'corinthian' ? 'Corinthian' : 'Pro';
@@ -128,8 +129,7 @@ const DivisionRow: React.FC<{
       <View style={{ flex: 1 }}>
         <Text style={styles.divisionName}>{label} Division</Text>
         <Text style={styles.divisionMeta}>
-          Entry £{info.entryFee.toLocaleString()} • Purse £
-          {info.prizeMoney.toLocaleString()} • {info.fleetSize} boats
+          Entry {money(info.entryFee)} • Purse {money(info.prizeMoney)} • {info.fleetSize} boats
         </Text>
       </View>
       <NauticalButton

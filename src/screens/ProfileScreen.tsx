@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { CompositeScreenProps } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -18,7 +18,7 @@ type Props = CompositeScreenProps<
 
 export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
-  const { state, resetCampaign } = useGame();
+  const { state, resetCampaign, money, currency, setCurrency } = useGame();
   const { configured, user, displayName } = useAuth();
   const best = state.history.find((r) => r.finished && r.position === 1);
   const wins = state.history.filter((r) => r.finished && r.position === 1).length;
@@ -52,7 +52,7 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
 
       <View style={styles.statsRow}>
         <View style={styles.statCard}>
-          <Text style={styles.statValue}>£{state.funds.toLocaleString()}</Text>
+          <Text style={styles.statValue}>{money(state.funds)}</Text>
           <Text style={styles.statLabel}>Funds</Text>
         </View>
         <View style={styles.statCard}>
@@ -98,6 +98,25 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={styles.emptySub}>Your results and best finishes will appear here.</Text>
         </View>
       )}
+
+      <View style={styles.currencyRow}>
+        <Text style={styles.currencyLabel}>Currency</Text>
+        <View style={styles.currencyToggle}>
+          {(['USD', 'EUR'] as const).map((c) => (
+            <Pressable
+              key={c}
+              onPress={() => setCurrency(c)}
+              style={[styles.currencyOption, currency === c && styles.currencyOptionActive]}
+            >
+              <Text
+                style={[styles.currencyText, currency === c && styles.currencyTextActive]}
+              >
+                {c === 'USD' ? '$ USD' : '€ EUR'}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
 
       <View style={styles.actions}>
         <NauticalButton
@@ -201,6 +220,30 @@ const styles = StyleSheet.create({
   emptyText: { color: colors.foam, fontSize: fontSize.md, fontWeight: fontWeight.bold },
   emptySub: { color: colors.slate, fontSize: fontSize.sm, marginTop: spacing.xs, textAlign: 'center' },
   actions: { gap: spacing.md },
+  currencyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.md,
+  },
+  currencyLabel: {
+    color: colors.mist,
+    fontSize: fontSize.sm,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  currencyToggle: {
+    flexDirection: 'row',
+    backgroundColor: colors.navy,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.hull,
+    overflow: 'hidden',
+  },
+  currencyOption: { paddingVertical: spacing.sm, paddingHorizontal: spacing.lg },
+  currencyOptionActive: { backgroundColor: colors.hull },
+  currencyText: { color: colors.mist, fontSize: fontSize.sm, fontWeight: fontWeight.medium },
+  currencyTextActive: { color: colors.brassLight, fontWeight: fontWeight.bold },
 });
 
 export default ProfileScreen;

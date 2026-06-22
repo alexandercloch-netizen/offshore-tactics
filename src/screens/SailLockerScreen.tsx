@@ -24,7 +24,7 @@ function envelope(sail: Sail): string {
 
 export const SailLockerScreen: React.FC<Props> = ({ route, navigation }) => {
   const insets = useSafeAreaInsets();
-  const { state, buySail, sellSail } = useGame();
+  const { state, buySail, sellSail, money } = useGame();
   const boat = state.profile.fleet.find((b) => b.id === route.params.boatId);
 
   const owned = boat?.sails ?? [];
@@ -57,7 +57,7 @@ export const SailLockerScreen: React.FC<Props> = ({ route, navigation }) => {
         <Text style={styles.boatName}>{boat.name}</Text>
         <Text style={styles.intro}>
           {boat.className} · {owned.length} specialist{' '}
-          {owned.length === 1 ? 'sail' : 'sails'} aboard. Funds: £{state.funds.toLocaleString()}
+          {owned.length === 1 ? 'sail' : 'sails'} aboard. Funds: {money(state.funds)}
         </Text>
 
         <View style={styles.viewer}>
@@ -91,7 +91,7 @@ export const SailLockerScreen: React.FC<Props> = ({ route, navigation }) => {
                     onPress={() => sellSail(boat.id, sail.id, refund)}
                   >
                     <Text style={styles.btnSellText}>Sell</Text>
-                    <Text style={styles.btnSubPriceSell}>+£{refund.toLocaleString()}</Text>
+                    <Text style={styles.btnSubPriceSell}>+{money(refund)}</Text>
                   </Pressable>
                 ) : (
                   <Pressable
@@ -100,7 +100,7 @@ export const SailLockerScreen: React.FC<Props> = ({ route, navigation }) => {
                     onPress={() => buySail(boat.id, sail.id, cost)}
                   >
                     <Text style={styles.btnBuyText}>Buy</Text>
-                    <Text style={styles.btnSubPrice}>£{cost.toLocaleString()}</Text>
+                    <Text style={styles.btnSubPrice}>{money(cost)}</Text>
                   </Pressable>
                 )}
               </View>

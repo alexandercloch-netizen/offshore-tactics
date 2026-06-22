@@ -13,7 +13,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'CrewSelect'>;
 
 export const CrewSelectScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
-  const { state, toggleCrew } = useGame();
+  const { state, toggleCrew, money } = useGame();
   const boat = getBoatById(state.selectedBoatId);
   const capacity = boat ? boat.crewCapacity : 0;
   const selected = state.selectedCrewIds;
@@ -31,7 +31,7 @@ export const CrewSelectScreen: React.FC<Props> = ({ navigation }) => {
           Crew: {selected.length}/{capacity}
         </Text>
         <Text style={styles.bannerWages}>
-          Wages £{wages.toLocaleString()}
+          Wages {money(wages)}
         </Text>
       </View>
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: spacing.xxl }]}>
@@ -55,7 +55,7 @@ export const CrewSelectScreen: React.FC<Props> = ({ navigation }) => {
                   <Text style={styles.role}>{member.role}</Text>
                 </View>
                 <View style={styles.wageBox}>
-                  <Text style={styles.wage}>£{member.wage.toLocaleString()}</Text>
+                  <Text style={styles.wage}>{money(member.wage)}</Text>
                   {isSelected ? (
                     <Text style={styles.signed}>Signed</Text>
                   ) : null}
