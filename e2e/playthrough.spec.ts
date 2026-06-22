@@ -6,8 +6,16 @@ import { test, expect, Page } from '@playwright/test';
 test('a full race can be played from start to finish', async ({ page }) => {
   await page.goto('/');
 
-  // Home → race select.
-  await page.getByRole('button', { name: 'Start Racing' }).click();
+  // First run: answer the onboarding quiz (role → boat → region → goal →
+  // experience), which lands back on the personalised home screen.
+  await page.getByText('Skipper', { exact: true }).first().click();
+  await page.getByText('Cruiser-Racer', { exact: true }).first().click();
+  await page.getByText('UK & Ireland', { exact: true }).first().click();
+  await page.getByText('Compete', { exact: true }).first().click();
+  await page.getByText('Club racer', { exact: true }).first().click();
+
+  // Home → race select (the always-present "browse" entry).
+  await page.getByRole('button', { name: 'Browse All Races' }).click();
 
   // Enter the first race in the Corinthian division.
   await page.getByRole('button', { name: 'Enter', exact: true }).first().click();
