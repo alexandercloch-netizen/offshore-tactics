@@ -1,15 +1,18 @@
 import React from 'react';
+import { ActivityIndicator, View } from 'react-native';
 import { DefaultTheme, NavigationContainer, Theme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { MainTabParamList, RootStackParamList } from '../types';
 import { colors, fontWeight } from '../theme';
 import { isSupabaseConfigured } from '../lib/supabase';
+import { useAuth } from '../store/AuthContext';
 import TabBarIcon from './TabBarIcon';
 import HomeScreen from '../screens/HomeScreen';
 import OnboardingScreen from '../screens/OnboardingScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import AuthScreen from '../screens/AuthScreen';
+import AuthGateScreen from '../screens/AuthGateScreen';
 import LeaderboardScreen from '../screens/LeaderboardScreen';
 import RaceSelectScreen from '../screens/RaceSelectScreen';
 import BoatSelectScreen from '../screens/BoatSelectScreen';
@@ -74,6 +77,30 @@ const MainTabs: React.FC = () => (
 );
 
 export const AppNavigator: React.FC = () => {
+  const { configured, user, loading } = useAuth();
+
+  // Hold on a splash until auth resolves, so the login wall doesn't flash for a
+  // signed-in returning player.
+  if (loading) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.abyss, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator color={colors.brassLight} />
+      </View>
+    );
+  }
+
+  // Required-but-frictionless gate: when cloud is configured, login is required;
+  // when it isn't (offline/local builds, CI), the game runs guest with no wall.
+  if (configured && !user) {
+    return (
+      <NavigationContainer theme={navTheme}>
+        <Stack.Navigator screenOptions={headerOptions}>
+          <Stack.Screen name="AuthGate" component={AuthGateScreen} options={{ headerShown: false }} />
+        </Stack.Navigator>
+      </NavigationContainer>
+    );
+  }
+
   return (
     <NavigationContainer theme={navTheme}>
       <Stack.Navigator initialRouteName="Main" screenOptions={headerOptions}>

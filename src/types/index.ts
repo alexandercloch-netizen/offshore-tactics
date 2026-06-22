@@ -406,7 +406,8 @@ export type MainTabParamList = {
 export type RootStackParamList = {
   Main: { screen?: keyof MainTabParamList } | undefined;
   Onboarding: undefined;
-  Auth: undefined;
+  AuthGate: undefined; // full-screen login wall shown when signed out
+  Auth: undefined; // account management when signed in
   RaceSelect: undefined;
   BoatSelect: undefined;
   CrewSelect: undefined;

@@ -168,6 +168,29 @@ begin
 end $$;
 
 -- =====================================================================
+-- account deletion (GDPR / app-store requirement)
+-- =====================================================================
+-- Lets a signed-in user delete their own account. Removing the auth user
+-- cascades to their saves, profile and leaderboard rows via the on-delete
+-- cascade foreign keys. SECURITY DEFINER so it can touch auth.users, but scoped
+-- to auth.uid() so a caller can only ever delete themselves.
+create or replace function public.delete_account()
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'not authenticated';
+  end if;
+  delete from auth.users where id = auth.uid();
+end;
+$$;
+
+grant execute on function public.delete_account() to authenticated;
+
+-- =====================================================================
 -- leaderboard: global race results
 -- =====================================================================
 create table if not exists public.leaderboard (
