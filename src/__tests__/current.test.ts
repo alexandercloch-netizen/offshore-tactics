@@ -7,7 +7,8 @@ import {
   raceDivision,
   stepRace,
 } from '../engine/gameEngine';
-import { createFleet } from '../engine/fleet';
+import { createFleet, correctedPosition, finalPosition } from '../engine/fleet';
+import { fleetBenchmarkHours } from '../engine/gameEngine';
 import { createWindField, sampleWind, weatherFromWind } from '../engine/wind';
 import { getRaceById, getBoatById } from '../data';
 import { mulberry32, resetRng, setRng } from '../engine/rng';
@@ -162,5 +163,63 @@ describe('tide changes the ETA (engine integration)', () => {
     const slack = finish(undefined);
     const running = finish(steadyTide(90, 2.5));
     expect(Math.abs(running - slack)).toBeGreaterThan(0.3);
+  });
+});
+
+describe('tide is fair in the standings', () => {
+  // The player sails a live-routed track; the fleet makes good the reference
+  // polar's true speed in the same wind, drifting on the same tide. Because both
+  // respond to the stream the same way, switching tide on must NOT systematically
+  // move the player up or down the corrected (handicap) results — it should net
+  // out, leaving only the genuine tactical swing of catching a gate well or badly.
+  // This guards the hard-won fix: the earlier (made-good-paced) model let tide run
+  // the player away to a near-permanent win, which this catches.
+  it('does not systematically shift the player on corrected time', () => {
+    const race = getRaceById('race-round-island')!;
+    const tidalRace = {
+      ...race,
+      tide: {
+        floodDeg: 90,
+        peakRateKn: 1.5,
+        gates: [
+          { waypoint: 'The Needles', gain: 0.5, radiusNm: 4 },
+          { waypoint: "St Catherine's Point", gain: 0.4, radiusNm: 5 },
+        ],
+      },
+    };
+    const boat = getBoatById('boat-tempest')!;
+    const tcc = boat.ratingTcc ?? 1;
+    const div = raceDivision(race, 'pro');
+
+    const corrected = (seed: number, withTide: boolean): number => {
+      setRng(mulberry32(seed));
+      const windField = createWindField(race);
+      const tidalField = withTide ? createTidalField(tidalRace) : undefined;
+      const start = race.waypoints[0];
+      let s = {
+        funds: 1e6, selectedRaceId: race.id, selectedDivision: 'pro', selectedBoatId: boat.id,
+        ownedBoatIds: [boat.id], selectedCrewIds: [], provisions: [], condition: healthy,
+        weather: weatherFromWind(sampleWind(windField, start.lat, start.lon, 0)), windField,
+        tidalField, fleet: createFleet(race, div, fleetBenchmarkHours(race, windField, boat), boat),
+        strategy: { bias: 0, effort: 'cruise' }, profile: { fleet: [] },
+        progress: initialProgress(race, boat, 'pro', windField), history: [], eventLog: [],
+      } as unknown as GameState;
+      const step = defaultStepNm(race) * 3;
+      let out = stepRace(s, step);
+      for (let i = 0; i < 4000; i += 1) {
+        out = stepRace(s, step);
+        s = { ...s, progress: out.progress, condition: out.condition, weather: out.weather, fleet: out.fleet };
+        if (out.finished || out.retired) break;
+      }
+      return correctedPosition(s.fleet ?? [], race.distanceNm, out.progress.elapsedHours, tcc);
+    };
+
+    const seeds = [1, 2, 3, 4, 5, 6];
+    const off = seeds.map((sd) => corrected(sd, false));
+    const on = seeds.map((sd) => corrected(sd, true));
+    const mean = (xs: number[]): number => xs.reduce((a, b) => a + b, 0) / xs.length;
+    // The mean corrected placing must barely move with tide — a runaway would
+    // collapse `on` toward 1st and blow this gap wide open.
+    expect(Math.abs(mean(on) - mean(off))).toBeLessThan(div.fleetSize * 0.2);
   });
 });

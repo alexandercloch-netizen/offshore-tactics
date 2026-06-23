@@ -131,6 +131,33 @@ export function madeGoodSpeed(boat: Boat, legBearing: number, windFromDeg: numbe
   return Math.max(straight, vmg.downVmg);
 }
 
+// The reference boat's tide-FREE made-good finish over this course and wind
+// field, sailing the rhumb line (bias 0). It's the yardstick that turns a boat's
+// target finish into a `paceScale`: scaling the reference polar's *absolute*
+// made-good speed by `benchMG / targetHours` lands the tide-free finish exactly
+// on target (so the tuned difficulty is preserved), while leaving the speed free
+// to swing with the real wind — light air slows the boat, pressure lifts it —
+// exactly as the player's does. Matching that swing is what lets the tide cancel
+// in the standings. Time advances as we integrate, so the wind evolves underfoot.
+function refMadeGoodHours(race: Race, field: WindField): number {
+  const total = race.distanceNm;
+  const step = Math.max(total / 120, 0.5);
+  let dist = 0;
+  let t = 0;
+  for (let guard = 0; dist < total && guard < 5000; guard += 1) {
+    const frac = clamp(dist / total, 0, 1);
+    const base = pointAtFraction(race.waypoints, frac);
+    const ahead = pointAtFraction(race.waypoints, clamp(frac + 0.01, 0, 1));
+    const courseDeg = bearing(base.lat, base.lon, ahead.lat, ahead.lon);
+    const wind = sampleWind(field, base.lat, base.lon, t);
+    const mgs = madeGoodSpeed(REF_BOAT, courseDeg, wind.fromDeg, wind.speedKn);
+    const d = Math.min(step, total - dist);
+    t += d / Math.max(mgs, 0.2);
+    dist += d;
+  }
+  return t > 0 ? t : race.recordTimeHours * 2;
+}
+
 // Which side of the course the breeze favours at a point, as a signed scalar in
 // roughly [-1, 1] (positive = the right of the rhumb line, negative = left),
 // scaled by how pronounced the pressure gradient is. A boat whose bias matches
@@ -168,13 +195,16 @@ function competitorState(race: Race, c: Competitor): { pos: GeoPoint; courseDeg:
   return { pos, courseDeg };
 }
 
-// Advance every competitor by the time elapsed this step. Each boat holds its
-// benchmark pace (course ÷ targetHours) — which sets the difficulty — but now
-// sails it through the *same engine the player does*: its speed surges and stalls
-// with the real wind it finds at its own position (a mean-1 factor, so the
-// average pace is unchanged) and the tide along its course, and it gains or loses
-// by backing the favoured side. So the fleet lives in the same weather as the
-// player, which is what lets tide stay fair in the standings. Pure given RNG.
+// Advance every competitor by the time elapsed this step. Each boat is paced to
+// its benchmark target (which sets the difficulty), but sails through the *same
+// model the player does*: it makes good the reference polar's true speed in the
+// real wind at its own position — fast in pressure, slow in a hole, just like the
+// player's boat — scaled by a per-boat `paceScale` so the tide-free finish still
+// lands on target. The same tide drifts it along its course. Because the fleet's
+// speed swings with the wind exactly as the player's does, tide pushes both the
+// same way and cancels in the standings — only sailing it better wins. The
+// `paceScale` is calibrated once (lazily, on the first step that has the field)
+// and carried thereafter. Pure given RNG.
 export function advanceFleet(
   fleet: Competitor[],
   race: Race,
@@ -187,19 +217,20 @@ export function advanceFleet(
   const start = race.waypoints[0];
   const finish = race.waypoints[race.waypoints.length - 1];
   const axisDeg = bearing(start.lat, start.lon, finish.lat, finish.lon);
+  // Reference yardstick (course-wide, tide-free) — computed once when any boat
+  // still needs its paceScale, then memoised on each competitor.
+  const needsCal = fleet.some((c) => !c.retired && c.finishedHours === null && c.paceScale === undefined);
+  const benchMG = needsCal ? refMadeGoodHours(race, field) : 0;
   return fleet.map((c) => {
     if (c.retired || c.finishedHours !== null) return c;
 
+    const paceScale = c.paceScale ?? benchMG / Math.max(c.targetHours, 1e-6);
     const { pos, courseDeg } = competitorState(race, c);
     const wind = sampleWind(field, pos.lat, pos.lon, startHours);
-    const pace = total / Math.max(c.targetHours, 1e-6);
-    // Response to the *local* wind vs the course's baseline, as a made-good ratio
-    // through the reference polar. Mean ~1 (local wind oscillates around base), so
-    // it leaves the average pace — and the tuned difficulty — intact, while the
-    // boat genuinely speeds up in pressure and slows in a hole like the player.
-    const refLocal = madeGoodSpeed(REF_BOAT, courseDeg, wind.fromDeg, wind.speedKn);
-    const refBase = madeGoodSpeed(REF_BOAT, courseDeg, field.baseDir, field.baseSpeed);
-    const windFactor = clamp(refLocal / Math.max(refBase, 0.1), 0.4, 1.8);
+    // Absolute made-good speed through the reference polar, scaled to this boat's
+    // pace. No normalising clamp: the swing between light and fresh is the real
+    // one, which is what matches the player's tide sensitivity.
+    const mgs = madeGoodSpeed(REF_BOAT, courseDeg, wind.fromDeg, wind.speedKn);
     const align = (c.bias ?? 0) * favouredSide(field, pos.lat, pos.lon, startHours, axisDeg);
     const sideBonus = 1 + 0.08 * align;
     const variance = 1 + gaussish() * 0.05;
@@ -207,20 +238,20 @@ export function advanceFleet(
     // stream carries the boat, a foul one holds it up. The benchmark is tide-free,
     // so over the fleet this is shared weather, not a difficulty knob.
     const tide = tideAlong(tidalField, pos.lat, pos.lon, startHours, courseDeg);
-    const smg = Math.max(pace * windFactor * sideBonus * variance + tide, 0.2);
+    const smg = Math.max(mgs * paceScale * sideBonus * variance + tide, 0.2);
 
     // Rare retirement, more likely when it is blowing hard.
     if (rnd() < 0.00025 * dtHours * (1 + wind.speedKn / 20)) {
-      return { ...c, retired: true };
+      return { ...c, paceScale, retired: true };
     }
 
     const advanced = c.distanceNm + smg * dtHours;
     if (advanced >= total) {
       const overshoot = advanced - total;
       const frac = 1 - overshoot / Math.max(smg * dtHours, 1e-6);
-      return { ...c, distanceNm: total, finishedHours: startHours + clamp(frac, 0, 1) * dtHours };
+      return { ...c, paceScale, distanceNm: total, finishedHours: startHours + clamp(frac, 0, 1) * dtHours };
     }
-    return { ...c, distanceNm: advanced };
+    return { ...c, paceScale, distanceNm: advanced };
   });
 }
 
