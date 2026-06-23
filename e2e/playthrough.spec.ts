@@ -4,6 +4,12 @@ import { test, expect, Page } from '@playwright/test';
 // race, kit out a boat and crew, sail it (answering any tactical decisions),
 // and land on the results screen.
 test('a full race can be played from start to finish', async ({ page }) => {
+  // TEMP diagnostics: surface any runtime JS error from the web app in CI logs.
+  page.on('pageerror', (e) => console.log('PAGEERROR:', e.message, '\n', e.stack));
+  page.on('console', (m) => {
+    if (m.type() === 'error') console.log('CONSOLEERROR:', m.text());
+  });
+
   await page.goto('/');
 
   // First run: answer the quick onboarding quiz (home waters → mission →
