@@ -132,6 +132,10 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
     .map((id) => getCrewById(id))
     .find((c) => c?.role === 'Navigator');
 
+  // A planning window scaled to the race, capped so the slider stays useful.
+  // (Declared before the meteogram series below, which reads it synchronously.)
+  const maxForecastHour = Math.min(48, Math.max(8, Math.ceil(race.recordTimeHours)));
+
   // Meteogram series: the forecast wind at the start over the planning window,
   // and the exact sample under the scrubber cursor.
   const GRAPH_SAMPLES = 25;
@@ -147,8 +151,6 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
     fromDeg: cursorSample.fromDeg,
     confidence: confidence,
   };
-  // A planning window scaled to the race, capped so the slider stays useful.
-  const maxForecastHour = Math.min(48, Math.max(8, Math.ceil(race.recordTimeHours)));
 
   // Finish ETA for each side at the player's current effort & crew, and how the
   // chosen plan stacks up against the fastest line.
