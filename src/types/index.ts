@@ -326,6 +326,7 @@ export interface TacticalChoice {
   moraleDelta: number;
   hullDelta: number; // hull integrity change
   risk: number; // 0-1 chance of an adverse twist
+  field?: boolean; // the bold option — its time outcome is resolved against the real wind field
 }
 
 export type EventKind = 'tactical' | 'weather' | 'mob' | 'hazard';

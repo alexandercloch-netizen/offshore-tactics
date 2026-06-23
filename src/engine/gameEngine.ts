@@ -48,7 +48,7 @@ import {
 } from './geo';
 import { polarSpeed } from './polar';
 import { effectivePolar } from './sails';
-import { createWindField, sampleWind, weatherFromWind } from './wind';
+import { createWindField, forecastConfidence, pressureHint, sampleWind, weatherFromWind } from './wind';
 import { planRoute } from './router';
 import { LANDMASSES } from '../data/landmasses';
 import { advanceFleet, correctedPosition, finalPosition, livePosition } from './fleet';
@@ -596,6 +596,68 @@ export function speedMadeGood(state: GameState): number {
   return Math.max(currentSpeed(state) * along, 0.2);
 }
 
+// ---- Reading the wind for tactical decisions ----
+
+const signedShift = (toDeg: number, fromDeg: number): number =>
+  ((toDeg - fromDeg + 540) % 360) - 180;
+
+// How much the *bold* tactical call is favoured by the real wind field at the
+// boat right now, as a signed scalar in [-1, 1]. Positive = a genuine shift is
+// developing, the breeze is building, or there's a strong pressure gradient to
+// exploit; negative = a false alarm, so sending it costs you. This is what makes
+// the chart matter: a bold call only pays when the field actually supports it.
+export function tacticalEdge(state: GameState): number {
+  const field = state.windField;
+  const p = state.progress;
+  if (!field || !p) return 0;
+  const now = sampleWind(field, p.lat, p.lon, p.elapsedHours);
+  const soon = sampleWind(field, p.lat, p.lon, p.elapsedHours + 1.5);
+  const shift = Math.abs(signedShift(soon.fromDeg, now.fromDeg));
+  const build = soon.speedKn - now.speedKn;
+  const pressure = pressureHint(field, p.lat, p.lon, p.elapsedHours);
+  const edge = (shift / 18) * 0.5 + (build / 6) * 0.3 + (pressure.strong ? 0.3 : 0) - 0.25;
+  return Math.max(-1, Math.min(1, edge));
+}
+
+export interface TacticalRead {
+  edge: number; // the true edge (resolution uses this)
+  shiftDeg: number; // signed forecast shift over the next stretch (+veer / −back)
+  buildKn: number; // forecast speed change
+  reliable: number; // 0–1 — how much the Navigator trusts this read
+  hint: string; // short navigator read for the decision modal
+}
+
+// The Navigator's read of the situation for the decision modal: the true edge,
+// plus a hint hedged by the Navigator's confidence — a sharp Navigator tells you
+// whether to send it; a weak one can only shrug. Resolution still uses the true
+// edge, so a good Navigator is a genuine edge, not just flavour.
+export function tacticalRead(state: GameState): TacticalRead {
+  const field = state.windField;
+  const p = state.progress;
+  const edge = tacticalEdge(state);
+  let shiftDeg = 0;
+  let buildKn = 0;
+  if (field && p) {
+    const now = sampleWind(field, p.lat, p.lon, p.elapsedHours);
+    const soon = sampleWind(field, p.lat, p.lon, p.elapsedHours + 1.5);
+    shiftDeg = signedShift(soon.fromDeg, now.fromDeg);
+    buildKn = soon.speedKn - now.speedKn;
+  }
+  const reliable = forecastConfidence(navigatorSkill(state.selectedCrewIds), 1.5);
+
+  let hint: string;
+  if (reliable < 0.5) {
+    hint = 'hard to call from here — back your own judgement.';
+  } else if (edge > 0.2) {
+    hint = 'the breeze backs the bold call — worth the risk.';
+  } else if (edge < -0.05) {
+    hint = 'looks like a false alarm — the safe line pays.';
+  } else {
+    hint = 'marginal — it could go either way.';
+  }
+  return { edge, shiftDeg, buildKn, reliable, hint };
+}
+
 export function vmgPreview(state: GameState, event: GameEvent): VmgPreview {
   const race = getRaceById(state.selectedRaceId);
   if (!race || !state.progress) return { before: 0, after: {} };
@@ -840,7 +902,18 @@ export function applyDecision(state: GameState, choice: TacticalChoice): StepRes
   let stamina = state.condition.crewStamina + choice.staminaDelta;
   let morale = state.condition.crewMorale + choice.moraleDelta;
   let hull = state.condition.hullIntegrity + choice.hullDelta;
+  // A bold, field-resolved call pays off only if the wind actually supports it.
+  // Read it right (a real shift/pressure to exploit) and it costs ~nothing — so
+  // you beat the safe option, which always bleeds a little time. Read it wrong
+  // and you've banged a phantom corner: real time lost, and the crew feels it.
+  // The conservative option keeps its authored, dependable outcome.
   let extraHours = choice.timeDelta;
+  if (choice.field) {
+    const edge = tacticalEdge(state); // ~[-0.25, 1]; ≥ EDGE_SEND means send it
+    const EDGE_SEND = 0.35;
+    extraHours = Math.max(0, Math.abs(choice.timeDelta) * 1.6 * (EDGE_SEND - edge));
+    morale += edge >= EDGE_SEND ? 2 : -3;
+  }
 
   // A demoralized crew — or a boat being pushed hard — is more likely to bungle;
   // a skilled crew is steadier and shaves the odds (±0.06 across the skill range).

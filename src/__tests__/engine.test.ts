@@ -10,8 +10,10 @@ import {
   raceDivision,
   speedMadeGood,
   stepRace,
+  tacticalEdge,
   vmgPreview,
 } from '../engine/gameEngine';
+import { WindField } from '../types';
 import { createWindField, sampleWind, weatherFromWind } from '../engine/wind';
 import { createFleet } from '../engine/fleet';
 import { mulberry32, resetRng, setRng } from '../engine/rng';
@@ -499,5 +501,78 @@ describe('data integrity', () => {
         expect(r).toBeLessThanOrEqual(100);
       });
     });
+  });
+});
+
+// A wind field with a strong, steady veer — a genuine, exploitable shift.
+function shiftingField(refLat: number, refLon: number): WindField {
+  return {
+    baseDir: 200,
+    baseSpeed: 14,
+    shiftAmpDeg: 0,
+    shiftPeriodH: 6,
+    shiftPhase: 0,
+    rotateDegPerH: 20,
+    gradientAxisDeg: 0,
+    gradientPerNm: 0,
+    refLat,
+    refLon,
+    feature: { lat: refLat, lon: refLon, radiusNm: 1, deltaKn: 0, driftDir: 0, driftKn: 0 },
+  };
+}
+
+// A dead-flat field: nothing to exploit, so a bold call is a false alarm.
+function flatField(refLat: number, refLon: number): WindField {
+  return { ...shiftingField(refLat, refLon), rotateDegPerH: 0 };
+}
+
+describe('tactical decisions resolved against the wind field', () => {
+  afterEach(() => resetRng());
+
+  const boldCall: TacticalChoice = {
+    id: 'test-bold',
+    label: 'Send it',
+    description: '',
+    timeDelta: -0.6,
+    staminaDelta: 0,
+    moraleDelta: 0,
+    hullDelta: 0,
+    risk: 0, // isolate the field resolution from the bungle roll
+    field: true,
+  };
+
+  it('reads a genuine shift as a positive edge and a flat field as a false alarm', () => {
+    const start = getRaceById('race-round-island')!.waypoints[0];
+    const shifting = baseState({ windField: shiftingField(start.lat, start.lon) });
+    const flat = baseState({ windField: flatField(start.lat, start.lon) });
+    expect(tacticalEdge(shifting)).toBeGreaterThan(0.2);
+    expect(tacticalEdge(flat)).toBeLessThan(0);
+  });
+
+  it('a bold call costs ~nothing when the field supports it, but bleeds time on a false alarm', () => {
+    const start = getRaceById('race-round-island')!.waypoints[0];
+    const shifting = baseState({ windField: shiftingField(start.lat, start.lon) });
+    const flat = baseState({ windField: flatField(start.lat, start.lon) });
+
+    setRng(mulberry32(1));
+    const good = applyDecision(shifting, boldCall);
+    setRng(mulberry32(1));
+    const bad = applyDecision(flat, boldCall);
+
+    const goodLost = good.progress.elapsedHours - shifting.progress!.elapsedHours;
+    const badLost = bad.progress.elapsedHours - flat.progress!.elapsedHours;
+    expect(goodLost).toBeLessThan(0.05); // reading it right is near-free
+    expect(badLost).toBeGreaterThan(0.3); // a phantom corner costs real time
+    expect(bad.condition.crewMorale).toBeLessThan(good.condition.crewMorale); // and stings the crew
+  });
+
+  it('leaves the conservative (non-field) option authored and field-independent', () => {
+    const start = getRaceById('race-round-island')!.waypoints[0];
+    const safe: TacticalChoice = { ...boldCall, id: 'test-safe', timeDelta: 0.3, field: false };
+    setRng(mulberry32(2));
+    const a = applyDecision(baseState({ windField: shiftingField(start.lat, start.lon) }), safe);
+    setRng(mulberry32(2));
+    const b = applyDecision(baseState({ windField: flatField(start.lat, start.lon) }), safe);
+    expect(a.progress.elapsedHours).toBeCloseTo(b.progress.elapsedHours, 6);
   });
 });

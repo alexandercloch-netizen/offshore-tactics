@@ -3,6 +3,7 @@ import { Modal, ScrollView, StyleSheet, Text, useWindowDimensions, View } from '
 import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
 import { GameEvent, TacticalChoice, VmgPreview } from '../types';
 import { InstrumentReport } from '../engine/instruments';
+import type { TacticalRead } from '../engine/gameEngine';
 import NauticalButton from './NauticalButton';
 import Sparkline from './Sparkline';
 
@@ -11,6 +12,7 @@ interface TacticalDecisionModalProps {
   event: GameEvent | null;
   vmg?: VmgPreview | null;
   instruments?: InstrumentReport | null;
+  read?: TacticalRead | null; // the Navigator's read, for field-resolved calls
   onSelect: (choice: TacticalChoice) => void;
 }
 
@@ -77,6 +79,7 @@ export const TacticalDecisionModal: React.FC<TacticalDecisionModalProps> = ({
   event,
   vmg,
   instruments,
+  read,
   onSelect,
 }) => {
   const isMob = event?.kind === 'mob';
@@ -109,6 +112,10 @@ export const TacticalDecisionModal: React.FC<TacticalDecisionModalProps> = ({
                 {event.title}
               </Text>
               <Text style={styles.prompt}>{event.prompt}</Text>
+
+              {read && event.choices.some((c) => c.field) ? (
+                <Text style={styles.read}>🧭 Navigator: {read.hint}</Text>
+              ) : null}
 
               {instruments ? (
                 <View style={styles.instruments}>
@@ -332,6 +339,13 @@ const styles = StyleSheet.create({
     color: colors.mist,
     fontSize: fontSize.md,
     lineHeight: 22,
+    marginBottom: spacing.lg,
+  },
+  read: {
+    color: colors.brassLight,
+    fontSize: fontSize.sm,
+    fontStyle: 'italic',
+    marginTop: -spacing.sm,
     marginBottom: spacing.lg,
   },
   choices: {
