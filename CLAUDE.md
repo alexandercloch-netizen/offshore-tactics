@@ -52,6 +52,10 @@ The simulation is a **pure, deterministic engine** with a thin React UI on top.
   - `fleet.ts` — the AI competitors (skill + course-side bias + variance).
   - `geo.ts` — projections, bearings, distances. `rng.ts` — seedable RNG.
   - `recommend.ts` — home-screen race recommendation from the player profile.
+  - Tactical decisions (`data/events.ts`) tagged `field: true` are *resolved
+    against the real wind* in `applyDecision` via `tacticalEdge` — a bold call
+    only pays when the field supports it; `tacticalRead` gives the Navigator's
+    (confidence-hedged) hint shown in the decision modal.
 - **`src/data/`** — content & catalogues: `races.ts`, `boats.ts`, `crew.ts`,
   `provisions.ts`, `events.ts` (tactical decisions), `weather.ts`,
   `landmasses.ts`, `polarLibrary.ts`, `sails.ts`, `onboarding.ts`. `index.ts`

@@ -27,8 +27,10 @@ import {
   raceDivision,
   resolveBoatById,
   speedMadeGood,
+  tacticalRead,
   vmgPreview,
 } from '../engine/gameEngine';
+import type { TacticalRead } from '../engine/gameEngine';
 import { competitorPoints } from '../engine/fleet';
 import { courseAspect, courseBounds } from '../engine/geo';
 import { featureState, pressureHint, sampleWindGrid, weatherOutlook } from '../engine/wind';
@@ -53,6 +55,7 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
   const [activeEvent, setActiveEvent] = useState<GameEvent | null>(null);
   const [activeVmg, setActiveVmg] = useState<VmgPreview | null>(null);
   const [activeInstruments, setActiveInstruments] = useState<InstrumentReport | null>(null);
+  const [activeRead, setActiveRead] = useState<TacticalRead | null>(null);
   const [paused, setPaused] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
 
@@ -130,6 +133,7 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
           weather: outcome.weather,
         };
         setActiveVmg(vmgPreview(tempState, outcome.event));
+        setActiveRead(tacticalRead(tempState));
         // Instruments + this-leg trend, to inform the call.
         const wf = stateRef.current.windField;
         if (wf && race) {
@@ -160,6 +164,7 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
       setActiveEvent(null);
       setActiveVmg(null);
       setActiveInstruments(null);
+      setActiveRead(null);
       eventActiveRef.current = false;
       const outcome = decide(choice);
       if (outcome.finished || outcome.retired) {
@@ -381,6 +386,7 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
         event={activeEvent}
         vmg={activeVmg}
         instruments={activeInstruments}
+        read={activeRead}
         onSelect={handleChoice}
       />
     </View>

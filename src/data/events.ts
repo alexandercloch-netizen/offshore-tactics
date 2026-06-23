@@ -22,6 +22,7 @@ export const GENERIC_EVENTS: GameEvent[] = [
         moraleDelta: 4,
         hullDelta: 0,
         risk: 0.3,
+        field: true,
       },
       {
         id: 'evt-windshift-hold',
@@ -52,6 +53,7 @@ export const GENERIC_EVENTS: GameEvent[] = [
         moraleDelta: 5,
         hullDelta: -4,
         risk: 0.25,
+        field: true,
       },
       {
         id: 'evt-spinnaker-white',
@@ -111,6 +113,7 @@ export const GENERIC_EVENTS: GameEvent[] = [
         moraleDelta: 3,
         hullDelta: 0,
         risk: 0.22,
+        field: true,
       },
       {
         id: 'evt-layline-hold',
@@ -140,6 +143,7 @@ export const GENERIC_EVENTS: GameEvent[] = [
         moraleDelta: 3,
         hullDelta: 0,
         risk: 0.2,
+        field: true,
       },
       {
         id: 'evt-lane-duck',
@@ -297,6 +301,7 @@ export const WEATHER_EVENTS: GameEvent[] = [
         moraleDelta: 3,
         hullDelta: -12,
         risk: 0.35,
+        field: true,
       },
       {
         id: 'evt-squall-reef',
@@ -326,6 +331,7 @@ export const WEATHER_EVENTS: GameEvent[] = [
         moraleDelta: 4,
         hullDelta: -2,
         risk: 0.32,
+        field: true,
       },
       {
         id: 'evt-front-conservative',
@@ -429,6 +435,7 @@ export const HAZARD_EVENTS: Record<HazardKey, GameEvent> = {
         moraleDelta: 5,
         hullDelta: -2,
         risk: 0.4,
+        field: true,
       },
       {
         id: 'evt-hz-tidal-safe',
@@ -459,6 +466,7 @@ export const HAZARD_EVENTS: Record<HazardKey, GameEvent> = {
         moraleDelta: 4,
         hullDelta: 0,
         risk: 0.38,
+        field: true,
       },
       {
         id: 'evt-hz-light-offshore',
@@ -489,6 +497,7 @@ export const HAZARD_EVENTS: Record<HazardKey, GameEvent> = {
         moraleDelta: 5,
         hullDelta: 0,
         risk: 0.35,
+        field: true,
       },
       {
         id: 'evt-hz-med-steady',
@@ -519,6 +528,7 @@ export const HAZARD_EVENTS: Record<HazardKey, GameEvent> = {
         moraleDelta: 5,
         hullDelta: 0,
         risk: 0.34,
+        field: true,
       },
       {
         id: 'evt-hz-gulf-direct',
@@ -549,6 +559,7 @@ export const HAZARD_EVENTS: Record<HazardKey, GameEvent> = {
         moraleDelta: 4,
         hullDelta: -10,
         risk: 0.36,
+        field: true,
       },
       {
         id: 'evt-hz-celtic-ease',
@@ -579,6 +590,7 @@ export const HAZARD_EVENTS: Record<HazardKey, GameEvent> = {
         moraleDelta: 5,
         hullDelta: -5,
         risk: 0.33,
+        field: true,
       },
       {
         id: 'evt-hz-island-low',
@@ -609,6 +621,7 @@ export const HAZARD_EVENTS: Record<HazardKey, GameEvent> = {
         moraleDelta: 3,
         hullDelta: -14,
         risk: 0.42,
+        field: true,
       },
       {
         id: 'evt-hz-bass-run',
@@ -639,6 +652,7 @@ export const HAZARD_EVENTS: Record<HazardKey, GameEvent> = {
         moraleDelta: 5,
         hullDelta: -2,
         risk: 0.4,
+        field: true,
       },
       {
         id: 'evt-hz-rapids-wait',
@@ -669,6 +683,7 @@ export const HAZARD_EVENTS: Record<HazardKey, GameEvent> = {
         moraleDelta: 4,
         hullDelta: 0,
         risk: 0.3,
+        field: true,
       },
       {
         id: 'evt-hz-doldrums-rhumb',
