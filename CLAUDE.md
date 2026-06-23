@@ -54,10 +54,16 @@ The simulation is a **pure, deterministic engine** with a thin React UI on top.
     Navigator skill) so the *planned* route/ETA reflect the believed forecast,
     while the race loop routes on the true field.
   - `fleet.ts` — the AI competitors. Each is paced to a per-boat target finish
-    derived from `fleetBenchmarkHours` (a reference boat's clean run on the
-    optimal line, via the same route-based model the player sails), so difficulty
-    is consistent across courses and a faster boat/crew genuinely gains; course-
-    side bias + variance shuffle the standings.
+    derived from `fleetBenchmarkHours` → `cleanRunHours` (a deterministic headless
+    run of *the player's own boat* through the real `stepRace` movement+wear model,
+    not a route-only ETA — the latter drifts 2–3× off the lived finish in light,
+    shifty air). Anchoring on the player's boat self-calibrates difficulty across
+    courses *and* boats, so every race is a fight whatever you charter. A bounded
+    boat-speed `edge` gives a quicker hull a modest lead across the line; the
+    fleet's handicap is centred on the player's boat rating backed out by that
+    edge, so **corrected (handicap) time is boat-neutral** — you win it by sailing
+    above your rating (crew, effort, calls), not by buying speed. Course-side bias
+    + variance shuffle the standings.
   - `geo.ts` — projections, bearings, distances. `rng.ts` — seedable RNG.
   - `recommend.ts` — home-screen race recommendation from the player profile.
   - Tactical decisions (`data/events.ts`) tagged `field: true` are *resolved

@@ -19,7 +19,7 @@ import {
 import { bearing } from '../engine/geo';
 import { WindField } from '../types';
 import { createWindField, sampleWind, weatherFromWind } from '../engine/wind';
-import { createFleet, finalPosition } from '../engine/fleet';
+import { createFleet, finalPosition, correctedPosition } from '../engine/fleet';
 import { mulberry32, resetRng, setRng } from '../engine/rng';
 import {
   BOATS,
@@ -32,8 +32,10 @@ import {
   getRaceById,
 } from '../data';
 import {
+  Boat,
   BoatCondition,
   GameState,
+  Race,
   RaceResult,
   StepResult,
   TacticalChoice,
@@ -65,7 +67,9 @@ function baseState(overrides: Partial<GameState> = {}): GameState {
     condition: healthy,
     weather,
     windField,
-    fleet: createFleet(race, raceDivision(race, division), fleetBenchmarkHours(race, windField)),
+    // A cheap fallback benchmark keeps the broad suite fast; the fleet-balance
+    // tests below build their state on the real `fleetBenchmarkHours` path.
+    fleet: createFleet(race, raceDivision(race, division), undefined, boat),
     strategy: DEFAULT_STRATEGY,
     profile: { fleet: [] },
     progress: initialProgress(race, boat, division, windField),
@@ -584,31 +588,135 @@ describe('tactical decisions resolved against the wind field', () => {
 describe('fleet balance', () => {
   afterEach(() => resetRng());
 
-  // Guards the regression where the AI fleet sailed an idealised line no human
-  // could match, leaving the player structurally last. A cleanly-sailed decent
-  // boat must be able to fight near the front.
-  it('a cleanly-sailed decent boat contends, never stuck last', () => {
-    const raceId = 'race-round-island';
+  // Sail a full race on the REAL fleet-pacing path (the benchmark is the
+  // player's own boat's clean run, the same model the player sails) and report
+  // both standings: across the line and on corrected (handicap) time.
+  function sailStandings(
+    raceId: string,
+    boatId: string,
+    division: 'corinthian' | 'pro',
+    effort: 'cruise' | 'push',
+    seed: number
+  ): { finished: boolean; size: number; onwater: number; corrected: number } {
+    setRng(mulberry32(seed));
     const race = getRaceById(raceId)!;
-    const fleetSize = raceDivision(race, 'corinthian').fleetSize;
-    const step = defaultStepNm(race);
-    const positions: number[] = [];
-    for (const seed of [3, 7, 21]) {
-      setRng(mulberry32(seed));
-      let s = baseState({ selectedRaceId: raceId, selectedBoatId: 'boat-tempest', selectedDivision: 'corinthian' });
-      let out = stepRace(s, step);
-      for (let i = 0; i < 3000; i += 1) {
-        out = stepRace(s, step);
-        s = { ...s, progress: out.progress, condition: out.condition, weather: out.weather, fleet: out.fleet };
-        if (out.finished || out.retired) break;
-      }
-      expect(out.finished).toBe(true);
-      positions.push(finalPosition(s.fleet ?? [], out.progress.elapsedHours));
+    const boat = getBoatById(boatId)!;
+    const windField = createWindField(race);
+    const fleet = createFleet(
+      race,
+      raceDivision(race, division),
+      fleetBenchmarkHours(race, windField, boat),
+      boat
+    );
+    let s = baseState({
+      selectedRaceId: raceId,
+      selectedBoatId: boatId,
+      selectedDivision: division,
+      windField,
+      fleet,
+      strategy: { bias: 0, effort },
+    });
+    // Coarse step keeps the balance sweep affordable; the standings assertions
+    // are loose, so the rougher track doesn't matter.
+    const step = defaultStepNm(race) * 3;
+    let out = stepRace(s, step);
+    for (let i = 0; i < 4000; i += 1) {
+      out = stepRace(s, step);
+      s = { ...s, progress: out.progress, condition: out.condition, weather: out.weather, fleet: out.fleet };
+      if (out.finished || out.retired) break;
     }
-    // Across seeds, a decent boat reaches the podium-contending top third — and is
-    // never marooned at the back every time.
-    expect(Math.min(...positions)).toBeLessThanOrEqual(Math.ceil(fleetSize / 3));
-    expect(Math.min(...positions)).toBeLessThan(fleetSize);
+    const tcc = boat.ratingTcc ?? 1;
+    return {
+      finished: out.finished,
+      size: raceDivision(race, division).fleetSize,
+      onwater: finalPosition(s.fleet ?? [], out.progress.elapsedHours),
+      corrected: correctedPosition(s.fleet ?? [], race.distanceNm, out.progress.elapsedHours, tcc),
+    };
+  }
+
+  // A fast check of the *pacing maths* (where the bugs lived): build the fleet on
+  // the real benchmark, then place a bare cruise player — who by construction
+  // finishes at ~the benchmark (see `cleanRunHours`) — against a fleet finishing
+  // at its target times. Exercises `createFleet`'s pacing and rating anchoring
+  // without a slow race sim. The benchmark is computed once per race+boat (it's a
+  // sim); across seeds only the fleet RNG varies, which is what we're probing.
+  function pacingStandings(
+    race: Race,
+    boat: Boat,
+    division: 'corinthian' | 'pro',
+    bench: number,
+    seed: number
+  ): { size: number; onwater: number; corrected: number } {
+    setRng(mulberry32(seed));
+    const fleet = createFleet(race, raceDivision(race, division), bench, boat).map((c) => ({
+      ...c,
+      distanceNm: race.distanceNm,
+      finishedHours: c.targetHours,
+    }));
+    const tcc = boat.ratingTcc ?? 1;
+    return {
+      size: raceDivision(race, division).fleetSize,
+      onwater: finalPosition(fleet, bench),
+      corrected: correctedPosition(fleet, race.distanceNm, bench, tcc),
+    };
+  }
+
+  // The benchmark a bare cruise in `boatId` would finish in, on a fixed field.
+  function benchFor(raceId: string, boatId: string): { race: Race; boat: Boat; bench: number } {
+    setRng(mulberry32(1));
+    const race = getRaceById(raceId)!;
+    const boat = getBoatById(boatId)!;
+    const field = createWindField(race);
+    return { race, boat, bench: fleetBenchmarkHours(race, field, boat) };
+  }
+
+  const SEEDS = [3, 7, 21, 42];
+  const COURSES = ['race-round-island', 'race-fastnet', 'race-caribbean-600'];
+
+  // Integration smoke test on the real pipeline (the cheap, short course):
+  // sailing a full race actually finishes and a decent boat fights near the
+  // front on corrected time — guarding the original "marooned at the back" bug.
+  it('a full sail finishes and a decent boat contends on corrected', () => {
+    const res = SEEDS.map((sd) => sailStandings('race-round-island', 'boat-tempest', 'corinthian', 'cruise', sd));
+    res.forEach((r) => expect(r.finished).toBe(true));
+    const size = res[0].size;
+    const corr = res.map((r) => r.corrected);
+    expect(Math.min(...corr)).toBeLessThanOrEqual(Math.ceil(size / 2)); // fights up the fleet
+  });
+
+  // Guards this session's regression: a fast boat (high rating), paced to its own
+  // benchmark but rated near 1.0, owed time it could never claw back — dead last
+  // on corrected EVERY race. With the rating centred on the player's boat,
+  // corrected is a fair fight whatever you charter: the quick hull leads across
+  // the line but is mid-fleet on handicap, not marooned. (Sim-free, all courses.)
+  it('a fast boat leads on the water yet corrected stays a fair fight (all courses)', () => {
+    for (const raceId of COURSES) {
+      const { race, boat, bench } = benchFor(raceId, 'boat-mistral');
+      for (const division of ['corinthian', 'pro'] as const) {
+        const res = SEEDS.map((sd) => pacingStandings(race, boat, division, bench, sd));
+        const size = res[0].size;
+        const onwater = res.map((r) => r.onwater);
+        const corr = res.map((r) => r.corrected);
+        // A fast hull leads across the line.
+        expect(Math.min(...onwater)).toBeLessThanOrEqual(Math.ceil(size / 4));
+        // But on corrected it is mid-fleet, never structurally marooned at the back.
+        expect(Math.max(...corr)).toBeLessThanOrEqual(Math.ceil(size * 0.75));
+      }
+    }
+  });
+
+  // The mirror case: a slow boat is back across the line but, owing little on
+  // handicap, stays competitive on corrected — never structurally last.
+  it('a slow boat is competitive on corrected despite trailing on the water (all courses)', () => {
+    for (const raceId of COURSES) {
+      const { race, boat, bench } = benchFor(raceId, 'boat-sprite');
+      for (const division of ['corinthian', 'pro'] as const) {
+        const res = SEEDS.map((sd) => pacingStandings(race, boat, division, bench, sd));
+        const size = res[0].size;
+        const corr = res.map((r) => r.corrected);
+        expect(Math.max(...corr)).toBeLessThanOrEqual(Math.ceil(size * 0.75));
+      }
+    }
   });
 });
 

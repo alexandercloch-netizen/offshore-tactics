@@ -22,22 +22,53 @@ function gaussish(): number {
 const clamp = (v: number, min: number, max: number): number =>
   Math.max(min, Math.min(max, v));
 
+// A mid-fleet cruiser-racer's baseline speed: the yardstick a chartered boat is
+// measured against for the on-water edge below. (Matches boat-corsair, our
+// documented reference.)
+const REF_BASE_SPEED = 8.6;
+
 // Build the AI fleet (everyone but the player). Each boat is paced to a target
-// finish time built from the race benchmark (a reference boat's clean run on the
-// optimal line — the SAME route-based model the player effectively sails, so the
-// difficulty is consistent across courses) divided by a per-boat pace multiplier.
-// `benchmarkHours` is computed at race setup; without it we fall back to a
-// record-based estimate so tests and legacy callers still work.
-export function createFleet(race: Race, division: RaceDivision, benchmarkHours?: number): Competitor[] {
+// finish time built from the race benchmark (a clean run of the player's own
+// boat — the SAME tick model the player sails, so difficulty is consistent
+// across courses and boats) divided by a per-boat pace multiplier. `benchmarkHours`
+// is computed at race setup; without it we fall back to a record-based estimate
+// so tests and legacy callers still work.
+export function createFleet(
+  race: Race,
+  division: RaceDivision,
+  benchmarkHours?: number,
+  playerBoat?: Boat
+): Competitor[] {
   const count = Math.max(division.fleetSize - 1, 0);
   const bench = benchmarkHours ?? race.recordTimeHours * 2.4;
-  // Median fleet pace vs the benchmark, by division: a Corinthian club fleet
-  // sails a touch under benchmark pace (so a decent skipper contends), the Pro
-  // fleet a touch over (so it stays a fight even in a fast boat). Wide spread so
-  // a boat's standing tracks its pace, not puff luck.
-  const mean = division.paceTarget >= 1.15 ? 0.97 : 1.06;
-  // Wider, more mixed pace in a Corinthian club fleet; tighter among the pros.
-  const spread = 0.08 + (division.paceTarget - 1) * 0.22;
+  // The benchmark is a bare cruise finish in the player's own boat (see
+  // `cleanRunHours`), so the fleet already tracks boat and course. Pace it around
+  // the benchmark by division: a Corinthian club fleet sails a touch under
+  // benchmark pace, so a clean amateur sail lands upper-mid and a *sharp* one
+  // (better crew, more effort, good calls — all faster than the bare benchmark)
+  // fights for the podium; the Pro fleet sits right on it, so that sharp sail is
+  // the price of contending.
+  const pro = division.paceTarget < 1.15;
+  const mean = pro ? 1.02 : 0.95;
+  // A tight, fast pro fleet; a wider, more mixed club fleet.
+  const spread = pro ? 0.1 : 0.14;
+  // A modest, bounded on-water edge for the boat you bring: a quicker hull faces
+  // a slightly slower-paced fleet (and a slow one a quicker fleet), so chartering
+  // up genuinely pays on the water — but only a little, capped at ±~10%, so it
+  // never becomes a runaway. Raw speed still pays off most on corrected time,
+  // where a fast boat owes its rating. No boat given → no edge (legacy/tests).
+  const edge = playerBoat
+    ? clamp(1 + (playerBoat.baseSpeed / REF_BASE_SPEED - 1) * 0.4, 0.9, 1.12)
+    : 1;
+  const pacedBench = bench * edge;
+  // The fleet are reference-class boats paced to the player's run, so their
+  // handicaps centre on what the player's boat rates after backing out that
+  // on-water edge — which makes corrected (handicap) time a fair fight whatever
+  // you charter: a quicker hull leads across the line but owes the lead back on
+  // rating, exactly as a handicap intends. You win corrected by sailing above
+  // your rating (sharper crew, harder effort, better calls), not by buying speed.
+  const playerTcc = playerBoat?.ratingTcc ?? 1;
+  const fleetBaseTcc = playerTcc / edge;
   const fleet: Competitor[] = [];
   for (let i = 0; i < count; i += 1) {
     const name = NAMES[i % NAMES.length] + (i >= NAMES.length ? ` ${Math.floor(i / NAMES.length) + 1}` : '');
@@ -46,11 +77,12 @@ export function createFleet(race: Race, division: RaceDivision, benchmarkHours?:
       id: `ai-${race.id}-${i}`,
       name,
       speedMul,
-      // A faster boat rates higher and so owes more time on handicap — the
-      // correlation (<1) means raw pace is mostly, not fully, neutralised, so
-      // corrected standings turn on how well a boat sails its rating.
-      ratingTcc: clamp(1 + (speedMul - 1) * 0.85 + gaussish() * 0.025, 0.85, 1.45),
-      targetHours: bench / speedMul,
+      // Centred on the fleet's reference rating, nudged by pace: a faster boat in
+      // the fleet rates higher and owes more, but the <1 correlation means raw
+      // pace is only mostly neutralised — so corrected standings still turn on
+      // how well each boat sails its rating, and the order shuffles.
+      ratingTcc: clamp(fleetBaseTcc * (1 + (speedMul - 1) * 0.85) + gaussish() * 0.03, 0.7, 1.6),
+      targetHours: pacedBench / speedMul,
       // Each boat commits to a side of the course; combined with the live wind
       // it decides who gains and who loses, so the standings shuffle.
       bias: rndRange(-1, 1),

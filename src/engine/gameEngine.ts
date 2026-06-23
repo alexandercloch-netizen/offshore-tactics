@@ -436,35 +436,94 @@ export function makeWindField(race: Race): WindField {
   return createWindField(race);
 }
 
-// The benchmark finish time the AI fleet is paced around: a reference cruiser-
-// racer's clean run on the weather-optimal line, via the SAME route-based model
-// the player effectively sails. Anchoring the fleet here (rather than an ideal
-// straight-line VMG) keeps difficulty consistent across courses and lets a
-// faster boat or sharper crew genuinely gain ground on the fleet.
-export function fleetBenchmarkHours(race: Race, field: WindField): number {
-  const ref = getBoatById('boat-corsair');
+// A clean headless run of `boat` over the whole course, on the SAME movement
+// model the player sails (`stepRace`'s core: weather-route, advance, re-route on
+// shifts and roundings) but with a fresh hull, a club-average crew and a steady
+// cruise — i.e. the boat's realistic potential, deterministically (no RNG, no
+// decisions, no wear). This is the trustworthy anchor for fleet pacing: a
+// route-only ETA (`estimateRouteHours`) drifts 2–3× off the lived result in
+// light, shifty air, because the live boat sails through holes the snapshot
+// route gets stuck in. Mirrors `stepRace` so the two can't diverge by course.
+export function cleanRunHours(
+  race: Race,
+  boat: Boat,
+  field: WindField,
+  skillMul = crewSkillFactor(DEFAULT_CREW_SKILL),
+  effortMul = EFFORT_SPEED.cruise
+): number {
+  const marks = race.waypoints;
+  const land = LANDMASSES[race.id];
+  const wearMul = EFFORT_WEAR.cruise;
+  const condition: BoatCondition = { hullIntegrity: 100, crewStamina: 100, crewMorale: 100 };
+  const total = race.distanceNm;
+  // A coarser step than gameplay: the benchmark only needs the total finish time,
+  // not a smooth track, and time integrates over distance, so a bigger chunk is
+  // an unbiased (just rougher) estimate — and keeps race setup snappy on-device.
+  const step = Math.max(defaultStepNm(race) * 3, 1);
+  const start = marks[0];
+  let pos: GeoPoint = { lat: start.lat, lon: start.lon };
+  let nextMarkIndex = 1;
+  let elapsed = 0;
+  let distanceCoveredNm = 0;
+  let route = planRoute(boat, field, pos, marks, nextMarkIndex, 0, 0, land);
+  let heading = route.length > 1 ? brg(route[0], route[1]) : 0;
+  let routeWindDir = sampleWind(field, pos.lat, pos.lon, 0).fromDeg;
+  let routePlannedAtNm = 0;
+  for (let i = 0; i < 8000; i += 1) {
+    const wind = sampleWind(field, pos.lat, pos.lon, elapsed);
+    const speed = boatSpeedFor(boat, condition, heading, wind, effortMul, skillMul);
+    const adv = advanceAlongRoute(route, step);
+    pos = adv.pos;
+    let rounded = false;
+    if (nextMarkIndex < marks.length) {
+      const m = marks[nextMarkIndex];
+      if (haversineNm(pos.lat, pos.lon, m.lat, m.lon) < Math.max(step, 1.5)) {
+        nextMarkIndex += 1;
+        rounded = true;
+      }
+    }
+    const remaining = geometricRemaining(marks, pos, nextMarkIndex);
+    const prevCovered = distanceCoveredNm;
+    distanceCoveredNm = clamp(total - remaining, 0, total);
+    elapsed += step / speed;
+    // Carry the same wear the player would, on an unprovisioned cruise, so the
+    // benchmark reflects a real finish (a worn boat slows) — not an ideal one.
+    const df = total > 0 ? Math.max(distanceCoveredNm - prevCovered, 0) / total : 0;
+    const weather = weatherFromWind(wind);
+    condition.crewStamina = clamp(condition.crewStamina - df * (28 + weather.riskModifier * 45) * wearMul);
+    condition.crewMorale = clamp(condition.crewMorale - df * (10 + weather.riskModifier * 40));
+    condition.hullIntegrity = clamp(condition.hullIntegrity - df * (6 + weather.riskModifier * 40) * wearMul);
+    if (nextMarkIndex >= marks.length || remaining < 0.5) break;
+
+    route = adv.route;
+    const movedSincePlan = distanceCoveredNm - routePlannedAtNm;
+    const shifted = angularDelta(wind.fromDeg, routeWindDir) > REROUTE_SHIFT_DEG;
+    const wantReroute =
+      rounded ||
+      route.length < 2 ||
+      (shifted && movedSincePlan > total * 0.03) ||
+      movedSincePlan > total * 0.1;
+    if (wantReroute) {
+      route = planRoute(boat, field, pos, marks, nextMarkIndex, elapsed, 0, land);
+      routeWindDir = wind.fromDeg;
+      routePlannedAtNm = distanceCoveredNm;
+    }
+    heading = route.length > 1 ? brg(route[0], route[1]) : adv.heading;
+  }
+  return elapsed > 0 ? elapsed : race.recordTimeHours * 1.5;
+}
+
+// The benchmark finish time the AI fleet is paced around: the player's own boat
+// sailed a clean cruise on the weather-optimal line, via the SAME tick model the
+// player sails (`cleanRunHours`). Anchoring on the player's boat self-calibrates
+// per course AND per boat, so the fleet is a genuine fight whatever you charter
+// — a runner-up cruiser doesn't get lapped, a maxi doesn't sail away. The edge
+// from a sharper crew, harder effort or a better-rated boat then shows where it
+// should: ground made on the field and on corrected (handicap) time.
+export function fleetBenchmarkHours(race: Race, field: WindField, boat?: Boat): number {
+  const ref = boat ?? getBoatById('boat-corsair');
   if (!ref) return race.recordTimeHours * 2.4;
-  const start = race.waypoints[0];
-  const route = planRoute(
-    ref,
-    field,
-    { lat: start.lat, lon: start.lon },
-    race.waypoints,
-    1,
-    0,
-    0,
-    LANDMASSES[race.id]
-  );
-  const hours = estimateRouteHours(
-    ref,
-    { hullIntegrity: 100, crewStamina: 100, crewMorale: 100 },
-    route,
-    field,
-    0,
-    EFFORT_SPEED.cruise,
-    crewSkillFactor(DEFAULT_CREW_SKILL)
-  );
-  return hours > 0 ? hours : race.recordTimeHours * 2.4;
+  return cleanRunHours(race, ref, field);
 }
 
 // Geometric distance still to sail toward the finish (mark to mark, ignoring
