@@ -887,17 +887,32 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
     EFFORT_SPEED[strategy.effort],
     skillMul
   );
-  // Tide sets the boat over the ground: a fair stream speeds your progress to the
-  // mark, a foul one drags it. Measured along the bearing to the next mark (not
-  // the heading) so it matches the fleet exactly — beating into a foul tide costs
-  // the player and the fleet the same, keeping the standings fair.
+  // Through-water time for this step: the boat sails `stepNm` along its route at
+  // its polar speed. Tide is applied separately as set & drift below — NOT baked
+  // into this speed — so a fair/foul stream acts over *time*, not over the
+  // tack-inflated route distance, which keeps its effect the same size as the
+  // fleet's (which drifts along the course). That's what makes tide fair.
+  const dtHours = stepNm / Math.max(speed, 0.3);
+
+  const adv = advanceAlongRoute(prev.route, stepNm);
+  // Set & drift: the tide carries the boat over the ground toward the next mark by
+  // rate × time. A fair stream nudges it on, a foul one sets it back; the route
+  // (planned through the water) is unchanged. The fleet drifts the same way along
+  // its course, so beating into a foul tide costs the player and the fleet alike.
   const tideMark = marks[Math.min(prev.nextMarkIndex, marks.length - 1)];
   const courseToMark = brg(prev, tideMark);
   const tide = tideAlong(state.tidalField, prev.lat, prev.lon, prev.elapsedHours, courseToMark);
-  const groundSpeed = Math.max(speed + tide, 0.3);
-  const dtHours = stepNm / groundSpeed;
-
-  const adv = advanceAlongRoute(prev.route, stepNm);
+  const driftNm = tide * dtHours;
+  if (Math.abs(driftNm) > 1e-9) {
+    const set = driftNm >= 0 ? courseToMark : (courseToMark + 180) % 360;
+    // Mutate the position in place: `adv.pos` and `adv.route[0]` are the same
+    // object, so this also moves the route's start — the next step sails on from
+    // the drifted point and the set accumulates over the race, exactly as the
+    // fleet's tide accumulates into its progress.
+    const drifted = movePoint(adv.pos.lat, adv.pos.lon, set, Math.abs(driftNm));
+    adv.pos.lat = drifted.lat;
+    adv.pos.lon = drifted.lon;
+  }
 
   // Mark rounding.
   let nextMarkIndex = prev.nextMarkIndex;

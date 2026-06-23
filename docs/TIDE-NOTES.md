@@ -5,12 +5,36 @@ The tidal-current **engine** is built and tested (`src/engine/current.ts`,
 `advanceFleet`, and `GameContext`). It is **dormant**: no race ships a `tide`
 profile, so `createTidalField` returns a slack field and the game (and the tuned
 fleet balance) is unchanged. `current.test.ts` covers the field, the fair/foul
-projection, the ETA integration and the live `stepRace` wiring.
+projection, the ETA integration, the live `stepRace` wiring and — since the
+fairness fix below — that tide does not systematically shift the standings.
 
-## Why it isn't switched on yet
+## Fairness — SOLVED (the fleet now sails the player's model)
 
-Enabling a felt tide on a race keeps **skewing the fleet standings**, and the
-cause is now understood (measured, not guessed):
+The standings skew is fixed. Two coordinated changes made the player and the
+fleet respond to the stream identically, so it cancels:
+
+- **Fleet** (`advanceFleet`): each boat now makes good the **reference polar's
+  absolute speed in the real wind** (no normalising clamp), scaled by a per-boat
+  `paceScale` calibrated against the reference boat's tide-free made-good finish
+  (`refMadeGoodHours`). The tide-free finish still lands on target, so the #42
+  balance is preserved, but the fleet's speed now swings between light and fresh
+  air exactly as the player's does — which is what makes its tide sensitivity
+  match.
+- **Player** (`stepRace`): tide is applied as **set & drift** — it carries the
+  boat over the ground by rate × time (mutating the route's start so the set
+  accumulates), not folded into the tack-inflated route step. This stops the old
+  ±6 h over-amplification.
+
+Measured (Round the Island, peak 1.5 kn, Needles/St Catherine's gates, 6 seeds,
+boat-tempest pro): mean corrected placing moved 35.2 → 42.8 — a small, safe-side
+shift (tide makes it marginally harder, never an automatic win), versus the old
+runaway. What remains is genuine, high-variance gate tactics. Guarded by the
+`tide is fair in the standings` test.
+
+## History — why it was hard (kept for context)
+
+Earlier the felt tide kept **skewing the fleet standings**; the cause (measured,
+not guessed):
 
 - The player sails a **2-D routed track** (tacks, reroutes) at real polar speed.
 - The AI fleet holds a **calibrated made-good pace** along the course.
@@ -24,42 +48,29 @@ Catherine's): the player's net-tide effect on finish time swung roughly
 mismatch tracks how much of the flood/ebb cycle each side spans before
 finishing.
 
-### Models tried (all skewed the standings)
+### Models tried before the fix (all skewed the standings)
 
 1. Tide baked into the benchmark → a fast boat finished **last on corrected**.
 2. Symmetric live tide along heading → **everyone wins**.
 3. Symmetric along course → **bimodal** (1st or last by seed).
-4. 2-D made-good fleet + course tide → **runaway**.
-5. Player **set & drift** (tide as drift over time, not route distance) — more
-   physically correct and reduces some seeds, but still a runaway/bimodal,
-   because the fleet's made-good pace still spans the cycle differently.
+4. 2-D made-good fleet (normalised, clamped windFactor) + course tide → **runaway**.
+5. Player set & drift alone (fleet still made-good-paced) → still runaway/bimodal,
+   because the clamped pace didn't swing with the wind like the player's speed.
 
-## The path that should work
+The fix (above) was #5's set & drift **plus** giving the fleet the reference
+polar's *unclamped absolute* speed, so both sides' tide sensitivity matches.
 
-Move the **AI fleet through the same engine the player sails** so their tide
-exposure matches by construction:
+## What remains: enable it on a race (the playable feature)
 
-- Each competitor gets a real position and weather-routes per leg (cheap
-  isochrone or a shared per-side route), advancing via the reference polar in the
-  local wind **plus the same set & drift** the player gets.
-- Closed-form calibration keeps difficulty intact: sail the reference polar
-  scaled by `paceScale = speedMul / edge`, which makes the tide-free finish land
-  on the existing `targetHours` (so the #42 balance is preserved).
-- With player and fleet on one model, tide cancels in the standings; gates and
-  timing become genuine, fair tactics.
+The engine is fair; switching tide on is now a content + UI task:
 
-This also lays the groundwork for the **2-D fleet leverage** Phase 2 item.
-
-## When enabling, also ship (so tide is legible and playable)
-
+- Add a `tide` profile to **Round the Island** (the Solent is tide-dominated) —
+  start from the worked profile below and tune `peakRateKn` so the gate stakes
+  feel right without over-random results.
 - A **tide readout** (set, rate, fair/foul) in the race instruments + briefing.
-- **Current arrows** on the chart (`RouteMap`).
-- Re-validate the full boat × race × division × phase balance matrix with tide
-  **on** and **off** before turning a race's profile live.
-
-## Suggested first race to enable
-
-Round the Island (the Solent is tide-dominated). A worked profile to start from:
+- **Current arrows** on the chart (`RouteMap`), reusing `sampleCurrent`.
+- Re-check the `tide is fair in the standings` test (and spot-check other boats)
+  with the live profile before shipping.
 
 ```ts
 tide: {

@@ -433,6 +433,7 @@ export interface Competitor {
   speedMul: number; // pace multiplier vs the fleet benchmark (higher = quicker boat)
   ratingTcc: number; // handicap rating (corrected = elapsed × TCC), correlated with pace
   targetHours: number; // benchmark finish time for this boat (course ÷ this sets its pace)
+  paceScale?: number; // calibration: reference made-good speed × this hits targetHours (memoised on first step)
   bias?: number; // -1..1: which side of the course this boat favours
   distanceNm: number; // geometric distance covered along the course
   finishedHours: number | null; // elapsed time at finish, or null if still racing
