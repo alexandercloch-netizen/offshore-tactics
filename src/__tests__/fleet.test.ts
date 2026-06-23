@@ -68,7 +68,7 @@ describe('fleet racing dynamics', () => {
       setRng(mulberry32(31));
       const f = createWindField(race);
       let fleet = createFleet(race, race.divisions.pro);
-      for (let i = 0; i < 25; i += 1) fleet = advanceFleet(fleet, race, boat, f, i, 1);
+      for (let i = 0; i < 25; i += 1) fleet = advanceFleet(fleet, race, f, i, 1);
       return fleet.map((c) => Math.round(c.distanceNm));
     };
     expect(run()).toEqual(run());
@@ -85,7 +85,7 @@ describe('fleet racing dynamics', () => {
     const sim = (flip: boolean) => {
       setRng(mulberry32(42));
       let fleet: Competitor[] = base.map((c) => ({ ...c, bias: (flip ? -1 : 1) * (c.bias ?? 0) }));
-      for (let i = 0; i < 40; i += 1) fleet = advanceFleet(fleet, race, boat, f, i, 1);
+      for (let i = 0; i < 40; i += 1) fleet = advanceFleet(fleet, race, f, i, 1);
       return fleet.map((c) => Math.round(c.distanceNm * 100));
     };
 
@@ -112,7 +112,7 @@ describe('advanceFleet', () => {
     let fleet = createFleet(race, race.divisions.pro);
     const field = steady(240, 16);
     for (let i = 0; i < 20; i += 1) {
-      fleet = advanceFleet(fleet, race, boat, field, i * 2, 2);
+      fleet = advanceFleet(fleet, race, field, i * 2, 2);
     }
     expect(fleet.every((c) => c.distanceNm > 0 || c.retired)).toBe(true);
     const fastest = [...fleet].sort((a, b) => b.speedMul - a.speedMul)[0];
@@ -124,9 +124,9 @@ describe('advanceFleet', () => {
 
   it('records a finish time when a competitor completes the course', () => {
     const fleet: Competitor[] = [
-      { id: 'a', name: 'A', speedMul: 1, ratingTcc: 1, distanceNm: race.distanceNm - 1, finishedHours: null, retired: false },
+      { id: 'a', name: 'A', speedMul: 1, ratingTcc: 1, targetHours: 100, distanceNm: race.distanceNm - 1, finishedHours: null, retired: false },
     ];
-    const advanced = advanceFleet(fleet, race, boat, steady(240, 16), 10, 5);
+    const advanced = advanceFleet(fleet, race, steady(240, 16), 10, 5);
     expect(advanced[0].finishedHours).not.toBeNull();
     expect(advanced[0].distanceNm).toBe(race.distanceNm);
   });
@@ -134,9 +134,9 @@ describe('advanceFleet', () => {
 
 describe('standings', () => {
   const fleet: Competitor[] = [
-    { id: 'a', name: 'A', speedMul: 1, ratingTcc: 1, distanceNm: 300, finishedHours: null, retired: false },
-    { id: 'b', name: 'B', speedMul: 1, ratingTcc: 1, distanceNm: 100, finishedHours: null, retired: false },
-    { id: 'c', name: 'C', speedMul: 1, ratingTcc: 1, distanceNm: 0, finishedHours: null, retired: true },
+    { id: 'a', name: 'A', speedMul: 1, ratingTcc: 1, targetHours: 100, distanceNm: 300, finishedHours: null, retired: false },
+    { id: 'b', name: 'B', speedMul: 1, ratingTcc: 1, targetHours: 100, distanceNm: 100, finishedHours: null, retired: false },
+    { id: 'c', name: 'C', speedMul: 1, ratingTcc: 1, targetHours: 100, distanceNm: 0, finishedHours: null, retired: true },
   ];
 
   it('ranks the player by how many boats are ahead', () => {
@@ -147,8 +147,8 @@ describe('standings', () => {
 
   it('ranks the final finish by who crossed the line first', () => {
     const finished: Competitor[] = [
-      { id: 'a', name: 'A', speedMul: 1, ratingTcc: 1, distanceNm: race.distanceNm, finishedHours: 40, retired: false },
-      { id: 'b', name: 'B', speedMul: 1, ratingTcc: 1, distanceNm: race.distanceNm, finishedHours: 52, retired: false },
+      { id: 'a', name: 'A', speedMul: 1, ratingTcc: 1, targetHours: 100, distanceNm: race.distanceNm, finishedHours: 40, retired: false },
+      { id: 'b', name: 'B', speedMul: 1, ratingTcc: 1, targetHours: 100, distanceNm: race.distanceNm, finishedHours: 52, retired: false },
     ];
     expect(finalPosition(finished, 48)).toBe(2); // beat B, lost to A
   });
@@ -156,9 +156,9 @@ describe('standings', () => {
   it('corrected time can beat a faster boat on handicap', () => {
     const finished: Competitor[] = [
       // Faster across the line (40h) but rates high, so it owes time: corrected 52h.
-      { id: 'a', name: 'A', speedMul: 1.2, ratingTcc: 1.3, distanceNm: race.distanceNm, finishedHours: 40, retired: false },
+      { id: 'a', name: 'A', speedMul: 1.2, ratingTcc: 1.3, targetHours: 100, distanceNm: race.distanceNm, finishedHours: 40, retired: false },
       // Slower across the line (50h), rates 1.0: corrected 50h.
-      { id: 'b', name: 'B', speedMul: 0.9, ratingTcc: 1.0, distanceNm: race.distanceNm, finishedHours: 50, retired: false },
+      { id: 'b', name: 'B', speedMul: 0.9, ratingTcc: 1.0, targetHours: 100, distanceNm: race.distanceNm, finishedHours: 50, retired: false },
     ];
     expect(finalPosition(finished, 48)).toBe(2); // 2nd on the water (A ahead)
     expect(correctedPosition(finished, race.distanceNm, 48, 1.0)).toBe(1); // 1st on handicap
@@ -167,7 +167,7 @@ describe('standings', () => {
   it('projects an unfinished boat from its pace for corrected standings', () => {
     const stillRacing: Competitor[] = [
       // Half the course done when the player finishes → projects to ~2× elapsed.
-      { id: 'a', name: 'A', speedMul: 1, ratingTcc: 1, distanceNm: race.distanceNm / 2, finishedHours: null, retired: false },
+      { id: 'a', name: 'A', speedMul: 1, ratingTcc: 1, targetHours: 100, distanceNm: race.distanceNm / 2, finishedHours: null, retired: false },
     ];
     expect(correctedPosition(stillRacing, race.distanceNm, 50, 1.0)).toBe(1);
   });
@@ -176,9 +176,9 @@ describe('standings', () => {
 describe('competitorPoints', () => {
   it('maps racing competitors to coordinates and omits finished/retired', () => {
     const fleet: Competitor[] = [
-      { id: 'a', name: 'A', speedMul: 1, ratingTcc: 1, distanceNm: 200, finishedHours: null, retired: false },
-      { id: 'b', name: 'B', speedMul: 1, ratingTcc: 1, distanceNm: 200, finishedHours: 30, retired: false },
-      { id: 'c', name: 'C', speedMul: 1, ratingTcc: 1, distanceNm: 200, finishedHours: null, retired: true },
+      { id: 'a', name: 'A', speedMul: 1, ratingTcc: 1, targetHours: 100, distanceNm: 200, finishedHours: null, retired: false },
+      { id: 'b', name: 'B', speedMul: 1, ratingTcc: 1, targetHours: 100, distanceNm: 200, finishedHours: 30, retired: false },
+      { id: 'c', name: 'C', speedMul: 1, ratingTcc: 1, targetHours: 100, distanceNm: 200, finishedHours: null, retired: true },
     ];
     const pts = competitorPoints(fleet, race);
     expect(pts).toHaveLength(1);

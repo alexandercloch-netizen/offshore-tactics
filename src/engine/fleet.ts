@@ -22,16 +22,26 @@ function gaussish(): number {
 const clamp = (v: number, min: number, max: number): number =>
   Math.max(min, Math.min(max, v));
 
-// Build the AI fleet (everyone but the player). Faster, tighter fleets in the
-// pro division; slower and more spread out for Corinthian.
-export function createFleet(race: Race, division: RaceDivision): Competitor[] {
+// Build the AI fleet (everyone but the player). Each boat is paced to a target
+// finish time built from the race benchmark (a reference boat's clean run on the
+// optimal line — the SAME route-based model the player effectively sails, so the
+// difficulty is consistent across courses) divided by a per-boat pace multiplier.
+// `benchmarkHours` is computed at race setup; without it we fall back to a
+// record-based estimate so tests and legacy callers still work.
+export function createFleet(race: Race, division: RaceDivision, benchmarkHours?: number): Competitor[] {
   const count = Math.max(division.fleetSize - 1, 0);
-  const mean = 1.02 - (division.paceTarget - 1) * 0.5;
-  const spread = Math.max((division.paceTarget - 1) * 0.4, 0.04);
+  const bench = benchmarkHours ?? race.recordTimeHours * 2.4;
+  // Median fleet pace vs the benchmark, by division: a Corinthian club fleet
+  // sails a touch under benchmark pace (so a decent skipper contends), the Pro
+  // fleet a touch over (so it stays a fight even in a fast boat). Wide spread so
+  // a boat's standing tracks its pace, not puff luck.
+  const mean = division.paceTarget >= 1.15 ? 0.97 : 1.06;
+  // Wider, more mixed pace in a Corinthian club fleet; tighter among the pros.
+  const spread = 0.08 + (division.paceTarget - 1) * 0.22;
   const fleet: Competitor[] = [];
   for (let i = 0; i < count; i += 1) {
     const name = NAMES[i % NAMES.length] + (i >= NAMES.length ? ` ${Math.floor(i / NAMES.length) + 1}` : '');
-    const speedMul = clamp(mean + gaussish() * spread, 0.7, 1.12);
+    const speedMul = clamp(mean + gaussish() * spread, 0.7, 1.3);
     fleet.push({
       id: `ai-${race.id}-${i}`,
       name,
@@ -40,6 +50,7 @@ export function createFleet(race: Race, division: RaceDivision): Competitor[] {
       // correlation (<1) means raw pace is mostly, not fully, neutralised, so
       // corrected standings turn on how well a boat sails its rating.
       ratingTcc: clamp(1 + (speedMul - 1) * 0.85 + gaussish() * 0.025, 0.85, 1.45),
+      targetHours: bench / speedMul,
       // Each boat commits to a side of the course; combined with the live wind
       // it decides who gains and who loses, so the standings shuffle.
       bias: rndRange(-1, 1),
@@ -79,15 +90,14 @@ function favouredSide(
   return cross * (hint.strong ? 1 : 0.5);
 }
 
-// Advance every competitor by the time elapsed this step, reading the same wind
-// field as the player. Each boat's made-good speed is its skill (speedMul),
-// times a bonus for being on the favoured side of the course, times a little
-// puff-luck variance — so positions change through the race rather than staying
-// frozen in skill order. Pure given the RNG (variance + retirement rolls).
+// Advance every competitor by the time elapsed this step. Each boat holds its
+// benchmark pace (course ÷ targetHours), nudged by the local breeze and by
+// whether it's on the favoured side — so the field breathes and the standings
+// shuffle through the race rather than sitting frozen in pace order. The mean
+// nudge is ~1, so the per-boat target pace sets the difficulty. Pure given RNG.
 export function advanceFleet(
   fleet: Competitor[],
   race: Race,
-  boat: Boat,
   field: WindField,
   startHours: number,
   dtHours: number
@@ -102,12 +112,14 @@ export function advanceFleet(
     const fraction = clamp(c.distanceNm / total, 0, 1);
     const tp = pointAtFraction(race.waypoints, fraction);
     const wind = sampleWind(field, tp.lat, tp.lon, startHours);
-    const base = madeGoodSpeed(boat, tp.bearing, wind.fromDeg, wind.speedKn);
-    // Reward backing the right side, and add a small element of luck.
+    // Hold the benchmark pace (course ÷ targetHours), nudged only by mean-1
+    // factors so the overall difficulty is unchanged: a bonus for backing the
+    // favoured side (the tactical shuffle) and a touch of puff luck.
+    const pace = total / Math.max(c.targetHours, 1e-6);
     const align = (c.bias ?? 0) * favouredSide(field, tp.lat, tp.lon, startHours, axisDeg);
-    const sideBonus = 1 + 0.07 * align;
-    const variance = 1 + gaussish() * 0.04;
-    const smg = Math.max(base * c.speedMul * sideBonus * variance, 0.2);
+    const sideBonus = 1 + 0.1 * align;
+    const variance = 1 + gaussish() * 0.05;
+    const smg = Math.max(pace * sideBonus * variance, 0.2);
 
     // Rare retirement, more likely when it is blowing hard.
     if (rnd() < 0.00025 * dtHours * (1 + wind.speedKn / 20)) {

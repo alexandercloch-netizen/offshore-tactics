@@ -389,8 +389,9 @@ export interface RaceProgress {
 export interface Competitor {
   id: string;
   name: string;
-  speedMul: number; // skill multiplier on made-good speed
+  speedMul: number; // pace multiplier vs the fleet benchmark (higher = quicker boat)
   ratingTcc: number; // handicap rating (corrected = elapsed × TCC), correlated with pace
+  targetHours: number; // benchmark finish time for this boat (course ÷ this sets its pace)
   bias?: number; // -1..1: which side of the course this boat favours
   distanceNm: number; // geometric distance covered along the course
   finishedHours: number | null; // elapsed time at finish, or null if still racing
