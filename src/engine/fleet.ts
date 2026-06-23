@@ -22,28 +22,45 @@ function gaussish(): number {
 const clamp = (v: number, min: number, max: number): number =>
   Math.max(min, Math.min(max, v));
 
+// A mid-fleet cruiser-racer's baseline speed: the yardstick a chartered boat is
+// measured against for the on-water edge below. (Matches boat-corsair, our
+// documented reference.)
+const REF_BASE_SPEED = 8.6;
+
 // Build the AI fleet (everyone but the player). Each boat is paced to a target
-// finish time built from the race benchmark (a reference boat's clean run on the
-// optimal line — the SAME route-based model the player effectively sails, so the
-// difficulty is consistent across courses) divided by a per-boat pace multiplier.
-// `benchmarkHours` is computed at race setup; without it we fall back to a
-// record-based estimate so tests and legacy callers still work.
-export function createFleet(race: Race, division: RaceDivision, benchmarkHours?: number): Competitor[] {
+// finish time built from the race benchmark (a clean run of the player's own
+// boat — the SAME tick model the player sails, so difficulty is consistent
+// across courses and boats) divided by a per-boat pace multiplier. `benchmarkHours`
+// is computed at race setup; without it we fall back to a record-based estimate
+// so tests and legacy callers still work.
+export function createFleet(
+  race: Race,
+  division: RaceDivision,
+  benchmarkHours?: number,
+  playerBoat?: Boat
+): Competitor[] {
   const count = Math.max(division.fleetSize - 1, 0);
   const bench = benchmarkHours ?? race.recordTimeHours * 2.4;
   // The benchmark is a bare cruise finish in the player's own boat (see
-  // `cleanRunHours`), so it already tracks boat and course. Pace the fleet around
-  // it by division: a Corinthian club fleet sails a touch under benchmark pace,
-  // so a clean amateur sail lands upper-mid and a *sharp* one (better crew, more
-  // effort, good calls — all faster than the bare benchmark) fights for the
-  // podium; the Pro fleet sits right on it, so that sharp sail is the price of
-  // contending. Anchoring on the player's boat keeps every race a fight whatever
-  // you charter — raw boat speed pays off on corrected (handicap) time, not by
-  // lapping the fleet.
+  // `cleanRunHours`), so the fleet already tracks boat and course. Pace it around
+  // the benchmark by division: a Corinthian club fleet sails a touch under
+  // benchmark pace, so a clean amateur sail lands upper-mid and a *sharp* one
+  // (better crew, more effort, good calls — all faster than the bare benchmark)
+  // fights for the podium; the Pro fleet sits right on it, so that sharp sail is
+  // the price of contending.
   const pro = division.paceTarget < 1.15;
   const mean = pro ? 1.02 : 0.95;
   // A tight, fast pro fleet; a wider, more mixed club fleet.
   const spread = pro ? 0.1 : 0.14;
+  // A modest, bounded on-water edge for the boat you bring: a quicker hull faces
+  // a slightly slower-paced fleet (and a slow one a quicker fleet), so chartering
+  // up genuinely pays on the water — but only a little, capped at ±~10%, so it
+  // never becomes a runaway. Raw speed still pays off most on corrected time,
+  // where a fast boat owes its rating. No boat given → no edge (legacy/tests).
+  const edge = playerBoat
+    ? clamp(1 + (playerBoat.baseSpeed / REF_BASE_SPEED - 1) * 0.4, 0.9, 1.12)
+    : 1;
+  const pacedBench = bench * edge;
   const fleet: Competitor[] = [];
   for (let i = 0; i < count; i += 1) {
     const name = NAMES[i % NAMES.length] + (i >= NAMES.length ? ` ${Math.floor(i / NAMES.length) + 1}` : '');
@@ -56,7 +73,7 @@ export function createFleet(race: Race, division: RaceDivision, benchmarkHours?:
       // correlation (<1) means raw pace is mostly, not fully, neutralised, so
       // corrected standings turn on how well a boat sails its rating.
       ratingTcc: clamp(1 + (speedMul - 1) * 0.85 + gaussish() * 0.025, 0.85, 1.45),
-      targetHours: bench / speedMul,
+      targetHours: pacedBench / speedMul,
       // Each boat commits to a side of the course; combined with the live wind
       // it decides who gains and who loses, so the standings shuffle.
       bias: rndRange(-1, 1),

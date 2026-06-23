@@ -65,7 +65,7 @@ function baseState(overrides: Partial<GameState> = {}): GameState {
     condition: healthy,
     weather,
     windField,
-    fleet: createFleet(race, raceDivision(race, division), fleetBenchmarkHours(race, windField)),
+    fleet: createFleet(race, raceDivision(race, division), fleetBenchmarkHours(race, windField, boat), boat),
     strategy: DEFAULT_STRATEGY,
     profile: { fleet: [] },
     progress: initialProgress(race, boat, division, windField),
