@@ -1,0 +1,166 @@
+import { createTidalField, sampleCurrent, currentAlong, tideAlong } from '../engine/current';
+import {
+  EFFORT_SPEED,
+  defaultStepNm,
+  estimateRouteHours,
+  initialProgress,
+  raceDivision,
+  stepRace,
+} from '../engine/gameEngine';
+import { createFleet } from '../engine/fleet';
+import { createWindField, sampleWind, weatherFromWind } from '../engine/wind';
+import { getRaceById, getBoatById } from '../data';
+import { mulberry32, resetRng, setRng } from '../engine/rng';
+import { BoatCondition, GameState, GeoPoint, TidalField, WindField } from '../types';
+
+afterEach(() => resetRng());
+
+const healthy: BoatCondition = { hullIntegrity: 100, crewStamina: 100, crewMorale: 100 };
+
+// A steady, uniform wind so boat speed is constant and the tide is the only
+// variable in the ETA tests below.
+function steadyWind(fromDeg: number, speedKn: number): WindField {
+  return {
+    baseDir: fromDeg,
+    baseSpeed: speedKn,
+    shiftAmpDeg: 0,
+    shiftPeriodH: 6,
+    shiftPhase: 0,
+    rotateDegPerH: 0,
+    gradientAxisDeg: 0,
+    gradientPerNm: 0,
+    refLat: 50,
+    refLon: -1,
+    feature: { lat: 0, lon: 0, radiusNm: 1, deltaKn: 0, driftDir: 0, driftKn: 0 },
+  };
+}
+
+// A tide that holds near peak strength over a short race: a very long period with
+// the phase parked at the quarter-cycle (sin ≈ 1), so `floodDeg` is effectively a
+// constant set — handy for isolating fair vs foul.
+function steadyTide(floodDeg: number, peakRateKn: number): TidalField {
+  return { floodDeg, peakRateKn, periodH: 1e6, phaseH: 2.5e5, gates: [], refLat: 50, refLon: -1 };
+}
+
+describe('sampleCurrent', () => {
+  const field: TidalField = { floodDeg: 90, peakRateKn: 3, periodH: 12, phaseH: 0, gates: [], refLat: 50, refLon: -1 };
+
+  it('is slack at the start of the cycle, floods at the quarter, ebbs at three-quarters', () => {
+    expect(sampleCurrent(field, 50, -1, 0).rateKn).toBeCloseTo(0, 5);
+
+    const flood = sampleCurrent(field, 50, -1, 3); // quarter period
+    expect(flood.rateKn).toBeCloseTo(3, 1);
+    expect(flood.setDeg).toBe(90); // flooding toward floodDeg
+
+    const ebb = sampleCurrent(field, 50, -1, 9); // three-quarter period
+    expect(ebb.rateKn).toBeCloseTo(3, 1);
+    expect(ebb.setDeg).toBe(270); // ebbing the opposite way
+  });
+
+  it('runs harder inside a tide gate', () => {
+    const gated: TidalField = { ...field, gates: [{ lat: 50, lon: -1, radiusNm: 5, gain: 1 }] };
+    const open = sampleCurrent(field, 50, -1, 3).rateKn;
+    const atGate = sampleCurrent(gated, 50, -1, 3).rateKn;
+    expect(atGate).toBeGreaterThan(open);
+    expect(atGate).toBeCloseTo(open * 2, 1); // gain 1 → double at the centre
+    // Outside the gate radius it's back to the open-water rate.
+    const farLat = 50 + 20 / 60; // ~20nm north
+    expect(sampleCurrent(gated, farLat, -1, 3).rateKn).toBeCloseTo(open, 1);
+  });
+
+  it('is exactly slack when the field has no rate', () => {
+    const slack: TidalField = { ...field, peakRateKn: 0 };
+    expect(sampleCurrent(slack, 50, -1, 3).rateKn).toBe(0);
+  });
+});
+
+describe('currentAlong / tideAlong', () => {
+  it('is fair with the heading, foul against it, nil across it', () => {
+    const flood = { setDeg: 90, rateKn: 3 };
+    expect(currentAlong(flood, 90)).toBeCloseTo(3, 5); // dead fair
+    expect(currentAlong(flood, 270)).toBeCloseTo(-3, 5); // dead foul
+    expect(currentAlong(flood, 0)).toBeCloseTo(0, 5); // abeam
+  });
+
+  it('tideAlong is zero for a slack or absent field', () => {
+    expect(tideAlong(undefined, 50, -1, 3, 90)).toBe(0);
+    expect(tideAlong(steadyTide(90, 0), 50, -1, 3, 90)).toBe(0);
+  });
+});
+
+describe('createTidalField', () => {
+  // A race carrying a tide profile (none ship one yet — the field is dormant in
+  // game — so build a representative one to prove the resolver works).
+  const tidalRace = {
+    ...getRaceById('race-round-island')!,
+    tide: {
+      floodDeg: 90,
+      peakRateKn: 1.5,
+      gates: [{ waypoint: 'The Needles', gain: 0.5, radiusNm: 4 }],
+    },
+  };
+
+  it('resolves a race tide profile, gates and all', () => {
+    setRng(mulberry32(1));
+    const field = createTidalField(tidalRace);
+    expect(field.peakRateKn).toBeCloseTo(1.5, 5);
+    expect(field.gates.length).toBe(1);
+    // Gates resolve to their marks' coordinates.
+    const needles = tidalRace.waypoints.find((w) => w.name === 'The Needles')!;
+    expect(field.gates.some((g) => Math.abs(g.lat - needles.lat) < 1e-9)).toBe(true);
+  });
+
+  it('is slack for a race with no tide profile', () => {
+    const race = getRaceById('race-caribbean-600')!;
+    const field = createTidalField(race);
+    expect(field.peakRateKn).toBe(0);
+  });
+});
+
+describe('tide changes the ETA (engine integration)', () => {
+  it('a fair tide is faster than slack, a foul tide slower', () => {
+    const boat = getBoatById('boat-mistral')!;
+    const wind = steadyWind(90, 14); // beam reach, constant
+    const route: GeoPoint[] = [
+      { lat: 50, lon: -1 },
+      { lat: 50.5, lon: -1 }, // due north, ~30nm
+    ];
+    const none = estimateRouteHours(boat, healthy, route, wind, 0, EFFORT_SPEED.cruise, 1);
+    const fair = estimateRouteHours(boat, healthy, route, wind, 0, EFFORT_SPEED.cruise, 1, undefined, steadyTide(0, 3));
+    const foul = estimateRouteHours(boat, healthy, route, wind, 0, EFFORT_SPEED.cruise, 1, undefined, steadyTide(180, 3));
+    expect(fair).toBeLessThan(none);
+    expect(foul).toBeGreaterThan(none);
+  });
+
+  it('a running tide changes the live race finish (stepRace wiring)', () => {
+    const finish = (tide: TidalField | undefined): number => {
+      setRng(mulberry32(4));
+      const race = getRaceById('race-round-island')!;
+      const boat = getBoatById('boat-mistral')!;
+      const windField = createWindField(race);
+      const start = race.waypoints[0];
+      let s = {
+        funds: 1e6, selectedRaceId: race.id, selectedDivision: 'pro', selectedBoatId: boat.id,
+        ownedBoatIds: [boat.id], selectedCrewIds: [], provisions: [], condition: healthy,
+        weather: weatherFromWind(sampleWind(windField, start.lat, start.lon, 0)), windField,
+        tidalField: tide, fleet: createFleet(race, raceDivision(race, 'pro')),
+        strategy: { bias: 0, effort: 'cruise' }, profile: { fleet: [] },
+        progress: initialProgress(race, boat, 'pro', windField), history: [], eventLog: [],
+      } as unknown as GameState;
+      const step = defaultStepNm(race) * 3;
+      let out = stepRace(s, step);
+      for (let i = 0; i < 4000; i += 1) {
+        out = stepRace(s, step);
+        s = { ...s, progress: out.progress, condition: out.condition, weather: out.weather, fleet: out.fleet };
+        if (out.finished || out.retired) break;
+      }
+      return out.progress.elapsedHours;
+    };
+    // A strong steady stream slows a closed lap overall (foul legs cost more time
+    // than fair legs save), so the finish must differ from slack water — proof the
+    // tide actually reaches the boat through the live loop.
+    const slack = finish(undefined);
+    const running = finish(steadyTide(90, 2.5));
+    expect(Math.abs(running - slack)).toBeGreaterThan(0.3);
+  });
+});

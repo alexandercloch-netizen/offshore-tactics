@@ -24,6 +24,7 @@ import {
   RoutingBias,
   StepResult,
   TacticalChoice,
+  TidalField,
   VmgPreview,
   Waypoint,
   WindField,
@@ -51,6 +52,7 @@ import { bestVmgAngles, polarSpeed } from './polar';
 import { effectivePolar } from './sails';
 import { createWindField, forecastConfidence, pressureHint, sampleWind, weatherFromWind } from './wind';
 import { clearPolyline, planRoute, WindSampler } from './router';
+import { tideAlong } from './current';
 import { LANDMASSES, LandPolygon } from '../data/landmasses';
 import { advanceFleet, correctedPosition, finalPosition, livePosition } from './fleet';
 
@@ -456,9 +458,12 @@ export function cleanRunHours(
   const wearMul = EFFORT_WEAR.cruise;
   const condition: BoatCondition = { hullIntegrity: 100, crewStamina: 100, crewMorale: 100 };
   const total = race.distanceNm;
-  // A coarser step than gameplay: the benchmark only needs the total finish time,
-  // not a smooth track, and time integrates over distance, so a bigger chunk is
-  // an unbiased (just rougher) estimate — and keeps race setup snappy on-device.
+  // A coarser step than gameplay keeps race setup snappy: the benchmark only
+  // needs the total finish time, not a smooth track, and time integrates over
+  // distance, so a bigger chunk is an unbiased (just rougher) estimate. The
+  // benchmark is deliberately tide-FREE — tide is applied symmetrically to the
+  // player and the fleet at race time, so it cancels in the standings and the
+  // delicate, tide-free balance is preserved.
   const step = Math.max(defaultStepNm(race) * 3, 1);
   const start = marks[0];
   let pos: GeoPoint = { lat: start.lat, lon: start.lon };
@@ -636,7 +641,8 @@ export function estimateRouteHours(
   startHours: number,
   effortMul = 1,
   skillMul = 1,
-  sample: WindSampler = sampleWind
+  sample: WindSampler = sampleWind,
+  tidalField?: TidalField
 ): number {
   if (route.length < 2) return 0;
   const CHUNK_NM = 6;
@@ -654,7 +660,8 @@ export function estimateRouteHours(
       const lon = a.lon + (b.lon - a.lon) * f;
       const wind = sample(field, lat, lon, hours);
       const sp = boatSpeedFor(boat, condition, heading, wind, effortMul, skillMul);
-      hours += segNm / chunks / sp;
+      const tide = tideAlong(tidalField, lat, lon, hours, heading);
+      hours += segNm / chunks / Math.max(sp + tide, 0.3);
     }
   }
   return hours - startHours;
@@ -880,7 +887,15 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
     EFFORT_SPEED[strategy.effort],
     skillMul
   );
-  const dtHours = stepNm / speed;
+  // Tide sets the boat over the ground: a fair stream speeds your progress to the
+  // mark, a foul one drags it. Measured along the bearing to the next mark (not
+  // the heading) so it matches the fleet exactly — beating into a foul tide costs
+  // the player and the fleet the same, keeping the standings fair.
+  const tideMark = marks[Math.min(prev.nextMarkIndex, marks.length - 1)];
+  const courseToMark = brg(prev, tideMark);
+  const tide = tideAlong(state.tidalField, prev.lat, prev.lon, prev.elapsedHours, courseToMark);
+  const groundSpeed = Math.max(speed + tide, 0.3);
+  const dtHours = stepNm / groundSpeed;
 
   const adv = advanceAlongRoute(prev.route, stepNm);
 
@@ -982,8 +997,10 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
     legStartNm: prev.legStartNm ?? 0,
   };
 
-  // Advance the AI fleet through the same elapsed time and wind, then rank.
-  const fleet = advanceFleet(state.fleet ?? [], race, field, prev.elapsedHours, dtHours);
+  // Advance the AI fleet through the same elapsed time, wind and tide, then rank.
+  // The fleet feels the same stream as the player (paced off a tide-free
+  // benchmark), so tide cancels in the standings and only sailing it better wins.
+  const fleet = advanceFleet(state.fleet ?? [], race, field, prev.elapsedHours, dtHours, state.tidalField);
   progress.position = finished
     ? finalPosition(fleet, elapsedHours)
     : livePosition(fleet, distanceCoveredNm);
@@ -1087,7 +1104,7 @@ export function applyDecision(state: GameState, choice: TacticalChoice): StepRes
   // While the player handles the decision, the fleet sails on — a costly call
   // can drop you down the standings.
   const fleet = state.windField
-    ? advanceFleet(state.fleet ?? [], race, state.windField, state.progress.elapsedHours, lostHours)
+    ? advanceFleet(state.fleet ?? [], race, state.windField, state.progress.elapsedHours, lostHours, state.tidalField)
     : (state.fleet ?? []);
   progress.position = livePosition(fleet, progress.distanceCoveredNm);
 

@@ -1,7 +1,8 @@
-import { Boat, Competitor, GeoPoint, Race, RaceDivision, WindField } from '../types';
+import { Boat, Competitor, GeoPoint, Race, RaceDivision, TidalField, WindField } from '../types';
 import { bearing, pointAtFraction } from './geo';
 import { bestVmgAngles, polarSpeed } from './polar';
 import { pressureHint, sampleWind } from './wind';
+import { tideAlong } from './current';
 import { rnd, rndRange } from './rng';
 
 // Evocative yacht names for the AI fleet.
@@ -132,7 +133,8 @@ export function advanceFleet(
   race: Race,
   field: WindField,
   startHours: number,
-  dtHours: number
+  dtHours: number,
+  tidalField?: TidalField
 ): Competitor[] {
   const total = race.distanceNm;
   const start = race.waypoints[0];
@@ -151,7 +153,14 @@ export function advanceFleet(
     const align = (c.bias ?? 0) * favouredSide(field, tp.lat, tp.lon, startHours, axisDeg);
     const sideBonus = 1 + 0.1 * align;
     const variance = 1 + gaussish() * 0.05;
-    const smg = Math.max(pace * sideBonus * variance, 0.2);
+    // The same tide the player fights, along the local course direction: a fair
+    // stream carries the whole fleet, a foul one holds it up. The benchmark is
+    // tide-free, so this cancels in the standings — it's shared weather, not a
+    // difficulty knob — but the fleet now surges and stalls with the player.
+    const ahead = pointAtFraction(race.waypoints, clamp(fraction + 0.01, 0, 1));
+    const courseDeg = bearing(tp.lat, tp.lon, ahead.lat, ahead.lon);
+    const tide = tideAlong(tidalField, tp.lat, tp.lon, startHours, courseDeg);
+    const smg = Math.max(pace * sideBonus * variance + tide, 0.2);
 
     // Rare retirement, more likely when it is blowing hard.
     if (rnd() < 0.00025 * dtHours * (1 + wind.speedKn / 20)) {
