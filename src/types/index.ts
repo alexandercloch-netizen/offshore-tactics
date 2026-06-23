@@ -131,6 +131,7 @@ export interface Boat {
   stability: number; // 0-100 resistance to heavy-weather damage
   crewCapacity: number; // max crew berths
   price: number; // purchase / commission cost
+  ratingTcc?: number; // IRC-style time correction coefficient (corrected = elapsed × TCC); derived if absent
 }
 
 // ---- Custom boats: real polar diagrams (TWA x TWS speed tables) ----
@@ -388,6 +389,7 @@ export interface Competitor {
   id: string;
   name: string;
   speedMul: number; // skill multiplier on made-good speed
+  ratingTcc: number; // handicap rating (corrected = elapsed × TCC), correlated with pace
   bias?: number; // -1..1: which side of the course this boat favours
   distanceNm: number; // geometric distance covered along the course
   finishedHours: number | null; // elapsed time at finish, or null if still racing
@@ -407,9 +409,11 @@ export interface RaceResult {
   boatId: string;
   finished: boolean;
   retired: boolean;
-  position: number;
+  position: number; // official finish on corrected (handicap) time
+  onWaterPosition?: number; // line-honours placing (boats physically ahead at the line)
   fleetSize: number;
-  elapsedHours: number;
+  elapsedHours: number; // time on the water
+  correctedHours?: number; // elapsed × the boat's rating — the handicap result
   prizeMoney: number;
   summary: string;
   timestamp: number;

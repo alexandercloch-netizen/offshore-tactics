@@ -160,8 +160,10 @@ missing piece fails loudly — `npm run tsc` and `npm test` are your checklist.
 
 **Add a boat** — append a `Boat` to `src/data/boats.ts` with a non-zero
 `crewCapacity` (or the crew screen blocks signing), a price, `baseSpeed`, and
-0–100 `upwind`/`downwind`/`stability`. Catalogue boats use the parametric polar;
-players build custom boats (real polars) via the Boat Builder.
+0–100 `upwind`/`downwind`/`stability`. Give it a realistic `ratingTcc` (IRC-style
+handicap; corrected time = elapsed × TCC — heavier/faster boats rate higher and
+owe time); custom builds derive one via `ratingTccFor`. Catalogue boats use the
+parametric polar; players build custom boats (real polars) via the Boat Builder.
 
 **Add crew** — append a `CrewMember` to `src/data/crew.ts` with a `tier`
 (`pro` | `corinthian`), a `role`, `age`/`homePort`/`bio` (keep the wit), and
