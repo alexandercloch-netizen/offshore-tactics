@@ -559,7 +559,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
     const fleet = createFleet(
       race,
       raceDivision(race, current.selectedDivision),
-      fleetBenchmarkHours(race, windField)
+      fleetBenchmarkHours(race, windField, boat)
     );
     dispatch({
       type: 'BEGIN_RACE',

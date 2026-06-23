@@ -31,13 +31,19 @@ const clamp = (v: number, min: number, max: number): number =>
 export function createFleet(race: Race, division: RaceDivision, benchmarkHours?: number): Competitor[] {
   const count = Math.max(division.fleetSize - 1, 0);
   const bench = benchmarkHours ?? race.recordTimeHours * 2.4;
-  // Median fleet pace vs the benchmark, by division: a Corinthian club fleet
-  // sails a touch under benchmark pace (so a decent skipper contends), the Pro
-  // fleet a touch over (so it stays a fight even in a fast boat). Wide spread so
-  // a boat's standing tracks its pace, not puff luck.
-  const mean = division.paceTarget >= 1.15 ? 0.97 : 1.06;
-  // Wider, more mixed pace in a Corinthian club fleet; tighter among the pros.
-  const spread = 0.08 + (division.paceTarget - 1) * 0.22;
+  // The benchmark is a bare cruise finish in the player's own boat (see
+  // `cleanRunHours`), so it already tracks boat and course. Pace the fleet around
+  // it by division: a Corinthian club fleet sails a touch under benchmark pace,
+  // so a clean amateur sail lands upper-mid and a *sharp* one (better crew, more
+  // effort, good calls — all faster than the bare benchmark) fights for the
+  // podium; the Pro fleet sits right on it, so that sharp sail is the price of
+  // contending. Anchoring on the player's boat keeps every race a fight whatever
+  // you charter — raw boat speed pays off on corrected (handicap) time, not by
+  // lapping the fleet.
+  const pro = division.paceTarget < 1.15;
+  const mean = pro ? 1.02 : 0.95;
+  // A tight, fast pro fleet; a wider, more mixed club fleet.
+  const spread = pro ? 0.1 : 0.14;
   const fleet: Competitor[] = [];
   for (let i = 0; i < count; i += 1) {
     const name = NAMES[i % NAMES.length] + (i >= NAMES.length ? ` ${Math.floor(i / NAMES.length) + 1}` : '');
