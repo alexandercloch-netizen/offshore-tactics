@@ -1,12 +1,16 @@
 import React from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RootStackParamList } from '../types';
 import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
+import { getRaceById } from '../data';
+import { LANDMASSES } from '../data/landmasses';
 import { useGame } from '../store/GameContext';
 import { formatDuration } from '../engine/gameEngine';
+import { courseAspect } from '../engine/geo';
 import NauticalButton from '../components/NauticalButton';
+import RouteMap from '../components/RouteMap';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Results'>;
 
@@ -18,6 +22,7 @@ function ordinal(n: number): string {
 
 export const ResultsScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const { state, prepareNextRace, money } = useGame();
   const result = state.lastResult;
 
@@ -119,6 +124,8 @@ export const ResultsScreen: React.FC<Props> = ({ navigation }) => {
         <Text style={styles.summary}>{result.summary}</Text>
       </View>
 
+      <Debrief result={result} width={width} />
+
       <View style={styles.fundsCard}>
         <Text style={styles.fundsLabel}>Campaign Funds</Text>
         <Text style={styles.fundsValue}>{money(state.funds)}</Text>
@@ -140,6 +147,46 @@ export const ResultsScreen: React.FC<Props> = ({ navigation }) => {
         <NauticalButton label="Back to Harbour" variant="secondary" onPress={goHome} />
       </View>
     </ScrollView>
+  );
+};
+
+// The tactician's debrief: the line you sailed (solid) against the weather-optimal
+// line (green dashed), and how your time compared with a clean run on it.
+const Debrief: React.FC<{ result: NonNullable<ReturnType<typeof useGame>['state']['lastResult']>; width: number }> = ({
+  result,
+  width,
+}) => {
+  const race = getRaceById(result.raceId);
+  if (!result.finished || !race || !result.trail || result.trail.length < 2) return null;
+
+  const mapWidth = Math.min(width - spacing.lg * 2, 720);
+  const mapHeight = Math.max(220, Math.min(Math.round(mapWidth * courseAspect(race.waypoints)), 420));
+  const delta = result.optimalHours != null ? result.elapsedHours - result.optimalHours : null;
+
+  return (
+    <View style={styles.summaryCard}>
+      <Text style={styles.debriefTitle}>Tactician's Debrief</Text>
+      <Text style={styles.debriefSub}>Your line (solid) vs the weather-optimal route (dashed)</Text>
+      <View style={{ alignItems: 'center', marginVertical: spacing.sm }}>
+        <RouteMap
+          waypoints={race.waypoints}
+          trail={result.trail}
+          altRoute={result.optimalRoute}
+          land={LANDMASSES[race.id]}
+          width={mapWidth}
+          height={mapHeight}
+        />
+      </View>
+      {delta != null ? (
+        <Text style={styles.debriefLine}>
+          Sailed {formatDuration(result.elapsedHours)} · optimal line ≈{' '}
+          {formatDuration(result.optimalHours!)} ·{' '}
+          {delta > 0.02
+            ? `${formatDuration(delta)} left on the table`
+            : 'you matched the optimal line'}
+        </Text>
+      ) : null}
+    </View>
   );
 };
 
@@ -235,6 +282,24 @@ const styles = StyleSheet.create({
     color: colors.foam,
     fontSize: fontSize.md,
     lineHeight: 22,
+  },
+  debriefTitle: {
+    color: colors.foam,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.bold,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  debriefSub: {
+    color: colors.mist,
+    fontSize: fontSize.xs,
+    marginTop: 2,
+  },
+  debriefLine: {
+    color: colors.brassLight,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.bold,
+    textAlign: 'center',
   },
   fundsCard: {
     flexDirection: 'row',

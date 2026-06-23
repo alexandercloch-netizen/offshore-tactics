@@ -1021,6 +1021,20 @@ export function ratingTccFor(boat: Boat): number {
   return Math.max(0.85, Math.min(1.45, 0.78 + (boat.baseSpeed - 6) * 0.085));
 }
 
+// Evenly thin a polyline to at most `max` points (keeping the ends), so the
+// debrief track stored in a result stays small in saves.
+function downsampleTrack(pts: GeoPoint[], max = 36): GeoPoint[] {
+  const round = (p: GeoPoint): GeoPoint => ({
+    lat: Math.round(p.lat * 1e4) / 1e4,
+    lon: Math.round(p.lon * 1e4) / 1e4,
+  });
+  if (pts.length <= max) return pts.map(round);
+  const step = (pts.length - 1) / (max - 1);
+  const out: GeoPoint[] = [];
+  for (let i = 0; i < max; i += 1) out.push(round(pts[Math.round(i * step)]));
+  return out;
+}
+
 function prizeForPosition(division: RaceDivision, position: number): number {
   if (position === 1) return division.prizeMoney;
   if (position === 2) return Math.round(division.prizeMoney * 0.6);
@@ -1077,6 +1091,37 @@ export function buildResult(state: GameState, outcome: StepResult): RaceResult {
   const sponsor = finished ? Math.round(operating * 0.9) : 0;
   const prizeMoney = finished ? sponsor + prizeForPosition(division, position) : 0;
 
+  // Debrief geometry: the line you actually sailed vs the weather-optimal line,
+  // and what a clean run on the optimal line would have taken — captured now,
+  // while the wind field and trail are still in hand.
+  let trail: GeoPoint[] | undefined;
+  let optimalRoute: GeoPoint[] | undefined;
+  let optimalHours: number | undefined;
+  if (finished && boat && state.windField && (outcome.progress.trail?.length ?? 0) > 1) {
+    trail = downsampleTrack(outcome.progress.trail);
+    const start = race.waypoints[0];
+    const route = planRoute(
+      boat,
+      state.windField,
+      { lat: start.lat, lon: start.lon },
+      race.waypoints,
+      1,
+      0,
+      0,
+      LANDMASSES[race.id]
+    );
+    optimalRoute = downsampleTrack(route);
+    optimalHours = estimateRouteHours(
+      boat,
+      { hullIntegrity: 100, crewStamina: 100, crewMorale: 100 },
+      route,
+      state.windField,
+      0,
+      EFFORT_SPEED.cruise,
+      crewSkillFactor(crewSkillAverage(state.selectedCrewIds))
+    );
+  }
+
   // Did handicap change the story? (e.g. 5th across the line, 1st corrected.)
   const handicapSwing = finished && !retired && onWaterPosition !== position;
   const swingNote = handicapSwing
@@ -1111,6 +1156,9 @@ export function buildResult(state: GameState, outcome: StepResult): RaceResult {
     prizeMoney,
     summary,
     timestamp: Date.now(),
+    trail,
+    optimalRoute,
+    optimalHours,
   };
 }
 
