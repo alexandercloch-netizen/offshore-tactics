@@ -40,6 +40,7 @@ import NauticalButton from '../components/NauticalButton';
 import ForecastScrubber from '../components/ForecastScrubber';
 import WindScaleLegend from '../components/WindScaleLegend';
 import ForecastGraph, { ForecastGraphReadout, ForecastPoint } from '../components/ForecastGraph';
+import ErrorBoundary from '../components/ErrorBoundary';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Briefing'>;
 
@@ -237,13 +238,15 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
               <Text style={styles.panelTitle}>Forecast at the Start</Text>
               <ForecastGraphReadout point={cursorPoint} />
             </View>
-            <ForecastGraph
-              series={forecastSeries}
-              hour={forecastHour}
-              maxHour={maxForecastHour}
-              width={mapWidth}
-              onScrub={setForecastHour}
-            />
+            <ErrorBoundary label="The forecast graph could not be shown.">
+              <ForecastGraph
+                series={forecastSeries}
+                hour={forecastHour}
+                maxHour={maxForecastHour}
+                width={mapWidth}
+                onScrub={setForecastHour}
+              />
+            </ErrorBoundary>
             <Text style={styles.planHint}>
               Wind strength over the passage; arrows show direction. Tap to scrub — the
               trace fades as the forecast grows less certain.
