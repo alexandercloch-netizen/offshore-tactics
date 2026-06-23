@@ -44,9 +44,10 @@ import {
   bearing,
   courseLengthNm,
   haversineNm,
+  movePoint,
   pointOfSailFor,
 } from './geo';
-import { polarSpeed } from './polar';
+import { bestVmgAngles, polarSpeed } from './polar';
 import { effectivePolar } from './sails';
 import { createWindField, forecastConfidence, pressureHint, sampleWind, weatherFromWind } from './wind';
 import { planRoute, WindSampler } from './router';
@@ -595,6 +596,45 @@ export function speedMadeGood(state: GameState): number {
   const bearingToMark = bearing(p.lat, p.lon, mark.lat, mark.lon);
   const along = Math.cos(toRad(angularDelta(p.heading, bearingToMark)));
   return Math.max(currentSpeed(state) * along, 0.2);
+}
+
+// The boat's polar target speed for the current angle & wind — what a perfectly
+// sailed boat would do here. Compared with the live speed, the gap is the cost
+// of crew/hull condition and a conservative effort dial (the "% of polar").
+export function polarTargetSpeed(state: GameState): number {
+  const boat = resolveBoatById(state, state.selectedBoatId);
+  if (!boat || !state.progress) return 0;
+  const p = state.progress;
+  return polarSpeed(boat, angularDelta(p.heading, p.windDir), p.windSpeedKn);
+}
+
+// The laylines to the next mark when it can't be fetched directly — i.e. it's
+// upwind (sail the close-hauled VMG angle) or dead downwind (the running VMG
+// angle). Returns the mark and the two outboard endpoints to draw, or null when
+// the mark lays directly (a reach), where laylines have no meaning.
+export function laylines(state: GameState): { mark: GeoPoint; ends: [GeoPoint, GeoPoint] } | null {
+  const race = getRaceById(state.selectedRaceId);
+  const boat = resolveBoatById(state, state.selectedBoatId);
+  const field = state.windField;
+  const p = state.progress;
+  if (!race || !boat || !field || !p || p.nextMarkIndex >= race.waypoints.length) return null;
+
+  const mark = race.waypoints[p.nextMarkIndex];
+  const wind = sampleWind(field, p.lat, p.lon, p.elapsedHours);
+  const brgToMark = bearing(p.lat, p.lon, mark.lat, mark.lon);
+  const twaToMark = angularDelta(brgToMark, wind.fromDeg); // 0..180
+  const vmg = bestVmgAngles(boat, wind.speedKn);
+
+  let twaAngle: number;
+  if (twaToMark <= vmg.upAngle + 3) twaAngle = vmg.upAngle; // upwind: must tack up
+  else if (twaToMark >= vmg.downAngle - 3) twaAngle = vmg.downAngle; // dead downwind: must gybe down
+  else return null; // a reach — lay it directly
+
+  const legNm = Math.max(haversineNm(p.lat, p.lon, mark.lat, mark.lon) * 1.1, 1);
+  const norm360 = (d: number): number => ((d % 360) + 360) % 360;
+  const endA = movePoint(mark.lat, mark.lon, norm360(wind.fromDeg + twaAngle + 180), legNm);
+  const endB = movePoint(mark.lat, mark.lon, norm360(wind.fromDeg - twaAngle + 180), legNm);
+  return { mark: { lat: mark.lat, lon: mark.lon }, ends: [endA, endB] };
 }
 
 // ---- Reading the wind for tactical decisions ----
