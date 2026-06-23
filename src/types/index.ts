@@ -101,6 +101,46 @@ export interface WindField {
   texture?: WindTexture; // fine spatial streakiness
 }
 
+// ---- Tidal currents ----
+
+// The set & rate of the tidal stream at a point and time. `setDeg` is the
+// direction the water flows TOWARD (0 = N); `rateKn` is its speed.
+export interface CurrentSample {
+  setDeg: number;
+  rateKn: number;
+}
+
+// A tide gate: a headland or channel where the stream runs harder. Amplifies the
+// rate within `radiusNm` of the point, tapering to nothing at the edge.
+export interface TideGate {
+  lat: number;
+  lon: number;
+  radiusNm: number;
+  gain: number; // peak extra multiple of the rate at the centre (e.g. 1 = double)
+}
+
+// Per-race tidal data (authored on the Race). A semidiurnal flood/ebb stream on
+// a principal axis, optionally amplified at named marks (tide gates). Absent or
+// zero-rate → a slack course that sails exactly as before.
+export interface TideProfile {
+  floodDeg: number; // direction the flood stream sets TOWARD
+  peakRateKn: number; // peak (springs-ish) stream rate at mid-flood/ebb
+  periodH?: number; // tidal period; defaults to the semidiurnal 12.42h
+  gates?: { waypoint: string; gain: number; radiusNm: number }[]; // amplify near a mark
+}
+
+// Resolved, race-ready tidal field: an oscillating stream evolving with elapsed
+// hours, with the gate marks resolved to coordinates. Mirrors WindField.
+export interface TidalField {
+  floodDeg: number;
+  peakRateKn: number;
+  periodH: number;
+  phaseH: number; // where in the cycle the gun fires (seeded at race setup)
+  gates: TideGate[];
+  refLat: number;
+  refLon: number;
+}
+
 export interface Race {
   id: string;
   name: string;
@@ -117,6 +157,7 @@ export interface Race {
   signatureHazard: string; // human-readable description of the signature challenge
   season: string; // when the race is traditionally run
   unlockAfter?: string; // race id that must be finished to unlock this one
+  tide?: TideProfile; // tidal stream for the course (absent → slack water)
   divisions: Record<DivisionKey, RaceDivision>;
 }
 
@@ -435,6 +476,7 @@ export interface GameState {
   provisions: ProvisionSelection[];
   progress?: RaceProgress;
   windField?: WindField;
+  tidalField?: TidalField; // tidal stream for the race in progress (absent → slack)
   fleet?: Competitor[];
   strategy: PlayerStrategy;
   profile: Profile; // the player's fleet of custom boats (local-first)

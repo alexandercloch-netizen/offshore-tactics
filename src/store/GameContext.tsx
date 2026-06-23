@@ -21,6 +21,7 @@ import {
   PlayerStrategy,
   ProvisionSelection,
   TacticalChoice,
+  TidalField,
   WeatherCondition,
   WindField,
 } from '../types';
@@ -46,6 +47,7 @@ import {
   stepRace,
 } from '../engine/gameEngine';
 import { createWindField, sampleWind, weatherFromWind } from '../engine/wind';
+import { createTidalField } from '../engine/current';
 import { createFleet } from '../engine/fleet';
 import { clearState, loadState, saveState } from './storage';
 import { reconcileSaves, isNewerSave } from './reconcile';
@@ -98,6 +100,7 @@ type Action =
         condition: BoatCondition;
         weather: WeatherCondition;
         windField: WindField;
+        tidalField: TidalField;
         fleet: Competitor[];
         cost: number;
       };
@@ -260,6 +263,7 @@ function reducer(state: GameState, action: Action): GameState {
         condition: action.payload.condition,
         weather: action.payload.weather,
         windField: action.payload.windField,
+        tidalField: action.payload.tidalField,
         fleet: action.payload.fleet,
         lastResult: undefined,
         eventLog: [],
@@ -286,6 +290,7 @@ function reducer(state: GameState, action: Action): GameState {
         progress: undefined,
         weather: undefined,
         windField: undefined,
+        tidalField: undefined,
         fleet: undefined,
       };
 
@@ -302,6 +307,7 @@ function reducer(state: GameState, action: Action): GameState {
         progress: undefined,
         weather: undefined,
         windField: undefined,
+        tidalField: undefined,
         fleet: undefined,
         condition: DEFAULT_CONDITION,
       };
@@ -554,6 +560,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
       .filter((c): c is NonNullable<typeof c> => Boolean(c));
     const cost = campaignCost(current).total;
     const windField = createWindField(race);
+    const tidalField = createTidalField(race);
     const start = race.waypoints[0];
     const weather = weatherFromWind(sampleWind(windField, start.lat, start.lon, 0));
     const fleet = createFleet(
@@ -569,6 +576,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
         condition: initialCondition(crew, current.provisions, race),
         weather,
         windField,
+        tidalField,
         fleet,
         cost,
       },
