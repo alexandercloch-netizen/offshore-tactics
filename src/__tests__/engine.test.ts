@@ -738,7 +738,9 @@ describe('post-race debrief geometry', () => {
 
     const r = buildResult(s, outcome);
     expect(r.trail && r.trail.length).toBeGreaterThan(1);
-    expect(r.trail!.length).toBeLessThanOrEqual(36); // downsampled for save size
+    // Simplified for save size, plus any coast-hugging detour points the
+    // land-aware safety net adds back; still far smaller than the raw track.
+    expect(r.trail!.length).toBeLessThanOrEqual(80);
     expect(r.optimalRoute && r.optimalRoute.length).toBeGreaterThan(1);
     expect(r.optimalHours).toBeGreaterThan(0);
   });

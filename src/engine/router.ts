@@ -184,8 +184,9 @@ function coastalLeg(
 // Final safety net: walk the assembled route and detour any segment that still
 // clips land (e.g. a corner cut while rounding a headland mark, or a leg join),
 // so the boat never sails over land — the trail is interpolated within these
-// segments, so clean segments mean a clean track.
-function clearPolyline(pts: GeoPoint[], land?: LandPolygon[]): GeoPoint[] {
+// segments, so clean segments mean a clean track. Also reused to keep a
+// simplified/decimated polyline (the post-race debrief track) off land.
+export function clearPolyline(pts: GeoPoint[], land?: LandPolygon[]): GeoPoint[] {
   if (!land || pts.length < 2) return pts;
   const out: GeoPoint[] = [pts[0]];
   for (let i = 1; i < pts.length; i += 1) {

@@ -50,8 +50,8 @@ import {
 import { bestVmgAngles, polarSpeed } from './polar';
 import { effectivePolar } from './sails';
 import { createWindField, forecastConfidence, pressureHint, sampleWind, weatherFromWind } from './wind';
-import { planRoute, WindSampler } from './router';
-import { LANDMASSES } from '../data/landmasses';
+import { clearPolyline, planRoute, WindSampler } from './router';
+import { LANDMASSES, LandPolygon } from '../data/landmasses';
 import { advanceFleet, correctedPosition, finalPosition, livePosition } from './fleet';
 
 export const clamp = (value: number, min = 0, max = 100): number =>
@@ -1118,16 +1118,61 @@ export function ratingTccFor(boat: Boat): number {
 
 // Evenly thin a polyline to at most `max` points (keeping the ends), so the
 // debrief track stored in a result stays small in saves.
-function downsampleTrack(pts: GeoPoint[], max = 36): GeoPoint[] {
+// Perpendicular distance (in degrees, planar — fine at course scale) of `p` from
+// the segment a→b. Used by Douglas–Peucker below.
+function perpDistDeg(p: GeoPoint, a: GeoPoint, b: GeoPoint): number {
+  const dx = b.lon - a.lon;
+  const dy = b.lat - a.lat;
+  const len2 = dx * dx + dy * dy;
+  if (len2 < 1e-12) return Math.hypot(p.lon - a.lon, p.lat - a.lat);
+  const t = ((p.lon - a.lon) * dx + (p.lat - a.lat) * dy) / len2;
+  const cx = a.lon + t * dx;
+  const cy = a.lat + t * dy;
+  return Math.hypot(p.lon - cx, p.lat - cy);
+}
+
+// Douglas–Peucker: simplify a polyline by keeping the points that carry its
+// shape (high deviation) and dropping near-collinear ones. Unlike uniform
+// decimation it *preserves the corners*, so a coast-hugging track keeps hugging
+// the coast instead of chording across a headland.
+function rdp(pts: GeoPoint[], epsilon: number): GeoPoint[] {
+  if (pts.length < 3) return pts;
+  let maxD = 0;
+  let idx = 0;
+  for (let i = 1; i < pts.length - 1; i += 1) {
+    const d = perpDistDeg(pts[i], pts[0], pts[pts.length - 1]);
+    if (d > maxD) {
+      maxD = d;
+      idx = i;
+    }
+  }
+  if (maxD <= epsilon) return [pts[0], pts[pts.length - 1]];
+  const left = rdp(pts.slice(0, idx + 1), epsilon);
+  const right = rdp(pts.slice(idx), epsilon);
+  return [...left.slice(0, -1), ...right];
+}
+
+// Shrink a track for storage/display while keeping it in the water: simplify
+// (corner-preserving) to roughly `max` points, then run the land-aware detour so
+// no surviving segment chords across land — the post-race debrief draws straight
+// lines between these points, so this is what stops the saved track (and the
+// optimal line) cutting over islands and headlands.
+export function downsampleTrack(pts: GeoPoint[], land?: LandPolygon[], max = 48): GeoPoint[] {
   const round = (p: GeoPoint): GeoPoint => ({
     lat: Math.round(p.lat * 1e4) / 1e4,
     lon: Math.round(p.lon * 1e4) / 1e4,
   });
-  if (pts.length <= max) return pts.map(round);
-  const step = (pts.length - 1) / (max - 1);
-  const out: GeoPoint[] = [];
-  for (let i = 0; i < max; i += 1) out.push(round(pts[Math.round(i * step)]));
-  return out;
+  let simplified = pts;
+  if (pts.length > max) {
+    // Grow the tolerance until we're under budget (bounded so it always ends).
+    let eps = 1e-4;
+    simplified = rdp(pts, eps);
+    for (let guard = 0; simplified.length > max && guard < 40; guard += 1) {
+      eps *= 1.6;
+      simplified = rdp(pts, eps);
+    }
+  }
+  return clearPolyline(simplified, land).map(round);
 }
 
 function prizeForPosition(division: RaceDivision, position: number): number {
@@ -1193,7 +1238,7 @@ export function buildResult(state: GameState, outcome: StepResult): RaceResult {
   let optimalRoute: GeoPoint[] | undefined;
   let optimalHours: number | undefined;
   if (finished && boat && state.windField && (outcome.progress.trail?.length ?? 0) > 1) {
-    trail = downsampleTrack(outcome.progress.trail);
+    trail = downsampleTrack(outcome.progress.trail, LANDMASSES[race.id]);
     const start = race.waypoints[0];
     const route = planRoute(
       boat,
@@ -1205,7 +1250,7 @@ export function buildResult(state: GameState, outcome: StepResult): RaceResult {
       0,
       LANDMASSES[race.id]
     );
-    optimalRoute = downsampleTrack(route);
+    optimalRoute = downsampleTrack(route, LANDMASSES[race.id]);
     optimalHours = estimateRouteHours(
       boat,
       { hullIntegrity: 100, crewStamina: 100, crewMorale: 100 },
