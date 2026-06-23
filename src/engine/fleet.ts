@@ -61,6 +61,14 @@ export function createFleet(
     ? clamp(1 + (playerBoat.baseSpeed / REF_BASE_SPEED - 1) * 0.4, 0.9, 1.12)
     : 1;
   const pacedBench = bench * edge;
+  // The fleet are reference-class boats paced to the player's run, so their
+  // handicaps centre on what the player's boat rates after backing out that
+  // on-water edge — which makes corrected (handicap) time a fair fight whatever
+  // you charter: a quicker hull leads across the line but owes the lead back on
+  // rating, exactly as a handicap intends. You win corrected by sailing above
+  // your rating (sharper crew, harder effort, better calls), not by buying speed.
+  const playerTcc = playerBoat?.ratingTcc ?? 1;
+  const fleetBaseTcc = playerTcc / edge;
   const fleet: Competitor[] = [];
   for (let i = 0; i < count; i += 1) {
     const name = NAMES[i % NAMES.length] + (i >= NAMES.length ? ` ${Math.floor(i / NAMES.length) + 1}` : '');
@@ -69,10 +77,11 @@ export function createFleet(
       id: `ai-${race.id}-${i}`,
       name,
       speedMul,
-      // A faster boat rates higher and so owes more time on handicap — the
-      // correlation (<1) means raw pace is mostly, not fully, neutralised, so
-      // corrected standings turn on how well a boat sails its rating.
-      ratingTcc: clamp(1 + (speedMul - 1) * 0.85 + gaussish() * 0.025, 0.85, 1.45),
+      // Centred on the fleet's reference rating, nudged by pace: a faster boat in
+      // the fleet rates higher and owes more, but the <1 correlation means raw
+      // pace is only mostly neutralised — so corrected standings still turn on
+      // how well each boat sails its rating, and the order shuffles.
+      ratingTcc: clamp(fleetBaseTcc * (1 + (speedMul - 1) * 0.85) + gaussish() * 0.03, 0.7, 1.6),
       targetHours: pacedBench / speedMul,
       // Each boat commits to a side of the course; combined with the live wind
       // it decides who gains and who loses, so the standings shuffle.
