@@ -752,18 +752,23 @@ interface Advance {
   pos: GeoPoint;
   heading: number;
   route: GeoPoint[];
+  passed: GeoPoint[]; // intermediate route vertices crossed this tick (detour corners)
 }
 
 // Walk `distNm` along the remaining route, returning the new position, the
-// heading of the segment we end on, and the trimmed remaining route.
+// heading of the segment we end on, the trimmed remaining route, and any
+// intermediate route vertices crossed — so the trail can follow the route's
+// detour corners instead of cutting straight across them (and over land).
 function advanceAlongRoute(route: GeoPoint[], distNm: number): Advance {
   const pts = route.map((p) => ({ ...p }));
+  const passed: GeoPoint[] = [];
   let remaining = distNm;
   while (remaining > 1e-9 && pts.length > 1) {
     const segLen = haversineNm(pts[0].lat, pts[0].lon, pts[1].lat, pts[1].lon);
     if (segLen <= remaining + 1e-9 || segLen < 1e-9) {
       remaining -= segLen;
       pts.shift();
+      if (pts.length > 1) passed.push({ lat: pts[0].lat, lon: pts[0].lon }); // reached an intermediate corner
     } else {
       const frac = remaining / segLen;
       pts[0] = {
@@ -774,11 +779,11 @@ function advanceAlongRoute(route: GeoPoint[], distNm: number): Advance {
     }
   }
   const heading = pts.length > 1 ? brg(pts[0], pts[1]) : 0;
-  return { pos: pts[0], heading, route: pts };
+  return { pos: pts[0], heading, route: pts, passed };
 }
 
-function appendTrail(trail: GeoPoint[], pos: GeoPoint): GeoPoint[] {
-  const next = [...trail, pos];
+function appendTrail(trail: GeoPoint[], points: GeoPoint[]): GeoPoint[] {
+  const next = [...trail, ...points];
   if (next.length > TRAIL_CAP) {
     const downsampled: GeoPoint[] = [];
     for (let i = 0; i < next.length; i += 2) downsampled.push(next[i]);
@@ -897,7 +902,7 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
     heading,
     nextMarkIndex,
     route,
-    trail: appendTrail(prev.trail, adv.pos),
+    trail: appendTrail(prev.trail, [...adv.passed, adv.pos]),
     routeWindDir,
     routePlannedAtNm,
     routeBias,

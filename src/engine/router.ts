@@ -139,12 +139,15 @@ function findClearDetour(
   to: GeoPoint,
   land: LandPolygon[]
 ): GeoPoint | null {
-  const legDist = haversineNm(from.lat, from.lon, to.lat, to.lon);
+  const legDist = Math.max(haversineNm(from.lat, from.lon, to.lat, to.lon), 0.5);
   const brg = bearing(from.lat, from.lon, to.lat, to.lon);
-  for (const t of [0.5, 0.4, 0.6, 0.3, 0.7]) {
-    const aLat = from.lat + (to.lat - from.lat) * t;
-    const aLon = from.lon + (to.lon - from.lon) * t;
-    for (let off = legDist * 0.12; off <= legDist * 0.9; off += legDist * 0.12) {
+  // Probe perpendicular to the rhumb at several points along it, sweeping the
+  // offset out wide (headland marks can need a big seaward swing). Smallest
+  // offset that clears both halves wins, so detours stay tight to the coast.
+  for (let off = legDist * 0.1; off <= legDist * 1.6; off += legDist * 0.1) {
+    for (const t of [0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8]) {
+      const aLat = from.lat + (to.lat - from.lat) * t;
+      const aLon = from.lon + (to.lon - from.lon) * t;
       for (const side of [1, -1]) {
         const c = movePoint(aLat, aLon, (brg + side * 90 + 360) % 360, off);
         if (
@@ -172,10 +175,27 @@ function coastalLeg(
   depth = 0
 ): GeoPoint[] {
   if (!land || !segmentCrossesLand(land, from, to)) return [to];
-  if (depth >= 3) return [to]; // give up rather than loop on awkward geometry
+  if (depth >= 6) return [to]; // give up rather than loop on awkward geometry
   const cand = findClearDetour(from, to, land);
   if (!cand) return [to];
   return [...coastalLeg(from, cand, land, depth + 1), ...coastalLeg(cand, to, land, depth + 1)];
+}
+
+// Final safety net: walk the assembled route and detour any segment that still
+// clips land (e.g. a corner cut while rounding a headland mark, or a leg join),
+// so the boat never sails over land — the trail is interpolated within these
+// segments, so clean segments mean a clean track.
+function clearPolyline(pts: GeoPoint[], land?: LandPolygon[]): GeoPoint[] {
+  if (!land || pts.length < 2) return pts;
+  const out: GeoPoint[] = [pts[0]];
+  for (let i = 1; i < pts.length; i += 1) {
+    if (segmentCrossesLand(land, pts[i - 1], pts[i])) {
+      out.push(...coastalLeg(pts[i - 1], pts[i], land));
+    } else {
+      out.push(pts[i]);
+    }
+  }
+  return out;
 }
 
 // The active leg: weather-route from the current position to the next mark.
@@ -246,5 +266,5 @@ export function planRoute(
     pts.push(...coastalLeg(cur, to, land));
     cur = to;
   }
-  return pts;
+  return clearPolyline(pts, land);
 }

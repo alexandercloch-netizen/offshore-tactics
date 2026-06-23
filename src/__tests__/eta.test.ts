@@ -3,7 +3,7 @@ import {
   EFFORT_SPEED,
 } from '../engine/gameEngine';
 import { planRoute } from '../engine/router';
-import { createWindField, sampleForecast } from '../engine/wind';
+import { createWindField, sampleForecast, sampleWind } from '../engine/wind';
 import { mulberry32, resetRng, setRng } from '../engine/rng';
 import { getRaceById, getBoatById } from '../data';
 import { LANDMASSES } from '../data/landmasses';
@@ -37,8 +37,13 @@ describe('estimateRouteHours', () => {
 
   it('pushing hard is faster than conserving', () => {
     const { boat, field, route } = setup('race-caribbean-600');
-    const push = estimateRouteHours(boat, healthy, route, field, 0, EFFORT_SPEED.push, 1);
-    const conserve = estimateRouteHours(boat, healthy, route, field, 0, EFFORT_SPEED.conserve, 1);
+    // Freeze the wind in time so this isolates the effort dial. (On the live,
+    // evolving field a faster boat samples earlier — and so different — wind, so
+    // the *preview* ETA isn't strictly monotonic in effort; the race itself,
+    // sailed tick-by-tick on the true field, always rewards pushing.)
+    const frozen = (f: typeof field, lat: number, lon: number) => sampleWind(f, lat, lon, 0);
+    const push = estimateRouteHours(boat, healthy, route, field, 0, EFFORT_SPEED.push, 1, frozen);
+    const conserve = estimateRouteHours(boat, healthy, route, field, 0, EFFORT_SPEED.conserve, 1, frozen);
     expect(push).toBeLessThan(conserve);
   });
 

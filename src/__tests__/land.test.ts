@@ -1,5 +1,5 @@
-import { pointInLand } from '../engine/land';
-import { LANDMASSES } from '../data/landmasses';
+import { pointInLand, segmentCrossesLand } from '../engine/land';
+import { LANDMASSES, LandPolygon } from '../data/landmasses';
 import { RACES, getBoatById, getRaceById } from '../data';
 import { createWindField } from '../engine/wind';
 import { createFleet } from '../engine/fleet';
@@ -79,9 +79,30 @@ function sailTrail(raceId: string): { lat: number; lon: number }[] {
   return state.progress!.trail;
 }
 
-describe('routed tracks stay off land (all races)', () => {
-  const MARGIN_NM = 6; // tolerate coastal start/finish/marks sitting on the coarse coastline
+// A point sits "at" a mark if it's within the coarse-coastline tolerance of one.
+const MARGIN_NM = 6; // tolerate coastal start/finish/marks sitting on the coarse coastline
+function nearMark(race: { waypoints: { lat: number; lon: number }[] }, p: { lat: number; lon: number }): boolean {
+  return race.waypoints.some((w) => haversineNm(p.lat, p.lon, w.lat, w.lon) <= MARGIN_NM);
+}
 
+// Count the segments of a polyline that cut across land. A vertex check alone
+// misses the real defect — two clean vertices with land between them — so we
+// test the segments the boat actually sails. Segments touching a mandatory mark
+// are exempt (real harbours/headlands sit on the coarse coastline).
+function landCrossings(
+  race: { waypoints: { lat: number; lon: number }[] },
+  land: LandPolygon[] | undefined,
+  pts: { lat: number; lon: number }[]
+): { lat: number; lon: number }[][] {
+  const crossings: { lat: number; lon: number }[][] = [];
+  for (let i = 0; i < pts.length - 1; i += 1) {
+    if (nearMark(race, pts[i]) || nearMark(race, pts[i + 1])) continue;
+    if (segmentCrossesLand(land, pts[i], pts[i + 1])) crossings.push([pts[i], pts[i + 1]]);
+  }
+  return crossings;
+}
+
+describe('routed tracks stay off land (all races)', () => {
   RACES.filter((r) => LANDMASSES[r.id]?.length).forEach((race) => {
     it(`${race.name} keeps its track in the water`, () => {
       setRng(mulberry32(42));
@@ -89,16 +110,11 @@ describe('routed tracks stay off land (all races)', () => {
       const trail = sailTrail(race.id);
       expect(trail.length).toBeGreaterThan(2);
 
-      const onLand = trail.filter((p) => {
-        if (!pointInLand(land, p.lat, p.lon)) return false;
-        // Exempt points hugging a mandatory mark (real harbours/headlands).
-        const nearMark = race.waypoints.some(
-          (w) => haversineNm(p.lat, p.lon, w.lat, w.lon) <= MARGIN_NM
-        );
-        return !nearMark;
-      });
-
+      // No trail vertex sits on land...
+      const onLand = trail.filter((p) => pointInLand(land, p.lat, p.lon) && !nearMark(race, p));
       expect(onLand).toEqual([]);
+      // ...and no trail *segment* cuts across land between two clean vertices.
+      expect(landCrossings(race, land, trail)).toEqual([]);
     });
   });
 });
