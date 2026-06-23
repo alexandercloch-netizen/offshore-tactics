@@ -4,6 +4,12 @@ import { test, expect, Page } from '@playwright/test';
 // race, kit out a boat and crew, sail it (answering any tactical decisions),
 // and land on the results screen.
 test('a full race can be played from start to finish', async ({ page }) => {
+  // Fail fast on an uncaught runtime error rather than timing out on a missing
+  // button — a render crash should be an obvious, immediate failure.
+  page.on('pageerror', (e) => {
+    throw e;
+  });
+
   await page.goto('/');
 
   // First run: answer the quick onboarding quiz (home waters → mission →

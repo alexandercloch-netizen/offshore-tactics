@@ -59,14 +59,15 @@ export const ForecastGraph: React.FC<ForecastGraphProps> = ({ series, hour, maxH
   return (
     <Pressable onLayout={onLayout} onPress={onPress}>
       <Svg width={w} height={HEIGHT}>
-        {/* Y gridlines + labels at 0 and yMax. */}
+        {/* Y gridlines + labels at 0 and yMax (flat children — react-native-svg
+            on web does not handle Fragment children inside <Svg>). */}
         {[0, yMax].map((s) => (
-          <React.Fragment key={s}>
-            <Line x1={PAD_L} y1={y(s)} x2={w - PAD_R} y2={y(s)} stroke={colors.hull} strokeWidth={1} />
-            <SvgText x={PAD_L - 5} y={y(s) + 3} fill={colors.slate} fontSize="9" textAnchor="end">
-              {s}
-            </SvgText>
-          </React.Fragment>
+          <Line key={`g${s}`} x1={PAD_L} y1={y(s)} x2={w - PAD_R} y2={y(s)} stroke={colors.hull} strokeWidth={1} />
+        ))}
+        {[0, yMax].map((s) => (
+          <SvgText key={`gl${s}`} x={PAD_L - 5} y={y(s) + 3} fill={colors.slate} fontSize="9" textAnchor="end">
+            {s}
+          </SvgText>
         ))}
 
         {/* Strength trace. */}
