@@ -110,6 +110,14 @@ export interface CurrentSample {
   rateKn: number;
 }
 
+// A tidal stream sample at a grid point, for drawing current arrows on the chart.
+export interface CurrentArrow {
+  lat: number;
+  lon: number;
+  setDeg: number; // the way the stream sets TOWARD
+  rateKn: number;
+}
+
 // A tide gate: a headland or channel where the stream runs harder. Amplifies the
 // rate within `radiusNm` of the point, tapering to nothing at the edge.
 export interface TideGate {

@@ -20,6 +20,18 @@ export const RACES: Race[] = [
     prevailingWind: { fromDeg: 225, speedKn: 12 },
     signatureHazard: 'Tidal gate at The Needles — time it wrong and the fleet sails away from you.',
     season: 'June',
+    // The Solent is tide-dominated: a semidiurnal stream setting roughly E on the
+    // flood, running hardest at the Needles and the St Catherine's overfalls.
+    // Validated fair in the standings (see current.test.ts) — both the player and
+    // the fleet feel the same stream, so timing the gates is genuine tactics.
+    tide: {
+      floodDeg: 90,
+      peakRateKn: 1.5,
+      gates: [
+        { waypoint: 'The Needles', gain: 0.5, radiusNm: 4 },
+        { waypoint: "St Catherine's Point", gain: 0.4, radiusNm: 5 },
+      ],
+    },
     waypoints: [
       { name: 'Cowes (RYS Line)', lat: 50.76, lon: -1.3, type: 'start' },
       { name: 'Gurnard Ledge', lat: 50.765, lon: -1.4, type: 'turn' },

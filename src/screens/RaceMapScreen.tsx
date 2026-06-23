@@ -30,12 +30,14 @@ import {
   resolveBoatById,
   speedMadeGood,
   tacticalRead,
+  tideRead,
   vmgPreview,
 } from '../engine/gameEngine';
 import type { TacticalRead } from '../engine/gameEngine';
 import { competitorPoints } from '../engine/fleet';
 import { courseAspect, courseBounds } from '../engine/geo';
 import { featureState, pressureHint, sampleWindGrid, weatherOutlook } from '../engine/wind';
+import { sampleCurrentGrid } from '../engine/current';
 import { buildInstrumentReport, InstrumentReport } from '../engine/instruments';
 import { EffortMode, RoutingBias } from '../types';
 import RouteMap from '../components/RouteMap';
@@ -84,6 +86,16 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
     if (!race || !windField) return [];
     return sampleWindGrid(windField, courseBounds(race.waypoints), heatCols, heatRows, elapsedHourBucket);
   }, [race, windField, heatRows, elapsedHourBucket]);
+
+  // Tidal stream sampled on a coarse grid; refreshed each in-race hour as the
+  // flood/ebb turns. Empty on a slack course, so the chart simply omits it.
+  const tidalField = state.tidalField;
+  const currentArrows = useMemo(() => {
+    if (!race || !tidalField) return [];
+    const cols = 6;
+    const rows = Math.max(4, Math.min(8, Math.round(cols * courseAspect(race.waypoints))));
+    return sampleCurrentGrid(tidalField, courseBounds(race.waypoints), cols, rows, elapsedHourBucket);
+  }, [race, tidalField, elapsedHourBucket]);
 
   // If we landed here without an active race but with a full loadout, start it.
   useEffect(() => {
@@ -226,6 +238,7 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
   const lay = laylines(state);
   const layPaths = lay ? [[lay.mark, lay.ends[0]], [lay.mark, lay.ends[1]]] : undefined;
   const read = state.windField ? tacticalRead(state) : null;
+  const tide = tideRead(state);
   const recentLog = state.eventLog.slice(-4).reverse();
   const strategy = state.strategy;
   const hint =
@@ -278,6 +291,7 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
           competitors={state.fleet ? competitorPoints(state.fleet, race) : []}
           laylines={layPaths}
           wind={windArrows}
+          current={currentArrows}
           heat={windHeat}
           heatCols={heatCols}
           heatRows={heatRows}
@@ -321,6 +335,16 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
               <Text style={styles.pointOfSail}>{progress.pointOfSail}</Text>
               <Text style={styles.vmgLine}>VMG {currentVmg.toFixed(1)} kn</Text>
               <Text style={styles.weatherDesc}>{weather.description}</Text>
+              {tide ? (
+                <Text style={styles.tideLine}>
+                  Tide {tide.rateKn.toFixed(1)} kn ·{' '}
+                  {Math.abs(tide.along) < 0.1
+                    ? 'across'
+                    : tide.along > 0
+                      ? `fair +${tide.along.toFixed(1)}`
+                      : `foul ${tide.along.toFixed(1)}`}
+                </Text>
+              ) : null}
             </View>
           </View>
         </View>
@@ -613,6 +637,12 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     marginTop: spacing.xs,
     lineHeight: 18,
+  },
+  tideLine: {
+    color: colors.tide,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.bold,
+    marginTop: 2,
   },
   logEntry: {
     color: colors.mist,

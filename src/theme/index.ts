@@ -15,6 +15,7 @@ export const colors = {
   signalRed: '#D7263D',
   signalGreen: '#2EC4B6',
   warning: '#F4A259',
+  tide: '#49B6FF',
   white: '#FFFFFF',
   black: '#000000',
   overlay: 'rgba(3, 10, 18, 0.85)',

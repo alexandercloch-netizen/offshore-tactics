@@ -52,7 +52,7 @@ import { bestVmgAngles, polarSpeed } from './polar';
 import { effectivePolar } from './sails';
 import { createWindField, forecastConfidence, pressureHint, sampleWind, weatherFromWind } from './wind';
 import { clearPolyline, planRoute, WindSampler } from './router';
-import { tideAlong } from './current';
+import { currentAlong, sampleCurrent, tideAlong } from './current';
 import { LANDMASSES, LandPolygon } from '../data/landmasses';
 import { advanceFleet, correctedPosition, finalPosition, livePosition } from './fleet';
 
@@ -693,6 +693,28 @@ export function speedMadeGood(state: GameState): number {
   const bearingToMark = bearing(p.lat, p.lon, mark.lat, mark.lon);
   const along = Math.cos(toRad(angularDelta(p.heading, bearingToMark)));
   return Math.max(currentSpeed(state) * along, 0.2);
+}
+
+// The tidal stream the boat is in right now: its rate and set, plus the fair/foul
+// component along the bearing to the next mark (positive = a fair stream carrying
+// you on, negative = foul). Null on a slack course, so callers can hide the
+// readout entirely.
+export interface TideReading {
+  rateKn: number;
+  setDeg: number;
+  along: number; // signed kn along the course to the next mark (+ fair, − foul)
+}
+export function tideRead(state: GameState): TideReading | null {
+  const field = state.tidalField;
+  const p = state.progress;
+  if (!field || field.peakRateKn <= 0 || !p) return null;
+  const race = getRaceById(state.selectedRaceId);
+  const marks = race?.waypoints ?? [];
+  const mark = marks[Math.min(p.nextMarkIndex, marks.length - 1)];
+  const course = mark ? bearing(p.lat, p.lon, mark.lat, mark.lon) : p.heading;
+  const sample = sampleCurrent(field, p.lat, p.lon, p.elapsedHours);
+  if (sample.rateKn < 0.05) return null;
+  return { rateKn: sample.rateKn, setDeg: sample.setDeg, along: currentAlong(sample, course) };
 }
 
 // The boat's polar target speed for the current angle & wind — what a perfectly
