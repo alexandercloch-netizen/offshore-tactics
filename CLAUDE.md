@@ -68,7 +68,9 @@ The simulation is a **pure, deterministic engine** with a thin React UI on top.
   sync), `AuthContext` (Supabase auth + the login gate), `storage.ts`
   (AsyncStorage), `reconcile.ts` (local↔cloud save merge).
 - **`src/screens/`** — one per screen; bottom tabs (Race/Fleet/Leaderboard/
-  Profile) live under `Main`, with setup/race screens pushed over them.
+  Profile) live under `Main`, with setup/race screens pushed over them. The
+  `ResultsScreen` debrief contrasts the sailed track with the optimal line
+  (`RaceResult.trail`/`optimalRoute`/`optimalHours`, captured in `buildResult`).
 - **`src/components/`** — `RouteMap` (the SVG chart, incl. the wind-speed
   heatmap), `PolarViewer`, `WindIndicator`, `TacticalDecisionModal`,
   `ForecastScrubber` (briefing forecast timeline), `ForecastGraph` (the

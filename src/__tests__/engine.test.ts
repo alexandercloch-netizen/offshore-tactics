@@ -580,6 +580,30 @@ describe('tactical decisions resolved against the wind field', () => {
   });
 });
 
+describe('post-race debrief geometry', () => {
+  afterEach(() => resetRng());
+
+  it('a finished result carries the sailed trail, the optimal line and its ETA', () => {
+    setRng(mulberry32(5));
+    const race = getRaceById('race-round-island')!;
+    let s = baseState({ selectedRaceId: race.id });
+    const step = Math.max(race.distanceNm * 0.04, 1);
+    let outcome = stepRace(s, step);
+    for (let i = 0; i < 2000; i += 1) {
+      outcome = stepRace(s, step);
+      s = { ...s, progress: outcome.progress, condition: outcome.condition, weather: outcome.weather, fleet: outcome.fleet };
+      if (outcome.finished || outcome.retired) break;
+    }
+    expect(outcome.finished).toBe(true);
+
+    const r = buildResult(s, outcome);
+    expect(r.trail && r.trail.length).toBeGreaterThan(1);
+    expect(r.trail!.length).toBeLessThanOrEqual(36); // downsampled for save size
+    expect(r.optimalRoute && r.optimalRoute.length).toBeGreaterThan(1);
+    expect(r.optimalHours).toBeGreaterThan(0);
+  });
+});
+
 describe('tactical instruments', () => {
   it('polarTargetSpeed is a finite, positive polar speed', () => {
     const t = polarTargetSpeed(baseState());

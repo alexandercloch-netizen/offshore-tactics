@@ -418,6 +418,10 @@ export interface RaceResult {
   prizeMoney: number;
   summary: string;
   timestamp: number;
+  // Debrief geometry (finishers only; downsampled so saves stay small).
+  trail?: GeoPoint[]; // the track actually sailed
+  optimalRoute?: GeoPoint[]; // the weather-optimal line for contrast
+  optimalHours?: number; // ETA a clean run on the optimal line would have made
 }
 
 export interface GameState {
