@@ -1,4 +1,6 @@
-import { createTidalField, sampleCurrent, currentAlong, tideAlong } from '../engine/current';
+import { createTidalField, sampleCurrent, sampleCurrentGrid, currentAlong, tideAlong } from '../engine/current';
+import { tideRead } from '../engine/gameEngine';
+import { courseBounds } from '../engine/geo';
 import {
   EFFORT_SPEED,
   defaultStepNm,
@@ -89,9 +91,51 @@ describe('currentAlong / tideAlong', () => {
   });
 });
 
+describe('sampleCurrentGrid', () => {
+  const race = getRaceById('race-round-island')!;
+  const bounds = courseBounds(race.waypoints);
+
+  it('is empty for a slack or absent field', () => {
+    expect(sampleCurrentGrid(undefined, bounds, 5, 5, 3)).toEqual([]);
+    const slack = { floodDeg: 90, peakRateKn: 0, periodH: 12, phaseH: 0, gates: [], refLat: 50, refLon: -1 };
+    expect(sampleCurrentGrid(slack, bounds, 5, 5, 3)).toEqual([]);
+  });
+
+  it('returns set/rate arrows across the course at the flood', () => {
+    const field = { floodDeg: 90, peakRateKn: 2, periodH: 12, phaseH: 3, gates: [], refLat: 50, refLon: -1 };
+    const arrows = sampleCurrentGrid(field, bounds, 5, 5, 0); // hours+phase=3 → near peak flood
+    expect(arrows.length).toBeGreaterThan(0);
+    expect(arrows.every((a) => a.rateKn >= 0.15)).toBe(true);
+    expect(arrows.every((a) => a.setDeg === 90)).toBe(true);
+  });
+});
+
+describe('tideRead', () => {
+  const baseState = (tide: TidalField | undefined, nextMarkIndex: number, lat: number, lon: number) =>
+    ({
+      selectedRaceId: 'race-round-island',
+      tidalField: tide,
+      progress: { lat, lon, elapsedHours: 3, nextMarkIndex, heading: 90 },
+    } as unknown as GameState);
+
+  it('is null on a slack course', () => {
+    expect(tideRead(baseState(undefined, 1, 50.7, -1.3))).toBeNull();
+  });
+
+  it('reports rate and a signed fair/foul component to the next mark', () => {
+    // Flood sets E (90°); phase 0 with elapsed 3h of a 12h cycle → peak flood.
+    const field = { floodDeg: 90, peakRateKn: 2, periodH: 12, phaseH: 0, gates: [], refLat: 50, refLon: -1 };
+    const read = tideRead(baseState(field, 5, 50.555, -1.3))!;
+    expect(read).not.toBeNull();
+    expect(read.rateKn).toBeGreaterThan(0);
+    expect(read.setDeg).toBe(90);
+    expect(Number.isFinite(read.along)).toBe(true);
+  });
+});
+
 describe('createTidalField', () => {
-  // A race carrying a tide profile (none ship one yet — the field is dormant in
-  // game — so build a representative one to prove the resolver works).
+  // A race carrying a tide profile (Round the Island now ships one; override it
+  // with a known single-gate profile here to prove the resolver works).
   const tidalRace = {
     ...getRaceById('race-round-island')!,
     tide: {

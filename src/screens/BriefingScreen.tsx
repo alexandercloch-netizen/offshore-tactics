@@ -258,6 +258,15 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
           <View style={styles.panel}>
             <Text style={styles.panelTitle}>Signature Challenge</Text>
             <Text style={styles.hazard}>{race.signatureHazard}</Text>
+            {race.tide && race.tide.peakRateKn > 0 ? (
+              <Text style={styles.tideNote}>
+                🌊 Tidal stream up to {race.tide.peakRateKn.toFixed(1)} kn
+                {race.tide.gates && race.tide.gates.length > 0
+                  ? `, running hardest at ${race.tide.gates.map((g) => g.waypoint).join(' & ')}`
+                  : ''}
+                . Time the gates — the fleet feels the same stream you do.
+              </Text>
+            ) : null}
             <View style={styles.factRow}>
               <Fact label="Course" value={`${Math.round(race.distanceNm)} nm`} />
               <Fact label="Record" value={formatDuration(race.recordTimeHours)} />
@@ -429,6 +438,7 @@ const styles = StyleSheet.create({
   hint: { color: colors.signalGreen, fontSize: fontSize.sm, marginTop: spacing.xs },
   firstLeg: { color: colors.mist, fontSize: fontSize.sm, marginTop: spacing.xs },
   hazard: { color: colors.mist, fontSize: fontSize.sm, lineHeight: 20 },
+  tideNote: { color: colors.tide, fontSize: fontSize.sm, lineHeight: 20, marginTop: spacing.sm },
   factRow: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.md },
   fact: {
     flex: 1,

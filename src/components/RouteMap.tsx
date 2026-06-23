@@ -12,7 +12,7 @@ import Svg, {
   Text as SvgText,
 } from 'react-native-svg';
 import { colors, radius, spacing } from '../theme';
-import { GeoPoint, Waypoint } from '../types';
+import { CurrentArrow, GeoPoint, Waypoint } from '../types';
 import type { WindArrow } from '../engine/wind';
 import { isLoopCourse } from '../engine/geo';
 import { windHeatColor } from './windScale';
@@ -27,6 +27,7 @@ interface RouteMapProps {
   boat?: GeoPoint; // current boat position
   competitors?: GeoPoint[]; // AI fleet positions
   wind?: WindArrow[]; // sampled wind field, drawn as arrows
+  current?: CurrentArrow[]; // sampled tidal stream, drawn as arrows along the set
   heat?: WindArrow[]; // denser wind grid, drawn as a colour heatmap under the arrows
   heatCols?: number; // grid width of `heat`, to size the cells
   heatRows?: number; // grid height of `heat`
@@ -104,6 +105,7 @@ export const RouteMap: React.FC<RouteMapProps> = ({
   boat,
   competitors,
   wind,
+  current,
   heat,
   heatCols,
   heatRows,
@@ -163,6 +165,28 @@ export const RouteMap: React.FC<RouteMapProps> = ({
       barbL: { x: tip.x + Math.sin(left) * hl, y: tip.y - Math.cos(left) * hl },
       barbR: { x: tip.x + Math.sin(right) * hl, y: tip.y - Math.cos(right) * hl },
       color: windColor(w.speedKn),
+    };
+  });
+
+  // Tidal stream arrows: each points the way the stream SETS, length scaled by
+  // rate. A flat-tailed, single-barb arrow in tide blue, distinct from the wind's.
+  const currentArrows = (current ?? []).map((cur) => {
+    const p = project(cur.lat, cur.lon);
+    const a = (cur.setDeg * Math.PI) / 180;
+    const dx = Math.sin(a);
+    const dy = -Math.cos(a);
+    const len = 8 + Math.max(0, Math.min(cur.rateKn / 2.5, 1)) * 12;
+    const tip = { x: p.x + dx * len * 0.5, y: p.y + dy * len * 0.5 };
+    const tail = { x: p.x - dx * len * 0.5, y: p.y - dy * len * 0.5 };
+    const hl = 4.5;
+    const left = (cur.setDeg + 150) * (Math.PI / 180);
+    const right = (cur.setDeg - 150) * (Math.PI / 180);
+    return {
+      key: `${cur.lat.toFixed(3)},${cur.lon.toFixed(3)}`,
+      tail,
+      tip,
+      barbL: { x: tip.x + Math.sin(left) * hl, y: tip.y - Math.cos(left) * hl },
+      barbR: { x: tip.x + Math.sin(right) * hl, y: tip.y - Math.cos(right) * hl },
     };
   });
 
@@ -260,6 +284,20 @@ export const RouteMap: React.FC<RouteMapProps> = ({
               </SvgText>
             </>
           ) : null}
+
+          {/* Tidal stream: which way the water sets and how hard (under the wind). */}
+          {currentArrows.map((cur) => (
+            <Path
+              key={`tide-${cur.key}`}
+              d={`M ${cur.tail.x.toFixed(1)} ${cur.tail.y.toFixed(1)} L ${cur.tip.x.toFixed(1)} ${cur.tip.y.toFixed(1)} M ${cur.barbL.x.toFixed(1)} ${cur.barbL.y.toFixed(1)} L ${cur.tip.x.toFixed(1)} ${cur.tip.y.toFixed(1)} L ${cur.barbR.x.toFixed(1)} ${cur.barbR.y.toFixed(1)}`}
+              stroke={colors.tide}
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              fill="none"
+              opacity={0.6}
+            />
+          ))}
 
           {/* Live wind field: direction & strength across the course. */}
           {windArrows.map((w) => (
