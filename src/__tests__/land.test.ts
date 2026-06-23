@@ -5,6 +5,9 @@ import { createWindField } from '../engine/wind';
 import { createFleet } from '../engine/fleet';
 import {
   DEFAULT_STRATEGY,
+  buildResult,
+  defaultStepNm,
+  downsampleTrack,
   initialProgress,
   raceDivision,
   stepRace,
@@ -144,5 +147,97 @@ describe('the planned course preview stays off land (all races)', () => {
       });
       expect(onLand).toEqual([]);
     });
+  });
+});
+
+// Stricter than `landCrossings` for loop courses: a chord across an island runs
+// mark-to-mark, so an endpoint check exempts it. Sample the segment *interior*
+// instead — a real incursion has points sitting inland, far from any mark, while
+// a tight headland rounding only has interior points hugging the mark.
+function inlandIncursions(
+  race: { waypoints: { lat: number; lon: number }[] },
+  land: LandPolygon[] | undefined,
+  pts: { lat: number; lon: number }[]
+): { lat: number; lon: number }[] {
+  const hits: { lat: number; lon: number }[] = [];
+  for (let i = 0; i < pts.length - 1; i += 1) {
+    const a = pts[i];
+    const b = pts[i + 1];
+    for (const t of [0.2, 0.35, 0.5, 0.65, 0.8]) {
+      const p = { lat: a.lat + (b.lat - a.lat) * t, lon: a.lon + (b.lon - a.lon) * t };
+      if (pointInLand(land, p.lat, p.lon) && !nearMark(race, p)) hits.push(p);
+    }
+  }
+  return hits;
+}
+
+// The post-race debrief draws the sailed track and the optimal line from a
+// *downsampled* copy stored on the result (kept small for the save). Uniform
+// decimation used to drop the headland corners, so the straight lines between
+// the survivors chorded across the island — the boat appeared to sail over land
+// on the results screen even though it never did live. Guard the stored track.
+describe('the post-race debrief track stays off land', () => {
+  function sailToResult(raceId: string, boatId: string, division: 'corinthian' | 'pro', seed: number) {
+    setRng(mulberry32(seed));
+    const race = getRaceById(raceId)!;
+    const boat = getBoatById(boatId)!;
+    const windField = createWindField(race);
+    let state = {
+      funds: 0,
+      selectedRaceId: raceId,
+      selectedDivision: division,
+      selectedBoatId: boat.id,
+      ownedBoatIds: [],
+      selectedCrewIds: [],
+      provisions: [],
+      strategy: DEFAULT_STRATEGY,
+      profile: { fleet: [] },
+      condition: healthy,
+      windField,
+      fleet: createFleet(race, raceDivision(race, division)),
+      progress: initialProgress(race, boat, division, windField),
+      history: [],
+      eventLog: [],
+    } as unknown as GameState;
+    // The real gameplay step (fine), so the trail is dense — exactly the case
+    // that exposed the chord-across-land bug once it was downsampled.
+    const step = defaultStepNm(race);
+    let out = stepRace(state, step);
+    for (let i = 0; i < 6000; i += 1) {
+      out = stepRace(state, step);
+      state = { ...state, progress: out.progress, condition: out.condition, weather: out.weather, fleet: out.fleet };
+      if (out.finished || out.retired) break;
+    }
+    return buildResult(state, out);
+  }
+
+  // Round the Island in a quick boat (the reported case): a tight loop around an
+  // island is the worst case for decimation chording across land.
+  it('Round the Island debrief keeps the sailed track and optimal line in the water', () => {
+    const race = getRaceById('race-round-island')!;
+    const land = LANDMASSES[race.id];
+    for (const seed of [3, 7, 21]) {
+      const result = sailToResult('race-round-island', 'boat-mistral', 'pro', seed);
+      expect(result.finished).toBe(true);
+      expect((result.trail?.length ?? 0)).toBeGreaterThan(2);
+      expect(inlandIncursions(race, land, result.trail ?? [])).toEqual([]);
+      expect(inlandIncursions(race, land, result.optimalRoute ?? [])).toEqual([]);
+    }
+  });
+
+  // Stress the simplifier directly: even decimated brutally hard (max 6–20 points
+  // around a whole island), the land-aware safety net must keep every surviving
+  // segment in the water. Naive uniform decimation chords straight across the
+  // island here; this is the guarantee that catches it regardless of budget.
+  it('keeps a hard-decimated island loop off land (the safety net works at any budget)', () => {
+    const race = getRaceById('race-round-island')!;
+    const land = LANDMASSES[race.id];
+    setRng(mulberry32(3));
+    const dense = sailTrail('race-round-island'); // a full lap's track
+    expect(dense.length).toBeGreaterThan(8);
+    for (const budget of [6, 8, 12, 20]) {
+      const cut = downsampleTrack(dense, land, budget);
+      expect(inlandIncursions(race, land, cut)).toEqual([]);
+    }
   });
 });
