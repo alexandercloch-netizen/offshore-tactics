@@ -79,7 +79,12 @@ export const ResultsScreen: React.FC<Props> = ({ navigation }) => {
         ) : (
           <>
             <Text style={styles.positionValue}>{ordinal(result.position)}</Text>
-            <Text style={styles.positionSub}>of {result.fleetSize} boats</Text>
+            <Text style={styles.positionSub}>of {result.fleetSize} on corrected time</Text>
+            {result.onWaterPosition && result.onWaterPosition !== result.position ? (
+              <Text style={styles.positionSwing}>
+                {ordinal(result.onWaterPosition)} across the line
+              </Text>
+            ) : null}
           </>
         )}
       </View>
@@ -89,8 +94,14 @@ export const ResultsScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={styles.statValue}>
             {result.retired ? '—' : formatDuration(result.elapsedHours)}
           </Text>
-          <Text style={styles.statLabel}>Elapsed Time</Text>
+          <Text style={styles.statLabel}>Elapsed (on the water)</Text>
         </View>
+        {!result.retired && result.correctedHours ? (
+          <View style={styles.statCard}>
+            <Text style={styles.statValue}>{formatDuration(result.correctedHours)}</Text>
+            <Text style={styles.statLabel}>Corrected Time</Text>
+          </View>
+        ) : null}
         <View style={styles.statCard}>
           <Text
             style={[
@@ -176,6 +187,11 @@ const styles = StyleSheet.create({
   positionSub: {
     color: colors.mist,
     fontSize: fontSize.md,
+  },
+  positionSwing: {
+    color: colors.brassLight,
+    fontSize: fontSize.sm,
+    marginTop: 2,
   },
   retiredText: {
     color: colors.signalRed,

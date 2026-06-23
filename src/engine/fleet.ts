@@ -31,10 +31,15 @@ export function createFleet(race: Race, division: RaceDivision): Competitor[] {
   const fleet: Competitor[] = [];
   for (let i = 0; i < count; i += 1) {
     const name = NAMES[i % NAMES.length] + (i >= NAMES.length ? ` ${Math.floor(i / NAMES.length) + 1}` : '');
+    const speedMul = clamp(mean + gaussish() * spread, 0.7, 1.12);
     fleet.push({
       id: `ai-${race.id}-${i}`,
       name,
-      speedMul: clamp(mean + gaussish() * spread, 0.7, 1.12),
+      speedMul,
+      // A faster boat rates higher and so owes more time on handicap — the
+      // correlation (<1) means raw pace is mostly, not fully, neutralised, so
+      // corrected standings turn on how well a boat sails its rating.
+      ratingTcc: clamp(1 + (speedMul - 1) * 0.85 + gaussish() * 0.025, 0.85, 1.45),
       // Each boat commits to a side of the course; combined with the live wind
       // it decides who gains and who loses, so the standings shuffle.
       bias: rndRange(-1, 1),
@@ -122,6 +127,31 @@ export function advanceFleet(
 // The player's live standing: 1 + the number of boats currently ahead.
 export function livePosition(fleet: Competitor[], playerDistanceNm: number): number {
   const ahead = fleet.filter((c) => !c.retired && c.distanceNm > playerDistanceNm).length;
+  return ahead + 1;
+}
+
+// A competitor's elapsed time for handicap purposes: its actual finish if it has
+// crossed, else a linear projection from its pace so far — so corrected
+// standings can be ranked the moment the player finishes.
+function projectedElapsed(c: Competitor, playerElapsedHours: number, totalNm: number): number {
+  if (c.finishedHours !== null) return c.finishedHours;
+  const covered = Math.max(c.distanceNm, 1e-6);
+  return playerElapsedHours * (totalNm / covered);
+}
+
+// The player's finish on CORRECTED (handicap) time: rank everyone's
+// elapsed × rating. This is the real offshore result — a slower boat that sails
+// above its rating beats a faster one that doesn't.
+export function correctedPosition(
+  fleet: Competitor[],
+  totalNm: number,
+  playerElapsedHours: number,
+  playerTcc: number
+): number {
+  const playerCorrected = playerElapsedHours * playerTcc;
+  const ahead = fleet.filter(
+    (c) => !c.retired && projectedElapsed(c, playerElapsedHours, totalNm) * c.ratingTcc < playerCorrected
+  ).length;
   return ahead + 1;
 }
 

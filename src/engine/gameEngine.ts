@@ -51,7 +51,7 @@ import { effectivePolar } from './sails';
 import { createWindField, sampleWind, weatherFromWind } from './wind';
 import { planRoute } from './router';
 import { LANDMASSES } from '../data/landmasses';
-import { advanceFleet, finalPosition, livePosition } from './fleet';
+import { advanceFleet, correctedPosition, finalPosition, livePosition } from './fleet';
 
 export const clamp = (value: number, min = 0, max = 100): number =>
   Math.max(min, Math.min(max, value));
@@ -899,6 +899,14 @@ export function applyDecision(state: GameState, choice: TacticalChoice): StepRes
 
 // ---- Results ----
 
+// A boat's handicap rating (corrected time = elapsed × TCC). Catalogue boats
+// carry an explicit rating; custom builds derive one from their pace so a fast
+// hull owes time and a cruiser is given some back.
+export function ratingTccFor(boat: Boat): number {
+  if (typeof boat.ratingTcc === 'number') return boat.ratingTcc;
+  return Math.max(0.85, Math.min(1.45, 0.78 + (boat.baseSpeed - 6) * 0.085));
+}
+
 function prizeForPosition(division: RaceDivision, position: number): number {
   if (position === 1) return division.prizeMoney;
   if (position === 2) return Math.round(division.prizeMoney * 0.6);
@@ -933,7 +941,20 @@ export function buildResult(state: GameState, outcome: StepResult): RaceResult {
   const divisionName = DIVISION_LABEL[state.selectedDivision];
   const finished = outcome.finished;
   const retired = outcome.retired;
-  const position = retired ? division.fleetSize : outcome.progress.position;
+  const boat = resolveBoatById(state, state.selectedBoatId);
+
+  // The official result is on CORRECTED time (elapsed × the boat's rating) — the
+  // way offshore races are actually scored. Line-honours ("on the water") is
+  // kept alongside for the drama of beating a faster boat on handicap.
+  const elapsedHours = outcome.progress.elapsedHours;
+  const tcc = boat ? ratingTccFor(boat) : 1;
+  const correctedHours = elapsedHours * tcc;
+  const onWaterPosition = retired ? division.fleetSize : outcome.progress.position;
+  const position =
+    retired || !finished
+      ? division.fleetSize
+      : correctedPosition(state.fleet ?? [], race.distanceNm, elapsedHours, tcc);
+
   // Finishing recoups most of your running costs (entry, wages, provisions —
   // not the one-off boat purchase); retiring forfeits them. Position prizes are
   // upside on top, so a well-sailed race is sustainable rather than a sure loss.
@@ -942,17 +963,23 @@ export function buildResult(state: GameState, outcome: StepResult): RaceResult {
   const sponsor = finished ? Math.round(operating * 0.9) : 0;
   const prizeMoney = finished ? sponsor + prizeForPosition(division, position) : 0;
 
+  // Did handicap change the story? (e.g. 5th across the line, 1st corrected.)
+  const handicapSwing = finished && !retired && onWaterPosition !== position;
+  const swingNote = handicapSwing
+    ? ` ${ordinal(onWaterPosition)} across the line, but ${ordinal(position)} once the handicap is applied.`
+    : '';
+
   let summary: string;
   if (retired) {
     summary = `Forced to retire from ${race.name} after the boat took too much punishment. Every campaign has its hard lessons.`;
   } else if (position === 1) {
-    summary = `Line honours in the ${divisionName} division! A flawless run sees you win ${race.name}. The fleet is left in your wake.`;
+    summary = `Overall win on corrected time in the ${divisionName} division of ${race.name}!${swingNote || ' A flawless race — the fleet is left in your wake.'}`;
   } else if (position <= 3) {
-    summary = `A podium finish — ${ordinal(position)} in the ${divisionName} division of ${race.name}. A strong, well-sailed race.`;
+    summary = `A podium on corrected time — ${ordinal(position)} in the ${divisionName} division of ${race.name}.${swingNote} A strong, well-sailed race.`;
   } else if (prizeMoney > 0) {
-    summary = `A solid ${ordinal(position)} in the ${divisionName} division of ${race.name}, good enough to take home some prize money.`;
+    summary = `A solid ${ordinal(position)} on corrected time in the ${divisionName} division of ${race.name}.${swingNote}`;
   } else {
-    summary = `${ordinal(position)} of ${division.fleetSize} in ${race.name}. Not the result you wanted — back to the drawing board.`;
+    summary = `${ordinal(position)} of ${division.fleetSize} on corrected time in ${race.name}.${swingNote} Not the result you wanted — back to the drawing board.`;
   }
 
   return {
@@ -963,8 +990,10 @@ export function buildResult(state: GameState, outcome: StepResult): RaceResult {
     finished,
     retired,
     position,
+    onWaterPosition,
     fleetSize: division.fleetSize,
-    elapsedHours: outcome.progress.elapsedHours,
+    elapsedHours,
+    correctedHours,
     prizeMoney,
     summary,
     timestamp: Date.now(),
