@@ -49,7 +49,7 @@ import {
 import { polarSpeed } from './polar';
 import { effectivePolar } from './sails';
 import { createWindField, forecastConfidence, pressureHint, sampleWind, weatherFromWind } from './wind';
-import { planRoute } from './router';
+import { planRoute, WindSampler } from './router';
 import { LANDMASSES } from '../data/landmasses';
 import { advanceFleet, correctedPosition, finalPosition, livePosition } from './fleet';
 
@@ -544,7 +544,8 @@ export function estimateRouteHours(
   field: WindField,
   startHours: number,
   effortMul = 1,
-  skillMul = 1
+  skillMul = 1,
+  sample: WindSampler = sampleWind
 ): number {
   if (route.length < 2) return 0;
   const CHUNK_NM = 6;
@@ -560,7 +561,7 @@ export function estimateRouteHours(
       const f = (c + 0.5) / chunks;
       const lat = a.lat + (b.lat - a.lat) * f;
       const lon = a.lon + (b.lon - a.lon) * f;
-      const wind = sampleWind(field, lat, lon, hours);
+      const wind = sample(field, lat, lon, hours);
       const sp = boatSpeedFor(boat, condition, heading, wind, effortMul, skillMul);
       hours += segNm / chunks / sp;
     }

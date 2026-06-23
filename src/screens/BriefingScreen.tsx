@@ -24,7 +24,7 @@ import {
   raceDivision,
   resolveBoatById,
 } from '../engine/gameEngine';
-import { planRoute } from '../engine/router';
+import { planRoute, WindSampler } from '../engine/router';
 import { courseAspect, courseBounds } from '../engine/geo';
 import {
   featureState,
@@ -55,6 +55,12 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
 
   const race = getRaceById(state.selectedRaceId);
   const boat = resolveBoatById(state, state.selectedBoatId);
+  // Everything the player sees is the crew's *believed* forecast, read through
+  // their Navigator: routes and ETAs are estimated on it, so a weak Navigator
+  // plans on a fuzzier picture (and can back the wrong side). The race itself
+  // still sails the true field.
+  const navSkill = navigatorSkill(state.selectedCrewIds);
+  const forecastSampler: WindSampler = (f, lat, lon, h) => sampleForecast(f, lat, lon, h, navSkill);
 
   // Weather-route each side option (left / optimal / right) once, so the plan
   // panel can compare finish ETAs. Routes depend on the wind & start, not the
@@ -62,6 +68,7 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
   const planRoutes = useMemo(() => {
     if (!race || !boat || !state.windField || !state.progress) return null;
     const from = { lat: state.progress.lat, lon: state.progress.lon };
+    const sampler: WindSampler = (f, lat, lon, h) => sampleForecast(f, lat, lon, h, navSkill);
     return ([-1, 0, 1] as RoutingBias[]).map((bias) => ({
       bias,
       route: planRoute(
@@ -72,11 +79,12 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
         state.progress!.nextMarkIndex,
         0,
         bias,
-        LANDMASSES[race.id]
+        LANDMASSES[race.id],
+        sampler
       ),
     }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [race, boat, state.windField, state.progress?.lat, state.progress?.lon, state.progress?.nextMarkIndex]);
+  }, [race, boat, state.windField, navSkill, state.progress?.lat, state.progress?.lon, state.progress?.nextMarkIndex]);
 
   // The race is normally committed (funds + wind field + fleet) when leaving
   // provisioning; begin it here as a fallback if we somehow arrived unstarted.
@@ -115,7 +123,6 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
   const heatRows = Math.max(10, Math.min(30, Math.round(heatCols * courseAspect(race.waypoints))));
   // The chart shows the crew's *forecast*, not ground truth: it grows fuzzier the
   // further out you scrub, and a sharp Navigator keeps it trustworthy for longer.
-  const navSkill = navigatorSkill(state.selectedCrewIds);
   const confidence = forecastConfidence(navSkill, forecastHour);
   const windArrows = sampleForecastGrid(windField, bounds, 7, 6, forecastHour, navSkill);
   const heat = sampleForecastGrid(windField, bounds, heatCols, heatRows, forecastHour, navSkill);
@@ -148,7 +155,7 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
   const skillMul = crewSkillFactor(crewSkillAverage(state.selectedCrewIds));
   const etas = (planRoutes ?? []).map((r) => ({
     ...r,
-    hours: estimateRouteHours(boat, state.condition, r.route, windField, 0, effortMul, skillMul),
+    hours: estimateRouteHours(boat, state.condition, r.route, windField, 0, effortMul, skillMul, forecastSampler),
   }));
   const fastest = etas.length ? etas.reduce((a, b) => (b.hours < a.hours ? b : a), etas[0]) : null;
   const mine = etas.find((e) => e.bias === state.strategy.bias) ?? fastest;

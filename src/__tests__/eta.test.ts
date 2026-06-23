@@ -3,7 +3,7 @@ import {
   EFFORT_SPEED,
 } from '../engine/gameEngine';
 import { planRoute } from '../engine/router';
-import { createWindField } from '../engine/wind';
+import { createWindField, sampleForecast } from '../engine/wind';
 import { mulberry32, resetRng, setRng } from '../engine/rng';
 import { getRaceById, getBoatById } from '../data';
 import { LANDMASSES } from '../data/landmasses';
@@ -55,6 +55,20 @@ describe('estimateRouteHours', () => {
       1
     );
     expect(worn).toBeGreaterThan(fresh);
+  });
+
+  it("estimated on the believed forecast: a weak navigator strays, a strong one tracks the truth", () => {
+    const { boat, field, route } = setup('race-fastnet');
+    const truth = estimateRouteHours(boat, healthy, route, field, 0, 1, 1);
+    const weak = estimateRouteHours(boat, healthy, route, field, 0, 1, 1, (f, la, lo, h) =>
+      sampleForecast(f, la, lo, h, 15)
+    );
+    const strong = estimateRouteHours(boat, healthy, route, field, 0, 1, 1, (f, la, lo, h) =>
+      sampleForecast(f, la, lo, h, 95)
+    );
+    // The race still sails the true field; only the *estimate* is blurred, more so
+    // for a weak navigator.
+    expect(Math.abs(weak - truth)).toBeGreaterThan(Math.abs(strong - truth));
   });
 
   it('is zero for a degenerate route', () => {

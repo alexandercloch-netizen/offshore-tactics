@@ -48,7 +48,10 @@ The simulation is a **pure, deterministic engine** with a thin React UI on top.
   - `polar.ts` / `polarTable.ts` / `polarImport.ts` — boat speed from polar
     diagrams (parametric for catalogue boats, real tables for custom boats).
   - `sails.ts` — specialist-sail wardrobe → effective polar.
-  - `router.ts` — isochrone-ish weather routing along the course.
+  - `router.ts` — isochrone-ish weather routing along the course. Takes an
+    optional `WindSampler`; the briefing passes a forecast sampler (blurred by
+    Navigator skill) so the *planned* route/ETA reflect the believed forecast,
+    while the race loop routes on the true field.
   - `fleet.ts` — the AI competitors (skill + course-side bias + variance).
   - `geo.ts` — projections, bearings, distances. `rng.ts` — seedable RNG.
   - `recommend.ts` — home-screen race recommendation from the player profile.
