@@ -22,6 +22,7 @@ interface RouteMapProps {
   waypoints: Waypoint[]; // fixed marks (also set the projection bounds)
   route?: GeoPoint[]; // remaining weather-routed path
   altRoute?: GeoPoint[]; // an alternative route to contrast (e.g. the faster line)
+  laylines?: GeoPoint[][]; // layline segments to the next mark (each a 2-point polyline)
   trail?: GeoPoint[]; // track sailed so far
   boat?: GeoPoint; // current boat position
   competitors?: GeoPoint[]; // AI fleet positions
@@ -98,6 +99,7 @@ export const RouteMap: React.FC<RouteMapProps> = ({
   waypoints,
   route,
   altRoute,
+  laylines,
   trail,
   boat,
   competitors,
@@ -119,6 +121,7 @@ export const RouteMap: React.FC<RouteMapProps> = ({
   const markPoints = waypoints.map((w) => project(w.lat, w.lon));
   const routePts = (route ?? []).map((p) => project(p.lat, p.lon));
   const altRoutePts = (altRoute ?? []).map((p) => project(p.lat, p.lon));
+  const laylinePaths = (laylines ?? []).map((seg) => seg.map((p) => project(p.lat, p.lon)));
   const trailPts = (trail ?? []).map((p) => project(p.lat, p.lon));
   const boatXY = boat ? project(boat.lat, boat.lon) : null;
   const competitorXY = (competitors ?? []).map((c) => project(c.lat, c.lon));
@@ -271,6 +274,21 @@ export const RouteMap: React.FC<RouteMapProps> = ({
               opacity={0.7}
             />
           ))}
+
+          {/* Laylines to the next mark (the close-hauled / running approach lines). */}
+          {laylinePaths.map((seg, i) =>
+            seg.length > 1 ? (
+              <Path
+                key={`layline-${i}`}
+                d={pathFrom(seg)}
+                stroke={colors.steel}
+                strokeWidth={1}
+                strokeDasharray="2 4"
+                fill="none"
+                opacity={0.6}
+              />
+            ) : null
+          )}
 
           {/* The faster alternative line, for contrast (drawn under the plan). */}
           {altRoutePts.length > 1 ? (

@@ -33,9 +33,10 @@ The simulation is a **pure, deterministic engine** with a thin React UI on top.
 
 - **`src/engine/`** — the game logic, no React. Pure & unit-tested:
   - `gameEngine.ts` — orchestration: race setup, per-tick `stepRace`, decisions
-    (`applyDecision`), results, costs, progression/unlocks. Also the speed model
-    (`boatSpeedFor`) and `estimateRouteHours` (a forward finish-ETA used by the
-    briefing's "fast route vs your plan" preview).
+    (`applyDecision`), results (corrected/handicap time via `ratingTccFor`),
+    costs, progression/unlocks. Also the speed model (`boatSpeedFor`),
+    `estimateRouteHours` (the briefing's finish-ETA preview), and the in-race
+    tactical instruments (`polarTargetSpeed`, `laylines`, `tacticalRead`).
   - `wind.ts` — the analytic wind field (`createWindField`/`sampleWind`): the
     seasonal baseline (from the baked `data/weatherClimatology.ts`), multiple
     drifting puffs/holes, a travelling front, a diurnal cycle and fine texture.

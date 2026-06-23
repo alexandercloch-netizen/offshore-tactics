@@ -8,11 +8,14 @@ import {
   initialProgress,
   isRaceUnlocked,
   raceDivision,
+  laylines,
+  polarTargetSpeed,
   speedMadeGood,
   stepRace,
   tacticalEdge,
   vmgPreview,
 } from '../engine/gameEngine';
+import { bearing } from '../engine/geo';
 import { WindField } from '../types';
 import { createWindField, sampleWind, weatherFromWind } from '../engine/wind';
 import { createFleet } from '../engine/fleet';
@@ -574,5 +577,41 @@ describe('tactical decisions resolved against the wind field', () => {
     setRng(mulberry32(2));
     const b = applyDecision(baseState({ windField: flatField(start.lat, start.lon) }), safe);
     expect(a.progress.elapsedHours).toBeCloseTo(b.progress.elapsedHours, 6);
+  });
+});
+
+describe('tactical instruments', () => {
+  it('polarTargetSpeed is a finite, positive polar speed', () => {
+    const t = polarTargetSpeed(baseState());
+    expect(Number.isFinite(t)).toBe(true);
+    expect(t).toBeGreaterThan(0);
+  });
+
+  it('laylines appear for an upwind mark and not for a reach', () => {
+    const race = getRaceById('race-round-island')!;
+    const s = baseState({ selectedRaceId: race.id });
+    const start = race.waypoints[0];
+    const mark = race.waypoints[1];
+    const brg = bearing(start.lat, start.lon, mark.lat, mark.lon);
+    const flatDir = (dir: number): WindField => ({
+      baseDir: dir,
+      baseSpeed: 12,
+      shiftAmpDeg: 0,
+      shiftPeriodH: 6,
+      shiftPhase: 0,
+      rotateDegPerH: 0,
+      gradientAxisDeg: 0,
+      gradientPerNm: 0,
+      refLat: start.lat,
+      refLon: start.lon,
+      feature: { lat: start.lat, lon: start.lon, radiusNm: 1, deltaKn: 0, driftDir: 0, driftKn: 0 },
+    });
+    // Wind from the mark's bearing → the mark is dead upwind → laylines exist.
+    const upwind = laylines({ ...s, windField: flatDir(brg) });
+    expect(upwind).not.toBeNull();
+    expect(upwind!.ends).toHaveLength(2);
+    // Wind across the course → a reach, the mark lays directly → no laylines.
+    const reach = laylines({ ...s, windField: flatDir((brg + 90) % 360) });
+    expect(reach).toBeNull();
   });
 });

@@ -24,6 +24,8 @@ import { useGame } from '../store/GameContext';
 import {
   currentSpeed,
   formatDuration,
+  laylines,
+  polarTargetSpeed,
   raceDivision,
   resolveBoatById,
   speedMadeGood,
@@ -217,6 +219,13 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
   const speed = currentSpeed(state);
   const currentVmg = speedMadeGood(state);
   const etaHours = remaining / Math.max(currentVmg, 0.2);
+  // Tactical instruments: polar target (and how close we're sailing to it), the
+  // laylines to the next mark, and where the breeze is trending.
+  const target = polarTargetSpeed(state);
+  const polarPct = target > 0 ? Math.round((speed / target) * 100) : 0;
+  const lay = laylines(state);
+  const layPaths = lay ? [[lay.mark, lay.ends[0]], [lay.mark, lay.ends[1]]] : undefined;
+  const read = state.windField ? tacticalRead(state) : null;
   const recentLog = state.eventLog.slice(-4).reverse();
   const strategy = state.strategy;
   const hint =
@@ -267,6 +276,7 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
           trail={progress.trail}
           boat={{ lat: progress.lat, lon: progress.lon }}
           competitors={state.fleet ? competitorPoints(state.fleet, race) : []}
+          laylines={layPaths}
           wind={windArrows}
           heat={windHeat}
           heatCols={heatCols}
@@ -297,6 +307,11 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
           <Metric label="Speed" value={`${speed.toFixed(1)} kn`} />
           <Metric label="ETA" value={remaining <= 0 ? '—' : formatDuration(etaHours)} />
         </View>
+        <View style={styles.metricsRow}>
+          <Metric label="VMG" value={`${currentVmg.toFixed(1)} kn`} />
+          <Metric label="Target" value={`${target.toFixed(1)} kn`} />
+          <Metric label="% Polar" value={`${polarPct}%`} />
+        </View>
 
         <View style={styles.panel}>
           <View style={styles.windRow}>
@@ -319,6 +334,11 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
               </Text>
             ) : null}
           </View>
+          {read ? (
+            <Text style={styles.trendLine}>
+              Ahead: {trendShift(read.shiftDeg)} · {trendBuild(read.buildKn)}
+            </Text>
+          ) : null}
 
           <Text style={styles.tacticsLabel}>Effort</Text>
           <Segmented<EffortMode>
@@ -391,6 +411,20 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
       />
     </View>
   );
+};
+
+// Short descriptions of the forecast shift/build over the next ~hour, for the HUD.
+const trendShift = (deg: number): string => {
+  const r = Math.round(deg);
+  if (r > 3) return `veering ${r}°`;
+  if (r < -3) return `backing ${Math.abs(r)}°`;
+  return 'steady wind';
+};
+const trendBuild = (kn: number): string => {
+  const r = Math.round(kn);
+  if (r > 1) return `building +${r} kn`;
+  if (r < -1) return `easing ${r} kn`;
+  return 'holding';
 };
 
 const Metric: React.FC<{ label: string; value: string }> = ({ label, value }) => (
@@ -595,6 +629,11 @@ const styles = StyleSheet.create({
     color: colors.signalGreen,
     fontSize: fontSize.xs,
     fontWeight: fontWeight.bold,
+  },
+  trendLine: {
+    color: colors.mist,
+    fontSize: fontSize.xs,
+    marginBottom: spacing.sm,
   },
   tacticsLabel: {
     color: colors.slate,
