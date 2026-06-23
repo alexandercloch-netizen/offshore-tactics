@@ -1,9 +1,15 @@
-import { Boat, GeoPoint, RoutingBias, Waypoint, WindField } from '../types';
+import { Boat, GeoPoint, RoutingBias, Waypoint, WindField, WindSample } from '../types';
 import { angularDelta, bearing, haversineNm, movePoint } from './geo';
 import { polarSpeed } from './polar';
 import { sampleWind } from './wind';
 import { LandPolygon } from '../data/landmasses';
 import { pointInLand, segmentCrossesLand } from './land';
+
+// How the router reads the wind. Defaults to the true field; the briefing passes
+// a forecast sampler (blurred by Navigator skill) so the *planned* route and ETA
+// reflect what the crew believes — a weak Navigator can plan the wrong route,
+// while the race itself still sails the true field.
+export type WindSampler = (field: WindField, lat: number, lon: number, hours: number) => WindSample;
 
 interface RNode {
   lat: number;
@@ -66,7 +72,8 @@ export function isochroneLeg(
   from: GeoPoint,
   to: GeoPoint,
   startHours: number,
-  land?: LandPolygon[]
+  land?: LandPolygon[],
+  sample: WindSampler = sampleWind
 ): GeoPoint[] {
   const direct = haversineNm(from.lat, from.lon, to.lat, to.lon);
   if (direct < 2) return [from, to];
@@ -80,7 +87,7 @@ export function isochroneLeg(
     const next: RNode[] = [];
 
     for (const node of frontier) {
-      const wind = sampleWind(field, node.lat, node.lon, startHours);
+      const wind = sample(field, node.lat, node.lon, startHours);
       const brgDest = bearing(node.lat, node.lon, to.lat, to.lon);
       for (let h = -HEADING_SPREAD; h <= HEADING_SPREAD; h += HEADING_STEP) {
         const heading = (brgDest + h + 360) % 360;
@@ -102,7 +109,7 @@ export function isochroneLeg(
     // Can any frontier node fetch the mark within the next step?
     for (const node of frontier) {
       const d = haversineNm(node.lat, node.lon, to.lat, to.lon);
-      const wind = sampleWind(field, node.lat, node.lon, startHours);
+      const wind = sample(field, node.lat, node.lon, startHours);
       const brg = bearing(node.lat, node.lon, to.lat, to.lon);
       const sp = polarSpeed(boat, angularDelta(brg, wind.fromDeg), wind.speedKn);
       if (sp > 0.2 && d <= sp * dt * 1.1 && !segmentCrossesLand(land, node, to)) {
@@ -183,7 +190,8 @@ function activeLeg(
   dest: GeoPoint,
   startHours: number,
   bias: RoutingBias,
-  land?: LandPolygon[]
+  land?: LandPolygon[],
+  sample: WindSampler = sampleWind
 ): GeoPoint[] {
   let strategic: GeoPoint | null = null;
   if (bias !== 0) {
@@ -200,9 +208,9 @@ function activeLeg(
       }
     }
   }
-  if (!strategic) return isochroneLeg(boat, field, from, dest, startHours, land);
-  const toStrategic = isochroneLeg(boat, field, from, strategic, startHours, land);
-  const toMark = isochroneLeg(boat, field, strategic, dest, startHours, land);
+  if (!strategic) return isochroneLeg(boat, field, from, dest, startHours, land, sample);
+  const toStrategic = isochroneLeg(boat, field, from, strategic, startHours, land, sample);
+  const toMark = isochroneLeg(boat, field, strategic, dest, startHours, land, sample);
   return [...toStrategic, ...toMark.slice(1)];
 }
 
@@ -221,13 +229,14 @@ export function planRoute(
   nextMarkIndex: number,
   startHours: number,
   bias: RoutingBias = 0,
-  land?: LandPolygon[]
+  land?: LandPolygon[],
+  sample: WindSampler = sampleWind
 ): GeoPoint[] {
   if (nextMarkIndex >= marks.length) return [from];
   const next = marks[nextMarkIndex];
   const dest = { lat: next.lat, lon: next.lon };
 
-  const pts = activeLeg(boat, field, from, dest, startHours, bias, land);
+  const pts = activeLeg(boat, field, from, dest, startHours, bias, land, sample);
 
   // Onward legs are a land-aware preview (cheap), refined to a full isochrone
   // when the boat actually rounds into them.
