@@ -456,7 +456,10 @@ export function cleanRunHours(
   const wearMul = EFFORT_WEAR.cruise;
   const condition: BoatCondition = { hullIntegrity: 100, crewStamina: 100, crewMorale: 100 };
   const total = race.distanceNm;
-  const step = defaultStepNm(race);
+  // A coarser step than gameplay: the benchmark only needs the total finish time,
+  // not a smooth track, and time integrates over distance, so a bigger chunk is
+  // an unbiased (just rougher) estimate — and keeps race setup snappy on-device.
+  const step = Math.max(defaultStepNm(race) * 3, 1);
   const start = marks[0];
   let pos: GeoPoint = { lat: start.lat, lon: start.lon };
   let nextMarkIndex = 1;
