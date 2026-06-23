@@ -38,6 +38,7 @@ import {
   buildResult,
   campaignCost,
   defaultStepNm,
+  fleetBenchmarkHours,
   initialCondition,
   initialProgress,
   raceDivision,
@@ -555,7 +556,11 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
     const windField = createWindField(race);
     const start = race.waypoints[0];
     const weather = weatherFromWind(sampleWind(windField, start.lat, start.lon, 0));
-    const fleet = createFleet(race, raceDivision(race, current.selectedDivision));
+    const fleet = createFleet(
+      race,
+      raceDivision(race, current.selectedDivision),
+      fleetBenchmarkHours(race, windField)
+    );
     dispatch({
       type: 'BEGIN_RACE',
       payload: {

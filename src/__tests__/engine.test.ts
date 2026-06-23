@@ -5,6 +5,7 @@ import {
   campaignCost,
   currentSpeed,
   defaultStepNm,
+  fleetBenchmarkHours,
   initialProgress,
   isRaceUnlocked,
   raceDivision,
@@ -18,7 +19,7 @@ import {
 import { bearing } from '../engine/geo';
 import { WindField } from '../types';
 import { createWindField, sampleWind, weatherFromWind } from '../engine/wind';
-import { createFleet } from '../engine/fleet';
+import { createFleet, finalPosition } from '../engine/fleet';
 import { mulberry32, resetRng, setRng } from '../engine/rng';
 import {
   BOATS,
@@ -64,7 +65,7 @@ function baseState(overrides: Partial<GameState> = {}): GameState {
     condition: healthy,
     weather,
     windField,
-    fleet: createFleet(race, raceDivision(race, division)),
+    fleet: createFleet(race, raceDivision(race, division), fleetBenchmarkHours(race, windField)),
     strategy: DEFAULT_STRATEGY,
     profile: { fleet: [] },
     progress: initialProgress(race, boat, division, windField),
@@ -577,6 +578,37 @@ describe('tactical decisions resolved against the wind field', () => {
     setRng(mulberry32(2));
     const b = applyDecision(baseState({ windField: flatField(start.lat, start.lon) }), safe);
     expect(a.progress.elapsedHours).toBeCloseTo(b.progress.elapsedHours, 6);
+  });
+});
+
+describe('fleet balance', () => {
+  afterEach(() => resetRng());
+
+  // Guards the regression where the AI fleet sailed an idealised line no human
+  // could match, leaving the player structurally last. A cleanly-sailed decent
+  // boat must be able to fight near the front.
+  it('a cleanly-sailed decent boat contends, never stuck last', () => {
+    const raceId = 'race-round-island';
+    const race = getRaceById(raceId)!;
+    const fleetSize = raceDivision(race, 'corinthian').fleetSize;
+    const step = defaultStepNm(race);
+    const positions: number[] = [];
+    for (const seed of [3, 7, 21]) {
+      setRng(mulberry32(seed));
+      let s = baseState({ selectedRaceId: raceId, selectedBoatId: 'boat-tempest', selectedDivision: 'corinthian' });
+      let out = stepRace(s, step);
+      for (let i = 0; i < 3000; i += 1) {
+        out = stepRace(s, step);
+        s = { ...s, progress: out.progress, condition: out.condition, weather: out.weather, fleet: out.fleet };
+        if (out.finished || out.retired) break;
+      }
+      expect(out.finished).toBe(true);
+      positions.push(finalPosition(s.fleet ?? [], out.progress.elapsedHours));
+    }
+    // Across seeds, a decent boat reaches the podium-contending top third — and is
+    // never marooned at the back every time.
+    expect(Math.min(...positions)).toBeLessThanOrEqual(Math.ceil(fleetSize / 3));
+    expect(Math.min(...positions)).toBeLessThan(fleetSize);
   });
 });
 

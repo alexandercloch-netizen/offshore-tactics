@@ -53,7 +53,11 @@ The simulation is a **pure, deterministic engine** with a thin React UI on top.
     optional `WindSampler`; the briefing passes a forecast sampler (blurred by
     Navigator skill) so the *planned* route/ETA reflect the believed forecast,
     while the race loop routes on the true field.
-  - `fleet.ts` — the AI competitors (skill + course-side bias + variance).
+  - `fleet.ts` — the AI competitors. Each is paced to a per-boat target finish
+    derived from `fleetBenchmarkHours` (a reference boat's clean run on the
+    optimal line, via the same route-based model the player sails), so difficulty
+    is consistent across courses and a faster boat/crew genuinely gains; course-
+    side bias + variance shuffle the standings.
   - `geo.ts` — projections, bearings, distances. `rng.ts` — seedable RNG.
   - `recommend.ts` — home-screen race recommendation from the player profile.
   - Tactical decisions (`data/events.ts`) tagged `field: true` are *resolved

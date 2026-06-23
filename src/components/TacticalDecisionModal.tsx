@@ -84,12 +84,11 @@ export const TacticalDecisionModal: React.FC<TacticalDecisionModalProps> = ({
 }) => {
   const isMob = event?.kind === 'mob';
   const { width } = useWindowDimensions();
-  // Dock the call to a right-hand panel only when the screen is wide enough that
-  // the panel clears the centred race column (≈760px) beside it; otherwise use a
-  // bottom sheet, which works at any width. Either way the backdrop stays clear
-  // so the chart, fleet and wind behind it remain readable while the player
-  // decides (the sim is frozen meanwhile).
-  const wide = width >= 1672;
+  // On a roomy screen show a centred dialog; on a phone-width screen use a
+  // bottom sheet. Either way the backdrop stays barely dimmed so the chart,
+  // fleet and wind behind remain readable while the player decides (the sim is
+  // frozen meanwhile).
+  const wide = width >= 820;
   return (
     <Modal visible={visible && !!event} transparent animationType={wide ? 'fade' : 'slide'}>
       <View style={[styles.backdrop, wide ? styles.backdropWide : styles.backdropNarrow]}>
@@ -208,9 +207,8 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   backdropWide: {
-    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
   },
   card: {
     backgroundColor: colors.card,
@@ -234,7 +232,6 @@ const styles = StyleSheet.create({
   },
   cardWide: {
     maxHeight: '92%',
-    marginRight: spacing.lg,
     borderWidth: 1,
     borderRadius: radius.lg,
   },

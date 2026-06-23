@@ -436,6 +436,37 @@ export function makeWindField(race: Race): WindField {
   return createWindField(race);
 }
 
+// The benchmark finish time the AI fleet is paced around: a reference cruiser-
+// racer's clean run on the weather-optimal line, via the SAME route-based model
+// the player effectively sails. Anchoring the fleet here (rather than an ideal
+// straight-line VMG) keeps difficulty consistent across courses and lets a
+// faster boat or sharper crew genuinely gain ground on the fleet.
+export function fleetBenchmarkHours(race: Race, field: WindField): number {
+  const ref = getBoatById('boat-corsair');
+  if (!ref) return race.recordTimeHours * 2.4;
+  const start = race.waypoints[0];
+  const route = planRoute(
+    ref,
+    field,
+    { lat: start.lat, lon: start.lon },
+    race.waypoints,
+    1,
+    0,
+    0,
+    LANDMASSES[race.id]
+  );
+  const hours = estimateRouteHours(
+    ref,
+    { hullIntegrity: 100, crewStamina: 100, crewMorale: 100 },
+    route,
+    field,
+    0,
+    EFFORT_SPEED.cruise,
+    crewSkillFactor(DEFAULT_CREW_SKILL)
+  );
+  return hours > 0 ? hours : race.recordTimeHours * 2.4;
+}
+
 // Geometric distance still to sail toward the finish (mark to mark, ignoring
 // the extra miles spent tacking), used for the progress bar and positioning.
 function geometricRemaining(
@@ -888,7 +919,7 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
   };
 
   // Advance the AI fleet through the same elapsed time and wind, then rank.
-  const fleet = advanceFleet(state.fleet ?? [], race, boat, field, prev.elapsedHours, dtHours);
+  const fleet = advanceFleet(state.fleet ?? [], race, field, prev.elapsedHours, dtHours);
   progress.position = finished
     ? finalPosition(fleet, elapsedHours)
     : livePosition(fleet, distanceCoveredNm);
@@ -992,7 +1023,7 @@ export function applyDecision(state: GameState, choice: TacticalChoice): StepRes
   // While the player handles the decision, the fleet sails on — a costly call
   // can drop you down the standings.
   const fleet = state.windField
-    ? advanceFleet(state.fleet ?? [], race, boat, state.windField, state.progress.elapsedHours, lostHours)
+    ? advanceFleet(state.fleet ?? [], race, state.windField, state.progress.elapsedHours, lostHours)
     : (state.fleet ?? []);
   progress.position = livePosition(fleet, progress.distanceCoveredNm);
 
