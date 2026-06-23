@@ -1,8 +1,9 @@
 import { Boat, Competitor, GeoPoint, Race, RaceDivision, TidalField, WindField } from '../types';
-import { bearing, pointAtFraction } from './geo';
+import { bearing, movePoint, pointAtFraction } from './geo';
 import { bestVmgAngles, polarSpeed } from './polar';
 import { pressureHint, sampleWind } from './wind';
 import { tideAlong } from './current';
+import { getBoatById } from '../data';
 import { rnd, rndRange } from './rng';
 
 // Evocative yacht names for the AI fleet.
@@ -27,6 +28,30 @@ const clamp = (v: number, min: number, max: number): number =>
 // measured against for the on-water edge below. (Matches boat-corsair, our
 // documented reference.)
 const REF_BASE_SPEED = 8.6;
+
+// The reference hull whose polar shapes the fleet's response to the local wind
+// (it only sets the *relative* surge/stall — see `windFactor` — so its exact
+// numbers wash out). A plain fallback keeps the engine pure if the catalogue
+// lookup ever misses.
+const REF_BOAT: Boat =
+  getBoatById('boat-corsair') ??
+  ({
+    id: 'ref',
+    name: 'Reference',
+    className: 'ref',
+    description: '',
+    baseSpeed: REF_BASE_SPEED,
+    upwind: 70,
+    downwind: 70,
+    stability: 70,
+    crewCapacity: 8,
+    price: 0,
+  } as Boat);
+
+// How far off the rhumb line a fully-committed boat sails, so the fleet spreads
+// across the course (lateral leverage) instead of stacking on one line.
+const LEVERAGE_FRACTION = 0.05;
+const LEVERAGE_CAP_NM = 30;
 
 // Build the AI fleet (everyone but the player). Each boat is paced to a target
 // finish time built from the race benchmark (a clean run of the player's own
@@ -123,11 +148,33 @@ function favouredSide(
   return cross * (hint.strong ? 1 : 0.5);
 }
 
+// Where a competitor actually is, and the way the course runs there. Its 2-D
+// position is derived from its progress and chosen side — offset perpendicular to
+// the rhumb line, tapering to nothing at the start and finish (everyone rounds
+// the same marks) — so the fleet samples the wind and tide where it really sails,
+// and the chart shows it spread across the course. Pure: no stored 2-D state.
+function competitorState(race: Race, c: Competitor): { pos: GeoPoint; courseDeg: number } {
+  const total = race.distanceNm;
+  const fraction = clamp(c.distanceNm / total, 0, 1);
+  const base = pointAtFraction(race.waypoints, fraction);
+  const ahead = pointAtFraction(race.waypoints, clamp(fraction + 0.01, 0, 1));
+  const courseDeg = bearing(base.lat, base.lon, ahead.lat, ahead.lon);
+  const taper = Math.sin(Math.PI * fraction); // 0 at the marks, 1 mid-course
+  const offsetNm = (c.bias ?? 0) * Math.min(total * LEVERAGE_FRACTION, LEVERAGE_CAP_NM) * taper;
+  const pos =
+    Math.abs(offsetNm) > 1e-6
+      ? movePoint(base.lat, base.lon, (courseDeg + 90 + 360) % 360, offsetNm)
+      : base;
+  return { pos, courseDeg };
+}
+
 // Advance every competitor by the time elapsed this step. Each boat holds its
-// benchmark pace (course ÷ targetHours), nudged by the local breeze and by
-// whether it's on the favoured side — so the field breathes and the standings
-// shuffle through the race rather than sitting frozen in pace order. The mean
-// nudge is ~1, so the per-boat target pace sets the difficulty. Pure given RNG.
+// benchmark pace (course ÷ targetHours) — which sets the difficulty — but now
+// sails it through the *same engine the player does*: its speed surges and stalls
+// with the real wind it finds at its own position (a mean-1 factor, so the
+// average pace is unchanged) and the tide along its course, and it gains or loses
+// by backing the favoured side. So the fleet lives in the same weather as the
+// player, which is what lets tide stay fair in the standings. Pure given RNG.
 export function advanceFleet(
   fleet: Competitor[],
   race: Race,
@@ -143,24 +190,24 @@ export function advanceFleet(
   return fleet.map((c) => {
     if (c.retired || c.finishedHours !== null) return c;
 
-    const fraction = clamp(c.distanceNm / total, 0, 1);
-    const tp = pointAtFraction(race.waypoints, fraction);
-    const wind = sampleWind(field, tp.lat, tp.lon, startHours);
-    // Hold the benchmark pace (course ÷ targetHours), nudged only by mean-1
-    // factors so the overall difficulty is unchanged: a bonus for backing the
-    // favoured side (the tactical shuffle) and a touch of puff luck.
+    const { pos, courseDeg } = competitorState(race, c);
+    const wind = sampleWind(field, pos.lat, pos.lon, startHours);
     const pace = total / Math.max(c.targetHours, 1e-6);
-    const align = (c.bias ?? 0) * favouredSide(field, tp.lat, tp.lon, startHours, axisDeg);
-    const sideBonus = 1 + 0.1 * align;
+    // Response to the *local* wind vs the course's baseline, as a made-good ratio
+    // through the reference polar. Mean ~1 (local wind oscillates around base), so
+    // it leaves the average pace — and the tuned difficulty — intact, while the
+    // boat genuinely speeds up in pressure and slows in a hole like the player.
+    const refLocal = madeGoodSpeed(REF_BOAT, courseDeg, wind.fromDeg, wind.speedKn);
+    const refBase = madeGoodSpeed(REF_BOAT, courseDeg, field.baseDir, field.baseSpeed);
+    const windFactor = clamp(refLocal / Math.max(refBase, 0.1), 0.4, 1.8);
+    const align = (c.bias ?? 0) * favouredSide(field, pos.lat, pos.lon, startHours, axisDeg);
+    const sideBonus = 1 + 0.08 * align;
     const variance = 1 + gaussish() * 0.05;
     // The same tide the player fights, along the local course direction: a fair
-    // stream carries the whole fleet, a foul one holds it up. The benchmark is
-    // tide-free, so this cancels in the standings — it's shared weather, not a
-    // difficulty knob — but the fleet now surges and stalls with the player.
-    const ahead = pointAtFraction(race.waypoints, clamp(fraction + 0.01, 0, 1));
-    const courseDeg = bearing(tp.lat, tp.lon, ahead.lat, ahead.lon);
-    const tide = tideAlong(tidalField, tp.lat, tp.lon, startHours, courseDeg);
-    const smg = Math.max(pace * sideBonus * variance + tide, 0.2);
+    // stream carries the boat, a foul one holds it up. The benchmark is tide-free,
+    // so over the fleet this is shared weather, not a difficulty knob.
+    const tide = tideAlong(tidalField, pos.lat, pos.lon, startHours, courseDeg);
+    const smg = Math.max(pace * windFactor * sideBonus * variance + tide, 0.2);
 
     // Rare retirement, more likely when it is blowing hard.
     if (rnd() < 0.00025 * dtHours * (1 + wind.speedKn / 20)) {
@@ -218,11 +265,7 @@ export function finalPosition(fleet: Competitor[], playerElapsedHours: number): 
 // shown from the gun (distance 0 = on the start line) so the fleet is visible
 // immediately, not only once it has sailed clear of the start.
 export function competitorPoints(fleet: Competitor[], race: Race): GeoPoint[] {
-  const total = race.distanceNm;
   return fleet
     .filter((c) => !c.retired && c.finishedHours === null)
-    .map((c) => {
-      const tp = pointAtFraction(race.waypoints, clamp(c.distanceNm / total, 0, 1));
-      return { lat: tp.lat, lon: tp.lon };
-    });
+    .map((c) => competitorState(race, c).pos);
 }

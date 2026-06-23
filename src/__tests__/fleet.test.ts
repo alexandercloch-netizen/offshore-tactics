@@ -185,6 +185,23 @@ describe('competitorPoints', () => {
     expect(typeof pts[0].lat).toBe('number');
   });
 
+  it('spreads boats across the course by the side they back (lateral leverage)', () => {
+    // Two boats at the same progress but opposite sides sit either side of the
+    // rhumb line mid-course — the fleet has width, not a single-file line.
+    const mid = race.distanceNm / 2;
+    const left: Competitor[] = [
+      { id: 'l', name: 'L', speedMul: 1, ratingTcc: 1, targetHours: 100, distanceNm: mid, bias: -1, finishedHours: null, retired: false },
+    ];
+    const right: Competitor[] = [
+      { id: 'r', name: 'R', speedMul: 1, ratingTcc: 1, targetHours: 100, distanceNm: mid, bias: 1, finishedHours: null, retired: false },
+    ];
+    const [lp] = competitorPoints(left, race);
+    const [rp] = competitorPoints(right, race);
+    // Opposite sides → genuinely different positions across the course.
+    expect(lp.lat !== rp.lat || lp.lon !== rp.lon).toBe(true);
+    expect(Math.hypot(lp.lat - rp.lat, lp.lon - rp.lon)).toBeGreaterThan(0.02);
+  });
+
   it('shows competitors sitting on the start line (distance 0)', () => {
     // A freshly created fleet is all at distance 0; it must be visible from the
     // gun, not only once boats have sailed clear of the start.
