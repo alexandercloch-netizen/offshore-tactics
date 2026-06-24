@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Svg, {
   Circle,
@@ -115,12 +115,156 @@ export const RouteMap: React.FC<RouteMapProps> = ({
   width = 320,
   height = 200,
 }) => {
-  if (!waypoints || waypoints.length < 2) {
+  const ready = !!waypoints && waypoints.length >= 2;
+
+  // The projection is fixed for the course — recompute only on resize, not on
+  // every race tick.
+  const project = useMemo(
+    () => (ready ? buildProjector(waypoints, width, height) : null),
+    [ready, waypoints, width, height]
+  );
+
+  // A loop course (e.g. Round the Island) starts and finishes at the same buoy,
+  // so draw one combined marker rather than stacking the START and FINISH labels.
+  const loopCourse = useMemo(() => (ready ? isLoopCourse(waypoints) : false), [ready, waypoints]);
+
+  // --- Static layers --------------------------------------------------------
+  // These change at most once per hour-bucket (the grids) or on resize, NOT every
+  // ~150ms tick. Memoising the rendered SVG keeps react-native-svg from
+  // reconciling hundreds of nodes (the heatmap especially) several times a second
+  // while the boat creeps forward.
+  const heatLayer = useMemo(() => {
+    if (!project || !heat || !heatCols || !heatRows || heatCols <= 1 || heatRows <= 1) return null;
+    const cw = (width / (heatCols - 1)) * 1.08;
+    const ch = (height / (heatRows - 1)) * 1.08;
+    return heat.map((h) => {
+      const p = project(h.lat, h.lon);
+      return (
+        <Rect
+          key={`heat-${h.lat.toFixed(3)},${h.lon.toFixed(3)}`}
+          x={p.x - cw / 2}
+          y={p.y - ch / 2}
+          width={cw}
+          height={ch}
+          fill={windHeatColor(h.speedKn)}
+          opacity={0.5}
+        />
+      );
+    });
+  }, [project, heat, heatCols, heatRows, width, height]);
+
+  const landLayer = useMemo(() => {
+    if (!project || !land) return null;
+    return land.map((polygon, i) => (
+      <Path
+        key={`land-${i}`}
+        d={landPath(polygon, project)}
+        fill="url(#land)"
+        stroke={colors.coastline}
+        strokeWidth={0.8}
+        fillRule="evenodd"
+      />
+    ));
+  }, [project, land]);
+
+  const currentLayer = useMemo(() => {
+    if (!project || !current) return null;
+    return current.map((cur) => {
+      const p = project(cur.lat, cur.lon);
+      const a = (cur.setDeg * Math.PI) / 180;
+      const dx = Math.sin(a);
+      const dy = -Math.cos(a);
+      const len = 8 + Math.max(0, Math.min(cur.rateKn / 2.5, 1)) * 12;
+      const tip = { x: p.x + dx * len * 0.5, y: p.y + dy * len * 0.5 };
+      const tail = { x: p.x - dx * len * 0.5, y: p.y - dy * len * 0.5 };
+      const hl = 4.5;
+      const left = (cur.setDeg + 150) * (Math.PI / 180);
+      const right = (cur.setDeg - 150) * (Math.PI / 180);
+      const barbL = { x: tip.x + Math.sin(left) * hl, y: tip.y - Math.cos(left) * hl };
+      const barbR = { x: tip.x + Math.sin(right) * hl, y: tip.y - Math.cos(right) * hl };
+      return (
+        <Path
+          key={`tide-${cur.lat.toFixed(3)},${cur.lon.toFixed(3)}`}
+          d={`M ${tail.x.toFixed(1)} ${tail.y.toFixed(1)} L ${tip.x.toFixed(1)} ${tip.y.toFixed(1)} M ${barbL.x.toFixed(1)} ${barbL.y.toFixed(1)} L ${tip.x.toFixed(1)} ${tip.y.toFixed(1)} L ${barbR.x.toFixed(1)} ${barbR.y.toFixed(1)}`}
+          stroke={colors.tide}
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          fill="none"
+          opacity={0.6}
+        />
+      );
+    });
+  }, [project, current]);
+
+  const windLayer = useMemo(() => {
+    if (!project || !wind) return null;
+    return wind.map((w) => {
+      const p = project(w.lat, w.lon);
+      const toDeg = w.fromDeg + 180;
+      const a = (toDeg * Math.PI) / 180;
+      const dx = Math.sin(a);
+      const dy = -Math.cos(a);
+      const len = 9 + Math.max(0, Math.min((w.speedKn - 4) / 26, 1)) * 13;
+      const tip = { x: p.x + dx * len * 0.5, y: p.y + dy * len * 0.5 };
+      const tail = { x: p.x - dx * len * 0.5, y: p.y - dy * len * 0.5 };
+      const hl = 5;
+      const left = (toDeg + 150) * (Math.PI / 180);
+      const right = (toDeg - 150) * (Math.PI / 180);
+      const barbL = { x: tip.x + Math.sin(left) * hl, y: tip.y - Math.cos(left) * hl };
+      const barbR = { x: tip.x + Math.sin(right) * hl, y: tip.y - Math.cos(right) * hl };
+      return (
+        <Path
+          key={`wind-${w.lat.toFixed(3)},${w.lon.toFixed(3)}`}
+          d={`M ${tail.x.toFixed(1)} ${tail.y.toFixed(1)} L ${tip.x.toFixed(1)} ${tip.y.toFixed(1)} M ${barbL.x.toFixed(1)} ${barbL.y.toFixed(1)} L ${tip.x.toFixed(1)} ${tip.y.toFixed(1)} L ${barbR.x.toFixed(1)} ${barbR.y.toFixed(1)}`}
+          stroke={windColor(w.speedKn)}
+          strokeWidth={1.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          fill="none"
+          opacity={0.7}
+        />
+      );
+    });
+  }, [project, wind]);
+
+  // Marks change only when one is rounded (nextMarkIndex), not every tick.
+  const marksLayer = useMemo(() => {
+    if (!project) return null;
+    return waypoints.map((wp, i) => {
+      const p = project(wp.lat, wp.lon);
+      const isStart = wp.type === 'start';
+      const isFinish = wp.type === 'finish';
+      if (isFinish && loopCourse) return null;
+      const passed = i > 0 && i < nextMarkIndex;
+      const r = isStart || isFinish ? 6 : wp.type === 'island' ? 5 : 4;
+      const fill = isFinish
+        ? colors.signalRed
+        : isStart
+          ? colors.signalGreen
+          : passed
+            ? colors.brassLight
+            : colors.hull;
+      const label = isStart ? (loopCourse ? 'START / FINISH' : 'START') : 'FINISH';
+      return (
+        <React.Fragment key={`${wp.name}-${i}`}>
+          <Circle cx={p.x} cy={p.y} r={r} fill={fill} stroke={colors.foam} strokeWidth={isStart || isFinish ? 1.5 : 1} />
+          {isStart || isFinish ? (
+            <SvgText x={p.x} y={p.y - 9} fill={colors.mist} fontSize="9" textAnchor="middle">
+              {label}
+            </SvgText>
+          ) : null}
+        </React.Fragment>
+      );
+    });
+  }, [project, waypoints, nextMarkIndex, loopCourse]);
+
+  if (!ready || !project) {
     return <View style={[styles.container, { width, height }]} />;
   }
 
-  const project = buildProjector(waypoints, width, height);
-  const markPoints = waypoints.map((w) => project(w.lat, w.lon));
+  // --- Dynamic layers (recomputed each tick — all cheap: a few path strings and
+  // up to ~60 dots) ---------------------------------------------------------
   const routePts = (route ?? []).map((p) => project(p.lat, p.lon));
   const altRoutePts = (altRoute ?? []).map((p) => project(p.lat, p.lon));
   const laylinePaths = (laylines ?? []).map((seg) => seg.map((p) => project(p.lat, p.lon)));
@@ -128,13 +272,7 @@ export const RouteMap: React.FC<RouteMapProps> = ({
   const boatXY = boat ? project(boat.lat, boat.lon) : null;
   const competitorXY = (competitors ?? []).map((c) => project(c.lat, c.lon));
 
-  // A loop course (e.g. Round the Island) starts and finishes at the same buoy,
-  // so draw one combined marker rather than stacking the START and FINISH
-  // circles and labels illegibly on top of each other.
-  const loopCourse = isLoopCourse(waypoints);
-
-  // Project the drifting puff/hole: its centre, and a radius in pixels derived
-  // from projecting a point one feature-radius north of the centre.
+  // The drifting puff/hole (refreshed each tick — just a couple of circles).
   const feature = windFeature
     ? (() => {
         const c = project(windFeature.lat, windFeature.lon);
@@ -142,72 +280,6 @@ export const RouteMap: React.FC<RouteMapProps> = ({
         return { c, rPx: Math.max(8, Math.hypot(edge.x - c.x, edge.y - c.y)), puff: windFeature.puff };
       })()
     : null;
-
-  // Wind arrows: each is centred on its grid point, points the way the wind
-  // blows TO, with length and colour scaled by strength.
-  const windArrows = (wind ?? []).map((w) => {
-    const p = project(w.lat, w.lon);
-    const toDeg = w.fromDeg + 180;
-    const a = (toDeg * Math.PI) / 180;
-    const dx = Math.sin(a);
-    const dy = -Math.cos(a);
-    const len = 9 + Math.max(0, Math.min((w.speedKn - 4) / 26, 1)) * 13;
-    const tip = { x: p.x + dx * len * 0.5, y: p.y + dy * len * 0.5 };
-    const tail = { x: p.x - dx * len * 0.5, y: p.y - dy * len * 0.5 };
-    // Arrowhead: two short barbs swept back from the tip.
-    const hl = 5;
-    const left = (toDeg + 150) * (Math.PI / 180);
-    const right = (toDeg - 150) * (Math.PI / 180);
-    return {
-      key: `${w.lat.toFixed(3)},${w.lon.toFixed(3)}`,
-      tail,
-      tip,
-      barbL: { x: tip.x + Math.sin(left) * hl, y: tip.y - Math.cos(left) * hl },
-      barbR: { x: tip.x + Math.sin(right) * hl, y: tip.y - Math.cos(right) * hl },
-      color: windColor(w.speedKn),
-    };
-  });
-
-  // Tidal stream arrows: each points the way the stream SETS, length scaled by
-  // rate. A flat-tailed, single-barb arrow in tide blue, distinct from the wind's.
-  const currentArrows = (current ?? []).map((cur) => {
-    const p = project(cur.lat, cur.lon);
-    const a = (cur.setDeg * Math.PI) / 180;
-    const dx = Math.sin(a);
-    const dy = -Math.cos(a);
-    const len = 8 + Math.max(0, Math.min(cur.rateKn / 2.5, 1)) * 12;
-    const tip = { x: p.x + dx * len * 0.5, y: p.y + dy * len * 0.5 };
-    const tail = { x: p.x - dx * len * 0.5, y: p.y - dy * len * 0.5 };
-    const hl = 4.5;
-    const left = (cur.setDeg + 150) * (Math.PI / 180);
-    const right = (cur.setDeg - 150) * (Math.PI / 180);
-    return {
-      key: `${cur.lat.toFixed(3)},${cur.lon.toFixed(3)}`,
-      tail,
-      tip,
-      barbL: { x: tip.x + Math.sin(left) * hl, y: tip.y - Math.cos(left) * hl },
-      barbR: { x: tip.x + Math.sin(right) * hl, y: tip.y - Math.cos(right) * hl },
-    };
-  });
-
-  // Wind-speed heatmap: one soft colour cell per grid point, sized to tile the
-  // chart. Drawn under the land and arrows so the coast and direction read on top.
-  const heatCells =
-    heat && heatCols && heatRows && heatCols > 1 && heatRows > 1
-      ? heat.map((h) => {
-          const p = project(h.lat, h.lon);
-          const cw = (width / (heatCols - 1)) * 1.08;
-          const ch = (height / (heatRows - 1)) * 1.08;
-          return {
-            key: `${h.lat.toFixed(3)},${h.lon.toFixed(3)}`,
-            x: p.x - cw / 2,
-            y: p.y - ch / 2,
-            w: cw,
-            h: ch,
-            fill: windHeatColor(h.speedKn),
-          };
-        })
-      : [];
 
   return (
     <View style={styles.container}>
@@ -229,40 +301,13 @@ export const RouteMap: React.FC<RouteMapProps> = ({
         <Rect x={0} y={0} width={width} height={height} fill="url(#sea)" rx={radius.sm} />
 
         <G clipPath="url(#frame)">
-          {/* Wind-speed heatmap (under land + arrows). */}
-          {heatCells.map((cell) => (
-            <Rect
-              key={`heat-${cell.key}`}
-              x={cell.x}
-              y={cell.y}
-              width={cell.w}
-              height={cell.h}
-              fill={cell.fill}
-              opacity={0.5}
-            />
-          ))}
-
-          {(land ?? []).map((polygon, i) => (
-            <Path
-              key={`land-${i}`}
-              d={landPath(polygon, project)}
-              fill="url(#land)"
-              stroke={colors.coastline}
-              strokeWidth={0.8}
-              fillRule="evenodd"
-            />
-          ))}
+          {heatLayer}
+          {landLayer}
 
           {/* Drifting pressure system: a puff (more breeze) or a hole. */}
           {feature ? (
             <>
-              <Circle
-                cx={feature.c.x}
-                cy={feature.c.y}
-                r={feature.rPx}
-                fill={feature.puff ? colors.signalGreen : colors.steel}
-                opacity={0.12}
-              />
+              <Circle cx={feature.c.x} cy={feature.c.y} r={feature.rPx} fill={feature.puff ? colors.signalGreen : colors.steel} opacity={0.12} />
               <Circle
                 cx={feature.c.x}
                 cy={feature.c.y}
@@ -273,58 +318,19 @@ export const RouteMap: React.FC<RouteMapProps> = ({
                 fill="none"
                 opacity={0.7}
               />
-              <SvgText
-                x={feature.c.x}
-                y={feature.c.y + 3}
-                fill={feature.puff ? colors.signalGreen : colors.mist}
-                fontSize="9"
-                textAnchor="middle"
-              >
+              <SvgText x={feature.c.x} y={feature.c.y + 3} fill={feature.puff ? colors.signalGreen : colors.mist} fontSize="9" textAnchor="middle">
                 {feature.puff ? 'MORE BREEZE' : 'LIGHT PATCH'}
               </SvgText>
             </>
           ) : null}
 
-          {/* Tidal stream: which way the water sets and how hard (under the wind). */}
-          {currentArrows.map((cur) => (
-            <Path
-              key={`tide-${cur.key}`}
-              d={`M ${cur.tail.x.toFixed(1)} ${cur.tail.y.toFixed(1)} L ${cur.tip.x.toFixed(1)} ${cur.tip.y.toFixed(1)} M ${cur.barbL.x.toFixed(1)} ${cur.barbL.y.toFixed(1)} L ${cur.tip.x.toFixed(1)} ${cur.tip.y.toFixed(1)} L ${cur.barbR.x.toFixed(1)} ${cur.barbR.y.toFixed(1)}`}
-              stroke={colors.tide}
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              fill="none"
-              opacity={0.6}
-            />
-          ))}
-
-          {/* Live wind field: direction & strength across the course. */}
-          {windArrows.map((w) => (
-            <Path
-              key={`wind-${w.key}`}
-              d={`M ${w.tail.x.toFixed(1)} ${w.tail.y.toFixed(1)} L ${w.tip.x.toFixed(1)} ${w.tip.y.toFixed(1)} M ${w.barbL.x.toFixed(1)} ${w.barbL.y.toFixed(1)} L ${w.tip.x.toFixed(1)} ${w.tip.y.toFixed(1)} L ${w.barbR.x.toFixed(1)} ${w.barbR.y.toFixed(1)}`}
-              stroke={w.color}
-              strokeWidth={1.5}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              fill="none"
-              opacity={0.7}
-            />
-          ))}
+          {currentLayer}
+          {windLayer}
 
           {/* Laylines to the next mark (the close-hauled / running approach lines). */}
           {laylinePaths.map((seg, i) =>
             seg.length > 1 ? (
-              <Path
-                key={`layline-${i}`}
-                d={pathFrom(seg)}
-                stroke={colors.steel}
-                strokeWidth={1}
-                strokeDasharray="2 4"
-                fill="none"
-                opacity={0.6}
-              />
+              <Path key={`layline-${i}`} d={pathFrom(seg)} stroke={colors.steel} strokeWidth={1} strokeDasharray="2 4" fill="none" opacity={0.6} />
             ) : null
           )}
 
@@ -344,58 +350,13 @@ export const RouteMap: React.FC<RouteMapProps> = ({
           ) : null}
         </G>
 
-        {waypoints.map((wp, i) => {
-          const p = markPoints[i];
-          const isStart = wp.type === 'start';
-          const isFinish = wp.type === 'finish';
-          // On a loop course the finish sits exactly on the start; skip its
-          // marker and fold the label into the start's combined badge below.
-          if (isFinish && loopCourse) return null;
-          const passed = i > 0 && i < nextMarkIndex;
-          const r = isStart || isFinish ? 6 : wp.type === 'island' ? 5 : 4;
-          const fill = isFinish
-            ? colors.signalRed
-            : isStart
-              ? colors.signalGreen
-              : passed
-                ? colors.brassLight
-                : colors.hull;
-          const label = isStart ? (loopCourse ? 'START / FINISH' : 'START') : 'FINISH';
-          return (
-            <React.Fragment key={`${wp.name}-${i}`}>
-              <Circle
-                cx={p.x}
-                cy={p.y}
-                r={r}
-                fill={fill}
-                stroke={colors.foam}
-                strokeWidth={isStart || isFinish ? 1.5 : 1}
-              />
-              {isStart || isFinish ? (
-                <SvgText x={p.x} y={p.y - 9} fill={colors.mist} fontSize="9" textAnchor="middle">
-                  {label}
-                </SvgText>
-              ) : null}
-            </React.Fragment>
-          );
-        })}
+        {marksLayer}
 
         {competitorXY.map((c, i) => (
-          <Circle
-            key={`ai-${i}`}
-            cx={c.x}
-            cy={c.y}
-            r={4}
-            fill={colors.foam}
-            stroke={colors.steel}
-            strokeWidth={1}
-            opacity={0.9}
-          />
+          <Circle key={`ai-${i}`} cx={c.x} cy={c.y} r={4} fill={colors.foam} stroke={colors.steel} strokeWidth={1} opacity={0.9} />
         ))}
 
-        {boatXY ? (
-          <Circle cx={boatXY.x} cy={boatXY.y} r={5} fill={colors.white} stroke={colors.signalGreen} strokeWidth={3} />
-        ) : null}
+        {boatXY ? <Circle cx={boatXY.x} cy={boatXY.y} r={5} fill={colors.white} stroke={colors.signalGreen} strokeWidth={3} /> : null}
       </Svg>
     </View>
   );

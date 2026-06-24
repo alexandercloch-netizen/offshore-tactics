@@ -70,6 +70,9 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
   // each in-race hour (and when the field changes), not every animation tick.
   const windField = state.windField;
   const elapsedHourBucket = state.progress ? Math.floor(state.progress.elapsedHours) : 0;
+  // The background heatmap is far heavier than the arrows, so refresh it on a
+  // coarser cadence (every 2 race-hours) — it's a soft backdrop, not an instrument.
+  const heatBucket = state.progress ? Math.floor(state.progress.elapsedHours / 2) : 0;
   const windArrows = useMemo(() => {
     if (!race || !windField) return [];
     const cols = 7;
@@ -77,15 +80,16 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
     return sampleWindGrid(windField, courseBounds(race.waypoints), cols, rows, elapsedHourBucket);
   }, [race, windField, elapsedHourBucket]);
 
-  // Denser grid for the wind-speed heatmap, refreshed each in-race hour.
-  const heatCols = 22;
+  // Grid for the wind-speed heatmap. Kept moderate (a soft backdrop, not an
+  // instrument) so it's cheap to re-render: ~16×≤18 cells, not ~22×30.
+  const heatCols = 16;
   const heatRows = race
-    ? Math.max(10, Math.min(30, Math.round(heatCols * courseAspect(race.waypoints))))
+    ? Math.max(8, Math.min(18, Math.round(heatCols * courseAspect(race.waypoints))))
     : 0;
   const windHeat = useMemo(() => {
     if (!race || !windField) return [];
-    return sampleWindGrid(windField, courseBounds(race.waypoints), heatCols, heatRows, elapsedHourBucket);
-  }, [race, windField, heatRows, elapsedHourBucket]);
+    return sampleWindGrid(windField, courseBounds(race.waypoints), heatCols, heatRows, heatBucket);
+  }, [race, windField, heatRows, heatBucket]);
 
   // Tidal stream sampled on a coarse grid; refreshed each in-race hour as the
   // flood/ebb turns. Empty on a slack course, so the chart simply omits it.
@@ -96,6 +100,13 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
     const rows = Math.max(4, Math.min(8, Math.round(cols * courseAspect(race.waypoints))));
     return sampleCurrentGrid(tidalField, courseBounds(race.waypoints), cols, rows, elapsedHourBucket);
   }, [race, tidalField, elapsedHourBucket]);
+
+  // Competitor map positions — recomputed only when the fleet advances (each tick),
+  // memoised so the value is stable for any render that isn't a fleet update.
+  const competitors = useMemo(
+    () => (race && state.fleet ? competitorPoints(state.fleet, race) : []),
+    [race, state.fleet]
+  );
 
   // If we landed here without an active race but with a full loadout, start it.
   useEffect(() => {
@@ -288,7 +299,7 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
           route={progress.route}
           trail={progress.trail}
           boat={{ lat: progress.lat, lon: progress.lon }}
-          competitors={state.fleet ? competitorPoints(state.fleet, race) : []}
+          competitors={competitors}
           laylines={layPaths}
           wind={windArrows}
           current={currentArrows}
