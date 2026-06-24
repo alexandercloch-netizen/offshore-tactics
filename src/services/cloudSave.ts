@@ -1,5 +1,8 @@
 import { GameState } from '../types';
 import { supabase } from '../lib/supabase';
+import { cloudSnapshot } from '../store/persistable';
+
+export { cloudSnapshot };
 
 // Loads a user's cloud save, or null if none exists / Supabase is unconfigured.
 export async function loadCloudSave(userId: string): Promise<GameState | null> {
@@ -19,9 +22,16 @@ export async function loadCloudSave(userId: string): Promise<GameState | null> {
 // the fallback). The RPC reads auth.uid(), so no user id is passed.
 export async function saveCloud(state: GameState): Promise<void> {
   if (!supabase) return;
-  const clientUpdatedAt = new Date(state.savedAt ?? Date.now()).toISOString();
+  const snapshot = cloudSnapshot(state);
+  const clientUpdatedAt = new Date(snapshot.savedAt ?? Date.now()).toISOString();
+  const payload = JSON.stringify(snapshot);
+  // Guardrail: durable state should be small (history is capped at 50). If a
+  // future regression lets it balloon, log loudly rather than fail silently.
+  if (payload.length > 512_000) {
+    console.warn(`Cloud save payload is large (${Math.round(payload.length / 1024)} KB)`);
+  }
   const { error } = await supabase.rpc('save_game', {
-    p_state: state,
+    p_state: snapshot,
     p_client_updated_at: clientUpdatedAt,
   });
   if (error) {

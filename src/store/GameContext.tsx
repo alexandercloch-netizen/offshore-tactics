@@ -46,6 +46,7 @@ import {
   initialProgress,
   raceDivision,
   resolveBoatById,
+  seedStartGrid,
   stepRace,
 } from '../engine/gameEngine';
 import { createWindField, sampleWind, weatherFromWind } from '../engine/wind';
@@ -90,7 +91,13 @@ type Action =
   | { type: 'SET_STRATEGY'; payload: Partial<PlayerStrategy> }
   | {
       type: 'APPLY_START';
-      payload: { startSpeedMul: number; startFadeNm: number; timePenaltyH: number; bias: RoutingBias };
+      payload: {
+        startSpeedMul: number;
+        startFadeNm: number;
+        timePenaltyH: number;
+        bias: RoutingBias;
+        rating: number;
+      };
     }
   | { type: 'SET_TUTORIAL_SEEN' }
   | { type: 'ADD_FLEET_BOAT'; payload: { boat: FleetBoat; cost: number } }
@@ -187,19 +194,25 @@ function reducer(state: GameState, action: Action): GameState {
       return { ...state, strategy: { ...state.strategy, ...action.payload } };
 
     case 'APPLY_START': {
-      // Bake the start sequence's result into the opening leg: a clean-/dirty-air
-      // speed factor, a committed first-beat bias, and any time penalty (a poor
+      // Bake the start sequence's result into the opening leg: a real gun position
+      // (the fleet spread + the player's lead, via seedStartGrid), a clean-/dirty-
+      // air speed factor, a committed first-beat bias, and any time penalty (a poor
       // start or OCS). No progress yet → ignore (defensive).
       if (!state.progress) return state;
-      const { startSpeedMul, startFadeNm, timePenaltyH, bias } = action.payload;
+      const race = getRaceById(state.selectedRaceId);
+      const { startSpeedMul, startFadeNm, timePenaltyH, bias, rating } = action.payload;
+      const seeded = race
+        ? seedStartGrid(state.progress, state.fleet ?? [], race, rating)
+        : { progress: state.progress, fleet: state.fleet ?? [] };
       return {
         ...state,
         strategy: { ...state.strategy, bias },
+        fleet: seeded.fleet,
         progress: {
-          ...state.progress,
+          ...seeded.progress,
           startSpeedMul,
           startFadeNm,
-          elapsedHours: state.progress.elapsedHours + timePenaltyH,
+          elapsedHours: seeded.progress.elapsedHours + timePenaltyH,
         },
       };
     }
@@ -457,7 +470,12 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
     const savedAt = Date.now();
     const snapshot: GameState = { ...state, savedAt };
     saveState(snapshot);
-    if (user && configured) {
+    // Don't sync to the cloud mid-race: it would upload the full live-race state
+    // (fleet, wind field, route, trail) on a tight debounce every tick, and no
+    // other device can adopt a race in progress anyway (see the Realtime guard
+    // below). The local cache still saves every tick for crash recovery; the
+    // cloud syncs the durable campaign state at the next race boundary.
+    if (user && configured && !state.progress) {
       // A change we just adopted from another device is already in the cloud —
       // cache it locally but don't re-upload it.
       if (skipCloudPushRef.current) {
@@ -543,6 +561,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
         startFadeNm: outcome.fadeNm,
         timePenaltyH: outcome.timePenaltyH,
         bias: outcome.bias,
+        rating: outcome.rating,
       },
     });
   }, []);

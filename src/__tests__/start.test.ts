@@ -1,7 +1,13 @@
 import { startLineGeo, startRead, resolveStart } from '../engine/start';
 import { haversineNm } from '../engine/geo';
-import { getRaceById } from '../data';
+import { initialProgress, seedStartGrid } from '../engine/gameEngine';
+import { createFleet } from '../engine/fleet';
+import { createWindField } from '../engine/wind';
+import { getRaceById, getBoatById } from '../data';
+import { mulberry32, setRng, resetRng } from '../engine/rng';
 import { StartPlan, TidalField, WindField } from '../types';
+
+afterEach(() => resetRng());
 
 const race = getRaceById('race-round-island')!;
 
@@ -105,6 +111,14 @@ describe('resolveStart', () => {
     expect(clear.bias).toBe(0);
   });
 
+  it('centres a neutral start (mid / timed / clear) near 0.5 — no free boost', () => {
+    const o = resolveStart(race, steady(prevailing), undefined, plan({}), 0.7, 0.5, size);
+    expect(o.rating).toBeGreaterThan(0.4);
+    expect(o.rating).toBeLessThan(0.6);
+    expect(o.speedMul).toBeGreaterThan(0.97);
+    expect(o.speedMul).toBeLessThan(1.03);
+  });
+
   it('keeps every outcome within sane bounds', () => {
     const wind = steady(prevailing + 6);
     for (const end of ['committee', 'mid', 'pin'] as const) {
@@ -124,5 +138,32 @@ describe('resolveStart', () => {
         }
       }
     }
+  });
+});
+
+describe('seedStartGrid (real gun position)', () => {
+  const setup = () => {
+    setRng(mulberry32(1));
+    const windField = createWindField(race);
+    const fleet = createFleet(race, race.divisions.pro);
+    const progress = initialProgress(race, getBoatById('boat-sprite')!, 'pro', windField);
+    return { fleet, progress };
+  };
+
+  it('places a great start ahead of a poor one and spreads the fleet off the line', () => {
+    const { fleet, progress } = setup();
+    const good = seedStartGrid(progress, fleet, race, 0.95);
+    const bad = seedStartGrid(progress, fleet, race, 0.05);
+    expect(good.progress.position).toBeLessThan(bad.progress.position);
+    expect(good.progress.distanceCoveredNm).toBeGreaterThan(bad.progress.distanceCoveredNm);
+    expect(good.fleet.some((c) => c.distanceNm > 0)).toBe(true); // not all stacked on the line
+  });
+
+  it('lands an average start mid-fleet', () => {
+    const { fleet, progress } = setup();
+    const avg = seedStartGrid(progress, fleet, race, 0.5);
+    const size = race.divisions.pro.fleetSize;
+    expect(avg.progress.position).toBeGreaterThan(size * 0.25);
+    expect(avg.progress.position).toBeLessThan(size * 0.75);
   });
 });

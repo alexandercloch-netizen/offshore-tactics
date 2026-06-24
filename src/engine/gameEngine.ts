@@ -3,6 +3,7 @@ import {
   AutoProvisionPreset,
   Boat,
   BoatCondition,
+  Competitor,
   CrewMember,
   CrewRole,
   CrewTier,
@@ -589,6 +590,44 @@ export function initialProgress(
     startSpeedMul: 1,
     startFadeNm: 0,
   };
+}
+
+// Seed the opening standings from the start outcome so the gun position is real,
+// not cosmetic. The fleet gets a small deterministic spread across the line, and
+// the player is placed within it by start quality: a great start (rating→1) is
+// advanced up the first leg ahead of the pack; a poor one (rating→0) starts
+// behind. The spread is tiny (~0.6% of the course) and averages out — an average
+// start (rating 0.5) lands the player mid-fleet, so the tuned difficulty holds.
+export function seedStartGrid(
+  progress: RaceProgress,
+  fleet: Competitor[],
+  race: Race,
+  rating: number
+): { progress: RaceProgress; fleet: Competitor[] } {
+  const total = progress.totalDistanceNm;
+  const band = race.distanceNm * 0.006;
+  const n = Math.max(fleet.length, 1);
+  const spreadFleet = fleet.map((c, i) =>
+    c.retired || c.finishedHours !== null ? c : { ...c, distanceNm: band * ((i + 0.5) / n) }
+  );
+  let next = progress;
+  const lead = band * clamp(rating, 0, 1);
+  if (lead > 1e-6 && progress.route.length > 1) {
+    const adv = advanceAlongRoute(progress.route, lead);
+    const remaining = geometricRemaining(race.waypoints, adv.pos, progress.nextMarkIndex);
+    const heading = adv.route.length > 1 ? brg(adv.route[0], adv.route[1]) : progress.heading;
+    next = {
+      ...progress,
+      lat: adv.pos.lat,
+      lon: adv.pos.lon,
+      route: adv.route,
+      heading,
+      distanceCoveredNm: clamp(total - remaining, 0, total),
+      trail: [...progress.trail, adv.pos],
+    };
+  }
+  const position = livePosition(spreadFleet, next.distanceCoveredNm);
+  return { progress: { ...next, position }, fleet: spreadFleet };
 }
 
 // Cap on the per-leg instrument buffer; downsampled when exceeded so a long leg

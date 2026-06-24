@@ -87,8 +87,10 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [race, boat, state.windField, navSkill, state.progress?.lat, state.progress?.lon, state.progress?.nextMarkIndex]);
 
-  // The race is normally committed (funds + wind field + fleet) when leaving
-  // provisioning; begin it here as a fallback if we somehow arrived unstarted.
+  // Commit the race here (funds + wind/tide field + fleet + the benchmark sim) —
+  // in this effect, which runs *after* the loading state below has painted, so a
+  // long course's benchmark runs behind the spinner instead of freezing the tap
+  // that left provisioning.
   useEffect(() => {
     if (!state.progress && race && boat && state.selectedCrewIds.length > 0) {
       beginRace();
