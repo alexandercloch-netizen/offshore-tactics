@@ -60,25 +60,43 @@ finishing.
 The fix (above) was #5's set & drift **plus** giving the fleet the reference
 polar's *unclamped absolute* speed, so both sides' tide sensitivity matches.
 
-## What remains: enable it on a race (the playable feature)
+## Enabled, with a UI (done)
 
-The engine is fair; switching tide on is now a content + UI task:
+Tide is live with a **tide readout** in the race HUD + briefing and **current
+arrows** on the chart (`sampleCurrentGrid` + the `current` prop on `RouteMap`).
 
-- Add a `tide` profile to **Round the Island** (the Solent is tide-dominated) —
-  start from the worked profile below and tune `peakRateKn` so the gate stakes
-  feel right without over-random results.
-- A **tide readout** (set, rate, fair/foul) in the race instruments + briefing.
-- **Current arrows** on the chart (`RouteMap`), reusing `sampleCurrent`.
-- Re-check the `tide is fair in the standings` test (and spot-check other boats)
-  with the live profile before shipping.
+## Which races carry a tide, and why these strengths
 
-```ts
-tide: {
-  floodDeg: 90,
-  peakRateKn: 1.4,
-  gates: [
-    { waypoint: 'The Needles', gain: 0.5, radiusNm: 4 },
-    { waypoint: "St Catherine's Point", gain: 0.4, radiusNm: 5 },
-  ],
-}
-```
+Tide is on every race that genuinely sails a **tidal stream** (oscillating
+flood/ebb). Skipped: Chicago Mac (freshwater), Caribbean 600 (negligible Carib
+tides), Transpac & Sydney–Hobart (ocean/weather-dominated), and Newport Bermuda
+(the **Gulf Stream is an ocean current** — steady and banded, not a tidal stream;
+a future "ocean current" feature, not this oscillating model).
+
+| Race | base kn | gates | one-time validated shift* |
+|------|--------:|-------|---------------------------|
+| Round the Island | 0.5 | Needles, St Catherine's | +13% |
+| Fastnet | 1.1 | Portland Bill, Cap de la Hague | −1% |
+| Race to Alaska | 0.5 | Seymour Narrows, Dixon Entrance | −5% |
+| Middle Sea | 0.3 | Strait of Messina | −15% |
+
+\* mean change in the player's corrected placing when tide is switched on, as a
+fraction of fleet size (boat-tempest, pro, several seeds). Bounded and
+mixed-direction — a tactical factor, not the old ~100% runaway.
+
+### The gentle-gate rule (a model limitation)
+
+Only the **base** tide (sampled everywhere) is *perfectly* fair: the player and
+every fleet boat feel it. **Tide gates are radius-limited**, but the fleet spreads
+laterally off the rhumb (leverage, up to ~30 nm on a long course), so biased
+boats partly **miss** a gate the player rounds — skewing the result by the gate's
+strength. So gates must stay **gentle** (gain ≲ 1, generous radius) and the base
+carries the main fair effect. A *dramatic* gate (e.g. the real Seymour Narrows or
+Messina) would need the fleet to **route through the marks** like the player —
+i.e. the full per-boat routing deferred earlier. Middle Sea is the weakest case
+(the Med is tideless apart from Messina, so there's little fair base to lean on);
+it's kept deliberately light.
+
+The `tide is fair in the standings` test guards Round the Island (fast,
+representative of the mechanism); the long ocean races were validated one-time
+(table above) rather than in CI, as a full race each is too slow for the suite.

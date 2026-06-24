@@ -91,6 +91,14 @@ export const RACES: Race[] = [
     signatureHazard: 'Fickle Mediterranean winds and the current through the Strait of Messina.',
     season: 'October',
     unlockAfter: 'race-chicago-mac',
+    // The Med is all but tideless — except the Strait of Messina, where a real
+    // tidal stream runs hard (the Scylla & Charybdis of legend). A low base rate
+    // with a strong, localised gate at the strait, so only Messina bites.
+    tide: {
+      floodDeg: 0, // the strait's stream sets ~N on the flood
+      peakRateKn: 0.3,
+      gates: [{ waypoint: 'Strait of Messina', gain: 0.6, radiusNm: 16 }],
+    },
     waypoints: [
       { name: 'Grand Harbour, Valletta', lat: 35.9, lon: 14.52, type: 'start' },
       { name: 'Capo Passero', lat: 36.69, lon: 15.13, type: 'turn' },
@@ -149,6 +157,18 @@ export const RACES: Race[] = [
     prevailingWind: { fromDeg: 240, speedKn: 18 },
     signatureHazard: 'Brutal Celtic Sea weather and tidal gates the whole way to the Rock.',
     season: 'July / August',
+    // The English Channel and its approaches are strongly tidal: the stream sets
+    // ENE up-Channel on the flood, running hardest at the Portland tidal race and
+    // the Alderney Race off Cap de la Hague. Generous gate radii so the spread-out
+    // fleet feels the same streams the player does (it stays fair in the standings).
+    tide: {
+      floodDeg: 75,
+      peakRateKn: 1.1,
+      gates: [
+        { waypoint: 'Portland Bill', gain: 1.0, radiusNm: 12 },
+        { waypoint: 'Cap de la Hague', gain: 1.2, radiusNm: 14 },
+      ],
+    },
     unlockAfter: 'race-newport-bermuda',
     waypoints: [
       { name: 'Cowes (RYS Line)', lat: 50.76, lon: -1.3, type: 'start' },
@@ -275,6 +295,18 @@ export const RACES: Race[] = [
       'Seymour Narrows runs at up to 16 knots of tide — hit the slack-water gate or anchor in place.',
     season: 'June',
     unlockAfter: 'race-transpac',
+    // The Inside Passage is intensely tidal. A steady base stream through the
+    // channels, with a fierce gate at Seymour Narrows (the signature hazard) and a
+    // lesser one at the exposed Dixon Entrance. Generous radii keep it fair across
+    // the spread-out fleet.
+    tide: {
+      floodDeg: 135, // floods SE down the passage
+      peakRateKn: 0.5,
+      gates: [
+        { waypoint: 'Seymour Narrows', gain: 1.2, radiusNm: 10 },
+        { waypoint: 'Dixon Entrance', gain: 0.4, radiusNm: 14 },
+      ],
+    },
     waypoints: [
       { name: 'Port Townsend, WA', lat: 48.11, lon: -122.76, type: 'start' },
       { name: 'Victoria, BC', lat: 48.42, lon: -123.37, type: 'turn' },
