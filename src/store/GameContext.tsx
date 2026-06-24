@@ -457,7 +457,12 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
     const savedAt = Date.now();
     const snapshot: GameState = { ...state, savedAt };
     saveState(snapshot);
-    if (user && configured) {
+    // Don't sync to the cloud mid-race: it would upload the full live-race state
+    // (fleet, wind field, route, trail) on a tight debounce every tick, and no
+    // other device can adopt a race in progress anyway (see the Realtime guard
+    // below). The local cache still saves every tick for crash recovery; the
+    // cloud syncs the durable campaign state at the next race boundary.
+    if (user && configured && !state.progress) {
       // A change we just adopted from another device is already in the cloud —
       // cache it locally but don't re-upload it.
       if (skipCloudPushRef.current) {
