@@ -28,7 +28,7 @@ const PRESETS: { key: AutoProvisionPreset; label: string; hint: string }[] = [
 
 export const ProvisioningScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
-  const { state, setProvisionQuantity, setProvisions, beginRace, money } = useGame();
+  const { state, setProvisionQuantity, setProvisions, money } = useGame();
 
   const quantityFor = (id: string): number =>
     state.provisions.find((p) => p.provisionId === id)?.quantity ?? 0;
@@ -54,9 +54,10 @@ export const ProvisioningScreen: React.FC<Props> = ({ navigation }) => {
 
   const setSail = () => {
     if (overBudget) return;
-    // Commit the campaign (funds, wind field, fleet) and head to the briefing —
-    // the calm beat before the gun to review conditions and set the plan.
-    beginRace();
+    // Head to the briefing — the calm beat before the gun. The race itself
+    // (funds, wind/tide field, fleet, and the benchmark sim) is committed by the
+    // briefing's effect *after* it paints its loading state, so the tap transitions
+    // instantly instead of freezing while a long course's benchmark runs.
     navigation.reset({ index: 0, routes: [{ name: 'Briefing' }] });
   };
 
