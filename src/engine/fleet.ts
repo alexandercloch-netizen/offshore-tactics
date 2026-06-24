@@ -1,10 +1,27 @@
-import { Boat, Competitor, GeoPoint, Race, RaceDivision, TidalField, WindField } from '../types';
+import { Boat, Competitor, GeoPoint, Race, RaceDivision, TidalField, Waypoint, WindField } from '../types';
 import { bearing, movePoint, pointAtFraction } from './geo';
 import { bestVmgAngles, polarSpeed } from './polar';
 import { pressureHint, sampleWind } from './wind';
 import { tideAlong } from './current';
+import { clearPolyline } from './router';
+import { snapToWater } from './land';
+import { LANDMASSES } from '../data/landmasses';
 import { getBoatById } from '../data';
 import { rnd, rndRange } from './rng';
+
+// The course "spine": a land-safe polyline through the marks (the rhumb line
+// detoured around any coast). The fleet rides this instead of the straight rhumb
+// between marks, so its boats follow the coast around an island rather than
+// cutting across it. Computed once per race (static geometry) and cached.
+const coursePathCache = new Map<string, GeoPoint[]>();
+function coursePath(race: Race): GeoPoint[] {
+  const cached = coursePathCache.get(race.id);
+  if (cached) return cached;
+  const rhumb = race.waypoints.map((w) => ({ lat: w.lat, lon: w.lon }));
+  const path = clearPolyline(rhumb, LANDMASSES[race.id]);
+  coursePathCache.set(race.id, path);
+  return path;
+}
 
 // Evocative yacht names for the AI fleet.
 const NAMES = [
@@ -176,23 +193,26 @@ function favouredSide(
 }
 
 // Where a competitor actually is, and the way the course runs there. Its 2-D
-// position is derived from its progress and chosen side — offset perpendicular to
-// the rhumb line, tapering to nothing at the start and finish (everyone rounds
-// the same marks) — so the fleet samples the wind and tide where it really sails,
-// and the chart shows it spread across the course. Pure: no stored 2-D state.
+// position rides the land-safe course spine (so it follows the coast around an
+// island instead of cutting across it), offset perpendicular by its chosen side
+// and tapered to nothing at the marks. The offset — and any residue — is finally
+// snapped to open water, so a fleet boat can never sit on land. Pure: no stored
+// 2-D state.
 function competitorState(race: Race, c: Competitor): { pos: GeoPoint; courseDeg: number } {
   const total = race.distanceNm;
+  const land = LANDMASSES[race.id];
+  const path = coursePath(race) as unknown as Waypoint[]; // pointAtFraction only reads lat/lon
   const fraction = clamp(c.distanceNm / total, 0, 1);
-  const base = pointAtFraction(race.waypoints, fraction);
-  const ahead = pointAtFraction(race.waypoints, clamp(fraction + 0.01, 0, 1));
+  const base = pointAtFraction(path, fraction);
+  const ahead = pointAtFraction(path, clamp(fraction + 0.01, 0, 1));
   const courseDeg = bearing(base.lat, base.lon, ahead.lat, ahead.lon);
   const taper = Math.sin(Math.PI * fraction); // 0 at the marks, 1 mid-course
   const offsetNm = (c.bias ?? 0) * Math.min(total * LEVERAGE_FRACTION, LEVERAGE_CAP_NM) * taper;
-  const pos =
+  const offset =
     Math.abs(offsetNm) > 1e-6
       ? movePoint(base.lat, base.lon, (courseDeg + 90 + 360) % 360, offsetNm)
-      : base;
-  return { pos, courseDeg };
+      : { lat: base.lat, lon: base.lon };
+  return { pos: snapToWater(land, offset.lat, offset.lon), courseDeg };
 }
 
 // Advance every competitor by the time elapsed this step. Each boat is paced to
