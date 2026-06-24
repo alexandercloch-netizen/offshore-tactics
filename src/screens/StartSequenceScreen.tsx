@@ -51,7 +51,10 @@ export const StartSequenceScreen: React.FC<Props> = ({ navigation }) => {
 
   const [end, setEnd] = useState<StartEnd>('mid');
   const [approach, setApproach] = useState<StartApproach>('timed');
-  const [beat, setBeat] = useState<StartBeat>('clear');
+  // Default the first-beat call to the plan made in the briefing: if a side was
+  // chosen there, pre-select committing to a side (so the start refines the plan
+  // rather than silently discarding it); otherwise default to clear air.
+  const [beat, setBeat] = useState<StartBeat>(state.strategy.bias !== 0 ? 'favoured' : 'clear');
   const [outcome, setOutcome] = useState<StartOutcome | null>(null);
 
   if (!race || !boat || !state.windField || !read) {

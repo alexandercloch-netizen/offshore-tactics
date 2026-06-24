@@ -124,22 +124,25 @@ export function resolveStart(
   const endScore =
     plan.end === 'committee' ? endBias : plan.end === 'pin' ? -endBias : -0.12 * Math.abs(endBias);
 
-  // Approach: a full send is the high-variance play — front row if you time it,
-  // OCS and a trip to the back if you don't.
+  // Approach: a *timed run* is the neutral baseline (zero, not a free boost —
+  // see #9 in the audit notes), a full send the high-variance play (front row if
+  // you time it, OCS to the back if you don't), and holding back the safe,
+  // slightly slow option.
   const ocsRisk = ocsRiskFrom(tideOver, reliable);
   let ocs = false;
   let approachScore: number;
   if (plan.approach === 'send') {
     ocs = roll < ocsRisk;
-    approachScore = ocs ? -1 : 0.6;
+    approachScore = ocs ? -1 : 0.55;
   } else if (plan.approach === 'timed') {
-    approachScore = 0.28 + 0.12 * reliable;
+    approachScore = 0.05 * reliable; // neutral, with a small reward for a sharp read
   } else {
-    approachScore = -0.08; // hold back: safe, a touch off the pace, but clean
+    approachScore = -0.15; // hold back: safe, clean, but off the pace
   }
 
-  // First beat: commit to the favoured side (pays when the field backs it), hold
-  // for clear air, or foot for speed.
+  // First beat: commit to the favoured side (pays only when the field backs it),
+  // hold for clear air (neutral), or foot for speed (a tiny first-leg nudge). None
+  // is a free gain — splitting to a side you read right is what pays.
   let bias: RoutingBias = 0;
   let beatScore = 0;
   let speedBump = 0;
@@ -147,7 +150,7 @@ export function resolveStart(
     bias = sideRead > 0.05 ? 1 : sideRead < -0.05 ? -1 : 0;
     beatScore = 0.25 * Math.abs(sideRead);
   } else if (plan.beat === 'clear') {
-    beatScore = 0.06;
+    beatScore = 0; // clear air is the neutral default
   } else {
     speedBump = 0.02;
   }
