@@ -55,7 +55,7 @@ import { createWindField, forecastConfidence, pressureHint, sampleWind, weatherF
 import { clearPolyline, planRoute, WindSampler } from './router';
 import { currentAlong, sampleCurrent, tideAlong } from './current';
 import { LANDMASSES, LandPolygon } from '../data/landmasses';
-import { pointInLand, segmentCrossesLand } from './land';
+import { pointInLand, segmentCrossesLand, snapToWater } from './land';
 import { advanceFleet, correctedPosition, finalPosition, livePosition } from './fleet';
 
 export const clamp = (value: number, min = 0, max = 100): number =>
@@ -1027,6 +1027,13 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
     // else: genuinely boxed (a channel the coarse coastline shows as closed) —
     // keep the route advance so the boat never stalls; can't do better here.
   }
+  // Universal backstop: whatever happened above, the boat's position is never left
+  // on land (e.g. a boxed sub-resolution channel) — snap it to the nearest water.
+  if (landMass) {
+    const safe = snapToWater(landMass, adv.pos.lat, adv.pos.lon);
+    adv.pos.lat = safe.lat;
+    adv.pos.lon = safe.lon;
+  }
 
   // Mark rounding.
   let nextMarkIndex = prev.nextMarkIndex;
@@ -1399,7 +1406,10 @@ export function buildResult(state: GameState, outcome: StepResult): RaceResult {
   let optimalRoute: GeoPoint[] | undefined;
   let optimalHours: number | undefined;
   if (finished && boat && state.windField && (outcome.progress.trail?.length ?? 0) > 1) {
-    trail = downsampleTrack(outcome.progress.trail, LANDMASSES[race.id]);
+    const debriefLand = LANDMASSES[race.id];
+    const offLand = (pts: GeoPoint[]): GeoPoint[] =>
+      pts.map((p) => snapToWater(debriefLand, p.lat, p.lon));
+    trail = offLand(downsampleTrack(outcome.progress.trail, LANDMASSES[race.id]));
     const start = race.waypoints[0];
     const route = planRoute(
       boat,
@@ -1411,7 +1421,7 @@ export function buildResult(state: GameState, outcome: StepResult): RaceResult {
       0,
       LANDMASSES[race.id]
     );
-    optimalRoute = downsampleTrack(route, LANDMASSES[race.id]);
+    optimalRoute = offLand(downsampleTrack(route, LANDMASSES[race.id]));
     optimalHours = estimateRouteHours(
       boat,
       { hullIntegrity: 100, crewStamina: 100, crewMorale: 100 },

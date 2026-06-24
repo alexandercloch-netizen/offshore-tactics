@@ -86,6 +86,29 @@ function pointInPolygon(poly: LandPolygon, lon: number, lat: number): boolean {
 }
 
 // Is the point on land for this race?
+// Snap a point to the nearest open water if it has landed on the coast. Spirals
+// outward in ~1nm rings and returns the first water point found — the universal
+// backstop that keeps any drawn position (a boat, a route vertex) off land,
+// whatever produced it. A point already at sea is returned unchanged.
+export function snapToWater(
+  polys: LandPolygon[] | undefined,
+  lat: number,
+  lon: number
+): GeoPoint {
+  if (!pointInLand(polys, lat, lon)) return { lat, lon };
+  const stepDeg = 1 / 60; // ~1 nm in latitude
+  const lonScale = 1 / Math.max(Math.cos((lat * Math.PI) / 180), 0.1);
+  for (let r = 1; r <= 40; r += 1) {
+    for (let a = 0; a < 360; a += 24) {
+      const rad = (a * Math.PI) / 180;
+      const cl = lat + Math.cos(rad) * stepDeg * r;
+      const co = lon + Math.sin(rad) * stepDeg * r * lonScale;
+      if (!pointInLand(polys, cl, co)) return { lat: cl, lon: co };
+    }
+  }
+  return { lat, lon }; // hemmed in by land on all sides (shouldn't happen at sea)
+}
+
 export function pointInLand(polys: LandPolygon[] | undefined, lat: number, lon: number): boolean {
   if (!polys || polys.length === 0) return false;
   const boxes = boxesFor(polys);

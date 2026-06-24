@@ -3,7 +3,7 @@ import { LANDMASSES, LandPolygon } from '../data/landmasses';
 import { RACES, getBoatById, getRaceById } from '../data';
 import { createWindField } from '../engine/wind';
 import { createTidalField } from '../engine/current';
-import { createFleet } from '../engine/fleet';
+import { createFleet, competitorPoints } from '../engine/fleet';
 import {
   DEFAULT_STRATEGY,
   buildResult,
@@ -123,6 +123,31 @@ describe('routed tracks stay off land (all races)', () => {
       expect(onLand).toEqual([]);
       // ...and no trail *segment* cuts across land between two clean vertices.
       expect(landCrossings(race, land, trail)).toEqual([]);
+    });
+  });
+});
+
+// The AI fleet rides the land-safe course spine (not the straight rhumb between
+// marks, which cuts across islands), and every fleet position is snapped to open
+// water — so a competitor can never be drawn on land, on ANY course (even the
+// sub-resolution channels, where the snap pulls the dot to the nearest water).
+describe('the AI fleet stays off land (all races)', () => {
+  RACES.filter((r) => LANDMASSES[r.id]?.length).forEach((race) => {
+    it(`${race.name} keeps its fleet in the water`, () => {
+      setRng(mulberry32(7));
+      const land = LANDMASSES[race.id];
+      const fleet = createFleet(race, raceDivision(race, 'pro'));
+      let onLand = 0;
+      let total = 0;
+      for (let f = 0; f <= 1.0001; f += 0.04) {
+        const at = fleet.map((c) => ({ ...c, distanceNm: f * race.distanceNm }));
+        for (const p of competitorPoints(at, race)) {
+          total += 1;
+          if (pointInLand(land, p.lat, p.lon)) onLand += 1;
+        }
+      }
+      expect(total).toBeGreaterThan(0);
+      expect(onLand).toBe(0);
     });
   });
 });
