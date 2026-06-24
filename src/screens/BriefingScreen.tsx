@@ -166,7 +166,8 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
   const offThePace = !!fastest && !!mine && fastest.bias !== mine.bias && saving > 0.05;
 
   const start = () => {
-    navigation.reset({ index: 0, routes: [{ name: 'RaceMap' }] });
+    // Out to the start line: make the pre-gun tactical calls before racing.
+    navigation.navigate('StartSequence');
   };
 
   return (

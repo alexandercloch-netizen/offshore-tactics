@@ -35,8 +35,12 @@ test('a full race can be played from start to finish', async ({ page }) => {
   // Set sail → the pre-start briefing.
   await page.getByRole('button', { name: 'Set Sail' }).click();
 
-  // Review the briefing, then start the race.
+  // Review the briefing, then head out to the start line.
   await page.getByRole('button', { name: 'Start Racing' }).click();
+
+  // The start sequence: accept the default calls, cross the line, then race.
+  await page.getByRole('button', { name: 'Cross the line' }).click();
+  await page.getByRole('button', { name: 'Sail the race' }).click();
 
   // Dismiss the first-run how-to-play overlay so the race starts.
   await page.getByRole('button', { name: /Got it/ }).click();
