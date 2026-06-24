@@ -20,6 +20,8 @@ import {
   PlayerProfile,
   PlayerStrategy,
   ProvisionSelection,
+  RoutingBias,
+  StartOutcome,
   TacticalChoice,
   TidalField,
   WeatherCondition,
@@ -86,6 +88,10 @@ type Action =
   | { type: 'SET_PROVISION'; payload: { provisionId: string; quantity: number } }
   | { type: 'SET_PROVISIONS'; payload: ProvisionSelection[] }
   | { type: 'SET_STRATEGY'; payload: Partial<PlayerStrategy> }
+  | {
+      type: 'APPLY_START';
+      payload: { startSpeedMul: number; startFadeNm: number; timePenaltyH: number; bias: RoutingBias };
+    }
   | { type: 'SET_TUTORIAL_SEEN' }
   | { type: 'ADD_FLEET_BOAT'; payload: { boat: FleetBoat; cost: number } }
   | { type: 'REMOVE_FLEET_BOAT'; payload: string }
@@ -179,6 +185,24 @@ function reducer(state: GameState, action: Action): GameState {
 
     case 'SET_STRATEGY':
       return { ...state, strategy: { ...state.strategy, ...action.payload } };
+
+    case 'APPLY_START': {
+      // Bake the start sequence's result into the opening leg: a clean-/dirty-air
+      // speed factor, a committed first-beat bias, and any time penalty (a poor
+      // start or OCS). No progress yet → ignore (defensive).
+      if (!state.progress) return state;
+      const { startSpeedMul, startFadeNm, timePenaltyH, bias } = action.payload;
+      return {
+        ...state,
+        strategy: { ...state.strategy, bias },
+        progress: {
+          ...state.progress,
+          startSpeedMul,
+          startFadeNm,
+          elapsedHours: state.progress.elapsedHours + timePenaltyH,
+        },
+      };
+    }
 
     case 'SET_TUTORIAL_SEEN':
       return { ...state, tutorialSeen: true };
@@ -331,6 +355,7 @@ export interface GameContextValue {
   setProvisionQuantity: (provisionId: string, quantity: number) => void;
   setProvisions: (selections: ProvisionSelection[]) => void;
   setStrategy: (partial: Partial<PlayerStrategy>) => void;
+  applyStart: (outcome: StartOutcome) => void;
   markTutorialSeen: () => void;
   addFleetBoat: (boat: FleetBoat, cost: number) => void;
   removeFleetBoat: (id: string) => void;
@@ -510,6 +535,18 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
     dispatch({ type: 'SET_STRATEGY', payload: partial });
   }, []);
 
+  const applyStart = useCallback((outcome: StartOutcome) => {
+    dispatch({
+      type: 'APPLY_START',
+      payload: {
+        startSpeedMul: outcome.speedMul,
+        startFadeNm: outcome.fadeNm,
+        timePenaltyH: outcome.timePenaltyH,
+        bias: outcome.bias,
+      },
+    });
+  }, []);
+
   const markTutorialSeen = useCallback(() => {
     dispatch({ type: 'SET_TUTORIAL_SEEN' });
   }, []);
@@ -682,6 +719,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
       setProvisionQuantity,
       setProvisions,
       setStrategy,
+      applyStart,
       markTutorialSeen,
       addFleetBoat,
       removeFleetBoat,
@@ -710,6 +748,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
       setProvisionQuantity,
       setProvisions,
       setStrategy,
+      applyStart,
       markTutorialSeen,
       addFleetBoat,
       removeFleetBoat,

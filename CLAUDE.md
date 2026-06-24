@@ -66,6 +66,12 @@ The simulation is a **pure, deterministic engine** with a thin React UI on top.
     + variance shuffle the standings.
   - `geo.ts` — projections, bearings, distances. `rng.ts` — seedable RNG.
   - `recommend.ts` — home-screen race recommendation from the player profile.
+  - `start.ts` — the race start: the start-line geometry (`startLineGeo`), the
+    Navigator's pre-gun read (`startRead` — favoured end, OCS risk, hedged by
+    confidence), and `resolveStart`, which turns the three start calls (end /
+    approach / first beat) into the opening leg's advantage **resolved against the
+    real wind & tide** (clean-/dirty-air `startSpeedMul` faded over the first leg,
+    a committed bias, OCS/time penalty). Pure; the only chance is an injected roll.
   - Tactical decisions (`data/events.ts`) tagged `field: true` are *resolved
     against the real wind* in `applyDecision` via `tacticalEdge` — a bold call
     only pays when the field supports it; `tacticalRead` gives the Navigator's
@@ -79,8 +85,10 @@ The simulation is a **pure, deterministic engine** with a thin React UI on top.
   (AsyncStorage), `reconcile.ts` (local↔cloud save merge).
 - **`src/screens/`** — one per screen; bottom tabs (Race/Fleet/Leaderboard/
   Profile) live under `Main`, with setup/race screens pushed over them. The
-  `ResultsScreen` debrief contrasts the sailed track with the optimal line
-  (`RaceResult.trail`/`optimalRoute`/`optimalHours`, captured in `buildResult`).
+  setup→race flow is Provisioning → Briefing → **StartSequence** (the pre-gun
+  start tactics; applies `resolveStart`'s outcome via the `APPLY_START` action) →
+  RaceMap. The `ResultsScreen` debrief contrasts the sailed track with the optimal
+  line (`RaceResult.trail`/`optimalRoute`/`optimalHours`, captured in `buildResult`).
 - **`src/components/`** — `RouteMap` (the SVG chart, incl. the wind-speed
   heatmap), `PolarViewer`, `WindIndicator`, `TacticalDecisionModal`,
   `ForecastScrubber` (briefing forecast timeline), `ForecastGraph` (the

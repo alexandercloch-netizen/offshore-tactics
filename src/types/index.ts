@@ -432,6 +432,56 @@ export interface RaceProgress {
   shownEventIds: string[]; // ids of decisions already presented, to avoid repeats
   readings: InstrumentReading[]; // recent instrument samples (capped)
   legStartNm: number; // distance covered at the last decision (this leg's start)
+  // The start sequence's lasting effect on the first leg: a clean-/dirty-air
+  // speed multiplier that fades linearly to 1 over `startFadeNm` of progress.
+  startSpeedMul?: number; // 1 = neutral; >1 clean air, <1 buried/dirty air
+  startFadeNm?: number; // distance over which the start advantage decays
+}
+
+// ---- Race start sequence ----
+
+// The player's three start calls.
+export type StartEnd = 'committee' | 'mid' | 'pin'; // which end of the line
+export type StartApproach = 'send' | 'timed' | 'hold'; // aggression at the gun
+export type StartBeat = 'favoured' | 'clear' | 'speed'; // first move off the line
+export interface StartPlan {
+  end: StartEnd;
+  approach: StartApproach;
+  beat: StartBeat;
+}
+
+// The start line, derived from the course geometry, for the chart schematic.
+export interface StartLineGeo {
+  committee: GeoPoint; // starboard (right) end — the committee boat
+  pin: GeoPoint; // port (left) end
+  lineBearing: number; // committee → pin
+  firstLegBearing: number; // toward the first mark
+}
+
+// The Navigator's pre-start read, hedged by their confidence (the chart shows it).
+export interface StartRead {
+  line: StartLineGeo;
+  endBias: number; // signed [-1,1]: + favours committee (right), − favours pin (left)
+  favouredEnd: StartEnd; // 'committee' | 'pin' | 'mid' (even) — the believed call
+  sideRead: number; // signed [-1,1]: + the right of the course pays off the line
+  ocsRisk: number; // 0–1: chance a full-send start is over early (tide-aware)
+  reliable: number; // 0–1: how much the Navigator trusts this read
+  windFromDeg: number;
+  windSpeedKn: number;
+  tideRateKn: number;
+  tideSetDeg: number;
+}
+
+// What the start produces, applied to the opening leg.
+export interface StartOutcome {
+  speedMul: number; // first-leg clean/dirty air factor
+  fadeNm: number; // distance it decays over
+  timePenaltyH: number; // added to elapsed (a poor start / OCS costs time)
+  bias: RoutingBias; // committed first-beat side → initial strategy bias
+  ocs: boolean; // over early — restarted from the back
+  rating: number; // 0–1 overall start quality
+  gunPosition: number; // displayed place crossing the line
+  summary: string; // human-readable debrief of the start
 }
 
 // An AI competitor sailing the same course & wind field as the player.
@@ -543,6 +593,7 @@ export type RootStackParamList = {
   CrewSelect: undefined;
   Provisioning: undefined;
   Briefing: undefined;
+  StartSequence: undefined;
   RaceMap: undefined;
   Results: undefined;
   BoatBuilder: undefined;

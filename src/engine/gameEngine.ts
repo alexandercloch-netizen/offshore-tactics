@@ -586,6 +586,8 @@ export function initialProgress(
     shownEventIds: [],
     readings: [],
     legStartNm: 0,
+    startSpeedMul: 1,
+    startFadeNm: 0,
   };
 }
 
@@ -901,7 +903,7 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
 
   const wind = sampleWind(field, prev.lat, prev.lon, prev.elapsedHours);
   const skillMul = crewSkillFactor(crewSkillAverage(state.selectedCrewIds));
-  const speed = boatSpeedFor(
+  const baseSpeed = boatSpeedFor(
     boat,
     state.condition,
     prev.heading,
@@ -909,6 +911,14 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
     EFFORT_SPEED[strategy.effort],
     skillMul
   );
+  // The start's lasting bite: a clean-/dirty-air speed multiplier from the start
+  // sequence, fading linearly back to neutral over the opening leg (`startFadeNm`).
+  // A great start carries you clear; a buried one bleeds the first beat.
+  const startMul =
+    prev.startFadeNm && prev.startFadeNm > 0 && prev.startSpeedMul && prev.startSpeedMul !== 1
+      ? prev.startSpeedMul + (1 - prev.startSpeedMul) * clamp(prev.distanceCoveredNm / prev.startFadeNm, 0, 1)
+      : 1;
+  const speed = baseSpeed * startMul;
   // Through-water time for this step: the boat sails `stepNm` along its route at
   // its polar speed. Tide is applied separately as set & drift below — NOT baked
   // into this speed — so a fair/foul stream acts over *time*, not over the
@@ -1032,6 +1042,8 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
       position: prev.position,
     }),
     legStartNm: prev.legStartNm ?? 0,
+    startSpeedMul: prev.startSpeedMul,
+    startFadeNm: prev.startFadeNm,
   };
 
   // Advance the AI fleet through the same elapsed time, wind and tide, then rank.
