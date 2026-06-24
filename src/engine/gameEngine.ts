@@ -55,6 +55,7 @@ import { createWindField, forecastConfidence, pressureHint, sampleWind, weatherF
 import { clearPolyline, planRoute, WindSampler } from './router';
 import { currentAlong, sampleCurrent, tideAlong } from './current';
 import { LANDMASSES, LandPolygon } from '../data/landmasses';
+import { pointInLand, segmentCrossesLand } from './land';
 import { advanceFleet, correctedPosition, finalPosition, livePosition } from './fleet';
 
 export const clamp = (value: number, min = 0, max = 100): number =>
@@ -884,6 +885,42 @@ interface Advance {
   passed: GeoPoint[]; // intermediate route vertices crossed this tick (detour corners)
 }
 
+// Does the path from `from` through any detour corners to `pos` cross land or end
+// on it? The exact set of segments the trail will draw this tick.
+function pathHitsLand(
+  from: GeoPoint,
+  passed: GeoPoint[],
+  pos: GeoPoint,
+  land?: LandPolygon[]
+): boolean {
+  if (!land) return false;
+  let a = from;
+  for (const corner of passed) {
+    if (segmentCrossesLand(land, a, corner)) return true;
+    a = corner;
+  }
+  return segmentCrossesLand(land, a, pos) || pointInLand(land, pos.lat, pos.lon);
+}
+
+// Fool-proof land avoidance at the movement layer: find a clear step of `dist`
+// from `from`, fanning out from the desired bearing until the step stays in the
+// water. The boat steers *around* land rather than ever tracing a line across it,
+// so no imperfection in the planned route can put the boat (or its trail) ashore.
+// Returns null only if every direction is blocked (open-water boats never are).
+function clearStep(
+  from: GeoPoint,
+  desiredBearing: number,
+  dist: number,
+  land: LandPolygon[]
+): GeoPoint | null {
+  const fan = [0, 18, -18, 36, -36, 55, -55, 75, -75, 100, -100, 130, -130, 160, -160, 180];
+  for (const delta of fan) {
+    const cand = movePoint(from.lat, from.lon, (desiredBearing + delta + 360) % 360, dist);
+    if (!pointInLand(land, cand.lat, cand.lon) && !segmentCrossesLand(land, from, cand)) return cand;
+  }
+  return null;
+}
+
 // Walk `distNm` along the remaining route, returning the new position, the
 // heading of the segment we end on, the trimmed remaining route, and any
 // intermediate route vertices crossed — so the trail can follow the route's
@@ -959,30 +996,36 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
       : 1;
   const speed = baseSpeed * startMul;
   // Through-water time for this step: the boat sails `stepNm` along its route at
-  // its polar speed. Tide is applied separately as set & drift below — NOT baked
-  // into this speed — so a fair/foul stream acts over *time*, not over the
-  // tack-inflated route distance, which keeps its effect the same size as the
-  // fleet's (which drifts along the course). That's what makes tide fair.
-  const dtHours = stepNm / Math.max(speed, 0.3);
+  // its polar speed. Tide is folded in below as a made-good rate, NOT as a 2-D
+  // drift — so the boat never leaves its land-routed track and a stream can't push
+  // it onto the coast (the recurring over-land bug).
+  const dtBase = stepNm / Math.max(speed, 0.3);
 
   const adv = advanceAlongRoute(prev.route, stepNm);
-  // Set & drift: the tide carries the boat over the ground toward the next mark by
-  // rate × time. A fair stream nudges it on, a foul one sets it back; the route
-  // (planned through the water) is unchanged. The fleet drifts the same way along
-  // its course, so beating into a foul tide costs the player and the fleet alike.
-  const tideMark = marks[Math.min(prev.nextMarkIndex, marks.length - 1)];
-  const courseToMark = brg(prev, tideMark);
-  const tide = tideAlong(state.tidalField, prev.lat, prev.lon, prev.elapsedHours, courseToMark);
-  const driftNm = tide * dtHours;
-  if (Math.abs(driftNm) > 1e-9) {
-    const set = driftNm >= 0 ? courseToMark : (courseToMark + 180) % 360;
-    // Mutate the position in place: `adv.pos` and `adv.route[0]` are the same
-    // object, so this also moves the route's start — the next step sails on from
-    // the drifted point and the set accumulates over the race, exactly as the
-    // fleet's tide accumulates into its progress.
-    const drifted = movePoint(adv.pos.lat, adv.pos.lon, set, Math.abs(driftNm));
-    adv.pos.lat = drifted.lat;
-    adv.pos.lon = drifted.lon;
+  // Fool-proof land guard: the boat advances along its planned route, but if that
+  // route (or its detour corners) would trace a segment across land — a clip the
+  // weather router occasionally leaves on an intricate coast — replace this step
+  // with a single clear step that steers around the obstacle in the water, and
+  // force an immediate re-route. The boat (and its trail) can therefore never
+  // cross land, whatever the route quality.
+  let forceReroute = false;
+  const landMass = LANDMASSES[race.id];
+  if (landMass && pathHitsLand({ lat: prev.lat, lon: prev.lon }, adv.passed, adv.pos, landMass)) {
+    const aim = adv.route.length > 1 ? adv.route[1] : adv.pos;
+    const desired = bearing(prev.lat, prev.lon, aim.lat, aim.lon);
+    const from = { lat: prev.lat, lon: prev.lon };
+    const steered =
+      clearStep(from, desired, stepNm, landMass) ??
+      clearStep(from, desired, stepNm * 0.5, landMass) ??
+      clearStep(from, desired, stepNm * 0.25, landMass);
+    if (steered) {
+      // Steer around the obstacle in open water and replan from there.
+      adv.pos = steered;
+      adv.passed = [];
+      forceReroute = true;
+    }
+    // else: genuinely boxed (a channel the coarse coastline shows as closed) —
+    // keep the route advance so the boat never stalls; can't do better here.
   }
 
   // Mark rounding.
@@ -1000,6 +1043,18 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
   const distanceCoveredNm = clamp(total - remaining, 0, total);
   const dGeom = Math.max(distanceCoveredNm - prev.distanceCoveredNm, 0);
   const df = total > 0 ? dGeom / total : 0;
+
+  // Tide as a made-good rate over the ground: a fair stream speeds the boat's
+  // progress along the course, a foul one slows it — scaled to the course made
+  // good this step (`dGeom`), NOT the tack-inflated route distance, so its effect
+  // stays the same size as the fleet's (which drifts its course progress) and the
+  // standings stay fair. Because it only adjusts *time*, the boat stays exactly on
+  // its land-routed track. Capped so a foul stream slows but can't stall the boat.
+  const tideMark = marks[Math.min(prev.nextMarkIndex, marks.length - 1)];
+  const courseToMark = brg(prev, tideMark);
+  const tide = tideAlong(state.tidalField, prev.lat, prev.lon, prev.elapsedHours, courseToMark);
+  const tideCourse = tide * dtBase; // course nm the stream adds (+) / removes (−) this step
+  const dtHours = dGeom > 1e-6 ? dtBase * (dGeom / Math.max(dGeom + tideCourse, dGeom * 0.2)) : dtBase;
   const elapsedHours = prev.elapsedHours + dtHours;
 
   // Wear accrues with geometric progress, so `df` sums to ~1 over a whole race
@@ -1038,6 +1093,7 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
   const shifted = angularDelta(wind.fromDeg, prev.routeWindDir) > REROUTE_SHIFT_DEG;
   const biasChanged = strategy.bias !== prev.routeBias;
   const wantReroute =
+    forceReroute || // the boat had to steer around a land clip — replan a clean route now
     rounded ||
     route.length < 2 ||
     biasChanged ||

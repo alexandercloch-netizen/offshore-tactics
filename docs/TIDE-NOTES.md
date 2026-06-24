@@ -31,6 +31,35 @@ shift (tide makes it marginally harder, never an automatic win), versus the old
 runaway. What remains is genuine, high-variance gate tactics. Guarded by the
 `tide is fair in the standings` test.
 
+## Tide model: made-good time, not 2-D drift (over-land fix)
+
+The player's tide was first applied as **set & drift** — moving the boat's 2-D
+position over the ground. Near a shoreside gate a foul/cross stream drifted the
+boat **onto land**, where the route degenerated and it stalled to the back (the
+reported Round-the-Island bug). No land-guard on the drift was fully robust.
+
+It's now applied as a **made-good rate over time**: the stream speeds (fair) or
+slows (foul) the boat's progress along the course, scaled to the course made good
+this step (not the tack-inflated route distance, so it stays fair vs the fleet) —
+and the boat **never leaves its land-routed track**. Same fairness (the `tide is
+fair in the standings` test still passes), zero drift-onto-land.
+
+Belt-and-suspenders: a movement-layer guard (`clearStep`/`pathHitsLand` in
+`gameEngine.ts`) means the boat **steers around** any land a planned route would
+clip and can never trace a segment across the coast. The fine-step land audit
+(`land.test.ts`) now runs the tide-bearing courses at the gameplay step (the old
+coarse step hid clips).
+
+### Known limitation: sub-resolution channels
+
+R2AK (Inside Passage — Seymour Narrows ≈ 750 m) and the Middle Sea (Strait of
+Messina, Aeolian gaps) have real channels **narrower than the 1:10m coastline can
+represent**, so the polygon paints navigable water as land and the route clips it
+regardless of tide (it clips with tide fully off). The boat is in real water; the
+*polygon* is too coarse. These two are excluded from the strict fine-step land
+audit. The real fix is a finer/hand-edited coastline for those courses — a future
+data task, not a movement bug.
+
 ## History — why it was hard (kept for context)
 
 Earlier the felt tide kept **skewing the fleet standings**; the cause (measured,

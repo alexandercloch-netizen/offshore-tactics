@@ -2,6 +2,7 @@ import { pointInLand, segmentCrossesLand } from '../engine/land';
 import { LANDMASSES, LandPolygon } from '../data/landmasses';
 import { RACES, getBoatById, getRaceById } from '../data';
 import { createWindField } from '../engine/wind';
+import { createTidalField } from '../engine/current';
 import { createFleet } from '../engine/fleet';
 import {
   DEFAULT_STRATEGY,
@@ -49,7 +50,7 @@ describe('coastline coverage', () => {
 
 // Sail a race headless (ignoring decision prompts, which don't move the boat) and
 // return the track actually sailed.
-function sailTrail(raceId: string): { lat: number; lon: number }[] {
+function sailTrail(raceId: string, withTide = false, stepNm?: number): { lat: number; lon: number }[] {
   const race = getRaceById(raceId)!;
   const boat = getBoatById('boat-mistral')!;
   const windField = createWindField(race);
@@ -65,16 +66,20 @@ function sailTrail(raceId: string): { lat: number; lon: number }[] {
     profile: { fleet: [] },
     condition: healthy,
     windField,
+    // The tide's set & drift moves the boat over the ground — guard that it never
+    // pushes the track onto the coast (a foul stream by a shoreside gate used to).
+    tidalField: withTide ? createTidalField(race) : undefined,
     fleet: createFleet(race, raceDivision(race, 'corinthian')),
     progress: initialProgress(race, boat, 'corinthian', windField),
     history: [],
     eventLog: [],
   } as unknown as GameState;
 
-  // Coarser steps than gameplay — enough to trace the whole routed track and
-  // catch any land incursion, without a slow tick-by-tick sim in CI.
-  const step = Math.max(race.distanceNm * 0.04, 1);
-  for (let i = 0; i < 2000; i += 1) {
+  // Coarser steps than gameplay by default — enough to trace the whole routed
+  // track without a slow tick-by-tick sim. Callers can pass the gameplay step for
+  // a higher-resolution audit (the tide drift needs it).
+  const step = stepNm ?? Math.max(race.distanceNm * 0.04, 1);
+  for (let i = 0; i < 4000; i += 1) {
     const out = stepRace(state, step);
     state = { ...state, progress: out.progress, condition: out.condition, weather: out.weather, fleet: out.fleet };
     if (out.finished || out.retired) break;
@@ -118,6 +123,36 @@ describe('routed tracks stay off land (all races)', () => {
       expect(onLand).toEqual([]);
       // ...and no trail *segment* cuts across land between two clean vertices.
       expect(landCrossings(race, land, trail)).toEqual([]);
+    });
+  });
+});
+
+// Tide on, at the *gameplay* step (the coarse step hid the bug). The boat now
+// makes good the tide as a time rate and stays on its routed track, and a
+// movement-layer guard steers it around any land clip the router leaves — so the
+// track must stay in the water on a running tide.
+//
+// Excluded: courses whose real channels are narrower than the 1:10m coastline can
+// represent — R2AK's Inside Passage (Seymour Narrows ~750 m) and the Middle Sea's
+// Strait of Messina / Aeolian island gaps. The polygon shows navigable water as
+// land, so the route unavoidably "clips" it. That's a coastline-resolution
+// limitation (tide-independent — it clips with no tide too), tracked in
+// docs/TIDE-NOTES.md, not a movement bug.
+const SUBRESOLUTION_COAST = new Set(['race-r2ak', 'race-middle-sea']);
+describe('routed tracks stay off land with the tide running', () => {
+  RACES.filter(
+    (r) => r.tide && r.tide.peakRateKn > 0 && LANDMASSES[r.id]?.length && !SUBRESOLUTION_COAST.has(r.id)
+  ).forEach((race) => {
+    [11, 21, 42].forEach((seed) => {
+      it(`${race.name} stays in the water on a running tide (seed ${seed})`, () => {
+        setRng(mulberry32(seed));
+        const land = LANDMASSES[race.id];
+        const trail = sailTrail(race.id, true, defaultStepNm(race));
+        expect(trail.length).toBeGreaterThan(2);
+        const onLand = trail.filter((p) => pointInLand(land, p.lat, p.lon) && !nearMark(race, p));
+        expect(onLand).toEqual([]);
+        expect(landCrossings(race, land, trail)).toEqual([]);
+      });
     });
   });
 });
