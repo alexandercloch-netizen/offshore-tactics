@@ -1215,7 +1215,9 @@ export function applyDecision(state: GameState, choice: TacticalChoice): StepRes
   if (choice.field) {
     const edge = tacticalEdge(state); // ~[-0.25, 1]; ≥ EDGE_SEND means send it
     const EDGE_SEND = 0.35;
-    extraHours = Math.max(0, Math.abs(choice.timeDelta) * 1.6 * (EDGE_SEND - edge));
+    // A misread bold call costs time, but not catastrophically: tuned so a single
+    // wrong corner is a couple of places against a tight fleet, not the race.
+    extraHours = Math.max(0, Math.abs(choice.timeDelta) * 1.0 * (EDGE_SEND - edge));
     morale += edge >= EDGE_SEND ? 2 : -3;
   }
 
@@ -1229,9 +1231,9 @@ export function applyDecision(state: GameState, choice: TacticalChoice): StepRes
   const safetyRelief = prov.safety * 0.2;
   const bungleChance = Math.max(0, choice.risk + moralePenalty + pushPenalty - skillRelief - safetyRelief);
   if (rnd() < bungleChance) {
-    extraHours += 0.6 + state.weather.riskModifier;
-    hull -= 8 * (1 - prov.hullWearResist);
-    morale -= 5;
+    extraHours += 0.3 + state.weather.riskModifier * 0.5;
+    hull -= 6 * (1 - prov.hullWearResist);
+    morale -= 4;
   } else if (choice.risk > 0.15) {
     morale += 2;
   }
@@ -1242,7 +1244,16 @@ export function applyDecision(state: GameState, choice: TacticalChoice): StepRes
     hullIntegrity: clamp(hull),
   };
 
-  const lostHours = Math.max(extraHours, 0);
+  // The on-water cost of a single call, damped and capped. A tightly-packed fleet
+  // means a small time loss is many places, so without this one decision could
+  // leapfrog the whole field ("flew past for no reason"). Capping keeps any one
+  // call to a few recoverable places; the player only falls out of contention by
+  // stacking up bad calls (the cost is per-decision, so repeated mistakes still
+  // compound) or sailing far off pace. The cap is relative to the race so it
+  // scales from a day-race to an ocean passage.
+  const DECISION_TIME_SCALE = 0.65;
+  const DECISION_TIME_CAP_H = 0.5; // absolute: one call costs ~30 min on the water at most
+  const lostHours = Math.min(Math.max(extraHours, 0) * DECISION_TIME_SCALE, DECISION_TIME_CAP_H);
   const progress: RaceProgress = {
     ...state.progress,
     elapsedHours: state.progress.elapsedHours + lostHours,

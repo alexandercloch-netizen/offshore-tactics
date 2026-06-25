@@ -157,6 +157,17 @@ export const RACES: Race[] = [
     prevailingWind: { fromDeg: 225, speedKn: 15 },
     signatureHazard: 'Reading the Gulf Stream eddies — find a fair meander or fight a foul current.',
     season: 'June (biennial)',
+    // The Gulf Stream: a persistent, non-reversing current setting ENE across the
+    // rhumb to Bermuda — the race's defining tactical problem. A weak general
+    // offshore drift everywhere, intensified into a strong band at the Stream
+    // crossing (the gate). No shelf tide out here.
+    tide: {
+      floodDeg: 60,
+      peakRateKn: 0,
+      driftDeg: 60,
+      driftKn: 0.6,
+      gates: [{ waypoint: 'Gulf Stream', gain: 3.0, radiusNm: 80 }],
+    },
     unlockAfter: 'race-middle-sea',
     waypoints: [
       { name: 'Newport, RI (Start)', lat: 41.4386, lon: -71.3432, type: 'start' },
@@ -233,6 +244,15 @@ export const RACES: Race[] = [
     prevailingWind: { fromDeg: 75, speedKn: 18 },
     signatureHazard: 'Island acceleration zones — big gusts funnelling between the headlands.',
     season: 'February',
+    // The Caribbean Current sets WNW through the islands at ~0.6 kn, with a light
+    // tidal stream squeezing between the headlands (hardest in the Saba channel).
+    tide: {
+      floodDeg: 290,
+      peakRateKn: 0.3,
+      driftDeg: 290,
+      driftKn: 0.6,
+      gates: [{ waypoint: 'Saba', gain: 0.8, radiusNm: 12 }],
+    },
     unlockAfter: 'race-fastnet',
     waypoints: [
       { name: 'Antigua (English Harbour)', lat: 16.9799, lon: -61.7539, type: 'start' },
@@ -278,6 +298,19 @@ export const RACES: Race[] = [
     prevailingWind: { fromDeg: 30, speedKn: 16 },
     signatureHazard: 'Bass Strait storms and the dreaded "southerly buster".',
     season: 'December',
+    // The East Australian Current sweeps south down the NSW coast (~1.2 kn — a big
+    // gain if you ride it offshore), then Bass Strait adds a strong oscillating
+    // tidal stream. The current never reverses; the Strait tide does.
+    tide: {
+      floodDeg: 280,
+      peakRateKn: 0.7,
+      driftDeg: 195,
+      driftKn: 1.2,
+      gates: [
+        { waypoint: 'NSW South Coast', gain: 0.8, radiusNm: 70 },
+        { waypoint: 'Bass Strait', gain: 1.0, radiusNm: 45 },
+      ],
+    },
     unlockAfter: 'race-caribbean-600',
     waypoints: [
       { name: 'Sydney Heads', lat: -33.8487, lon: 151.3068, type: 'start' },
@@ -311,6 +344,14 @@ export const RACES: Race[] = [
     prevailingWind: { fromDeg: 45, speedKn: 16 },
     signatureHazard: 'Routing around the Pacific High — too close and you park, too far and you sail extra miles.',
     season: 'July',
+    // A gentle westerly set across the Pacific toward Hawaii — the North Pacific
+    // drift under the trades. Light (this is a wind race), but there to read.
+    tide: {
+      floodDeg: 250,
+      peakRateKn: 0,
+      driftDeg: 250,
+      driftKn: 0.4,
+    },
     unlockAfter: 'race-sydney-hobart',
     waypoints: [
       { name: 'Point Fermin (San Pedro)', lat: 33.7, lon: -118.29, type: 'start' },

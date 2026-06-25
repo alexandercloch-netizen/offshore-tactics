@@ -42,11 +42,11 @@ function steadyWind(fromDeg: number, speedKn: number): WindField {
 // the phase parked at the quarter-cycle (sin ≈ 1), so `floodDeg` is effectively a
 // constant set — handy for isolating fair vs foul.
 function steadyTide(floodDeg: number, peakRateKn: number): TidalField {
-  return { floodDeg, peakRateKn, periodH: 1e6, phaseH: 2.5e5, gates: [], refLat: 50, refLon: -1 };
+  return { floodDeg, peakRateKn, periodH: 1e6, phaseH: 2.5e5, gates: [], driftDeg: 0, driftKn: 0, refLat: 50, refLon: -1 };
 }
 
 describe('sampleCurrent', () => {
-  const field: TidalField = { floodDeg: 90, peakRateKn: 3, periodH: 12, phaseH: 0, gates: [], refLat: 50, refLon: -1 };
+  const field: TidalField = { floodDeg: 90, peakRateKn: 3, periodH: 12, phaseH: 0, gates: [], driftDeg: 0, driftKn: 0, refLat: 50, refLon: -1 };
 
   it('is slack at the start of the cycle, floods at the quarter, ebbs at three-quarters', () => {
     expect(sampleCurrent(field, 50, -1, 0).rateKn).toBeCloseTo(0, 5);
@@ -77,6 +77,43 @@ describe('sampleCurrent', () => {
   });
 });
 
+describe('steady drift (ocean current)', () => {
+  // A pure ocean current: no oscillating tide, a constant set toward the east.
+  const drift: TidalField = {
+    floodDeg: 0, peakRateKn: 0, periodH: 12, phaseH: 0, gates: [],
+    driftDeg: 90, driftKn: 1.5, refLat: 30, refLon: -65,
+  };
+
+  it('does not reverse — same set & rate across the whole cycle', () => {
+    const a = sampleCurrent(drift, 30, -65, 0);
+    const b = sampleCurrent(drift, 30, -65, 6); // half a (nominal) period later
+    expect(a.rateKn).toBeCloseTo(1.5, 5);
+    expect(b.rateKn).toBeCloseTo(1.5, 5);
+    expect(a.setDeg).toBeCloseTo(90, 3);
+    expect(b.setDeg).toBeCloseTo(90, 3);
+  });
+
+  it('a gate intensifies the current core (e.g. the Gulf Stream axis)', () => {
+    const gated: TidalField = { ...drift, gates: [{ lat: 30, lon: -65, radiusNm: 50, gain: 2 }] };
+    const open = sampleCurrent(drift, 30, -65, 0).rateKn;
+    expect(sampleCurrent(gated, 30, -65, 0).rateKn).toBeCloseTo(open * 3, 1); // gain 2 → ×3
+  });
+
+  it('vector-sums with an oscillating tide', () => {
+    // Tide setting east at peak flood + drift east → rates add along the same axis.
+    const both: TidalField = { ...drift, floodDeg: 90, peakRateKn: 2, phaseH: 3 }; // sin≈1 at h=0
+    const s = sampleCurrent(both, 30, -65, 0);
+    expect(s.setDeg).toBeCloseTo(90, 1);
+    expect(s.rateKn).toBeCloseTo(3.5, 1); // 2 (tide) + 1.5 (drift)
+  });
+
+  it('tideAlong feels a pure current with no oscillating tide', () => {
+    // Current sets east (90); a course due east (90) gets a fair push.
+    expect(tideAlong(drift, 30, -65, 0, 90)).toBeCloseTo(1.5, 3);
+    expect(tideAlong(drift, 30, -65, 0, 270)).toBeCloseTo(-1.5, 3); // dead against
+  });
+});
+
 describe('currentAlong / tideAlong', () => {
   it('is fair with the heading, foul against it, nil across it', () => {
     const flood = { setDeg: 90, rateKn: 3 };
@@ -97,12 +134,12 @@ describe('sampleCurrentGrid', () => {
 
   it('is empty for a slack or absent field', () => {
     expect(sampleCurrentGrid(undefined, bounds, 5, 5, 3)).toEqual([]);
-    const slack = { floodDeg: 90, peakRateKn: 0, periodH: 12, phaseH: 0, gates: [], refLat: 50, refLon: -1 };
+    const slack = { floodDeg: 90, peakRateKn: 0, periodH: 12, phaseH: 0, gates: [], driftDeg: 0, driftKn: 0, refLat: 50, refLon: -1 };
     expect(sampleCurrentGrid(slack, bounds, 5, 5, 3)).toEqual([]);
   });
 
   it('returns set/rate arrows across the course at the flood', () => {
-    const field = { floodDeg: 90, peakRateKn: 2, periodH: 12, phaseH: 3, gates: [], refLat: 50, refLon: -1 };
+    const field = { floodDeg: 90, peakRateKn: 2, periodH: 12, phaseH: 3, gates: [], driftDeg: 0, driftKn: 0, refLat: 50, refLon: -1 };
     const arrows = sampleCurrentGrid(field, bounds, 5, 5, 0); // hours+phase=3 → near peak flood
     expect(arrows.length).toBeGreaterThan(0);
     expect(arrows.every((a) => a.rateKn >= 0.15)).toBe(true);
@@ -124,7 +161,7 @@ describe('tideRead', () => {
 
   it('reports rate and a signed fair/foul component to the next mark', () => {
     // Flood sets E (90°); phase 0 with elapsed 3h of a 12h cycle → peak flood.
-    const field = { floodDeg: 90, peakRateKn: 2, periodH: 12, phaseH: 0, gates: [], refLat: 50, refLon: -1 };
+    const field = { floodDeg: 90, peakRateKn: 2, periodH: 12, phaseH: 0, gates: [], driftDeg: 0, driftKn: 0, refLat: 50, refLon: -1 };
     const read = tideRead(baseState(field, 5, 50.555, -1.3))!;
     expect(read).not.toBeNull();
     expect(read.rateKn).toBeGreaterThan(0);
@@ -156,9 +193,10 @@ describe('createTidalField', () => {
   });
 
   it('is slack for a race with no tide profile', () => {
-    const race = getRaceById('race-caribbean-600')!;
+    const race = getRaceById('race-chicago-mac')!; // a lake — genuinely tideless
     const field = createTidalField(race);
     expect(field.peakRateKn).toBe(0);
+    expect(field.driftKn).toBe(0);
   });
 });
 

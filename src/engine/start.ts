@@ -74,7 +74,7 @@ function rawRead(race: Race, field: WindField, tide?: TidalField) {
 }
 
 function slack(): TidalField {
-  return { floodDeg: 0, peakRateKn: 0, periodH: 12.42, phaseH: 0, gates: [], refLat: 0, refLon: 0 };
+  return { floodDeg: 0, peakRateKn: 0, periodH: 12.42, phaseH: 0, gates: [], driftDeg: 0, driftKn: 0, refLat: 0, refLon: 0 };
 }
 
 function ocsRiskFrom(tideOver: number, reliable: number): number {

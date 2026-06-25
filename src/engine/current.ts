@@ -15,8 +15,14 @@ export function createTidalField(race: Race): TidalField {
   const refLat = (bounds.minLat + bounds.maxLat) / 2;
   const refLon = (bounds.minLon + bounds.maxLon) / 2;
   const tide = race.tide;
-  if (!tide || tide.peakRateKn <= 0) {
-    return { floodDeg: 0, peakRateKn: 0, periodH: SEMI_DIURNAL_H, phaseH: 0, gates: [], refLat, refLon };
+  const driftDeg = tide?.driftDeg ?? 0;
+  const driftKn = tide?.driftKn ?? 0;
+  // Slack only when there's neither an oscillating tide nor a steady current.
+  if (!tide || (tide.peakRateKn <= 0 && driftKn <= 0)) {
+    return {
+      floodDeg: 0, peakRateKn: 0, periodH: SEMI_DIURNAL_H, phaseH: 0, gates: [],
+      driftDeg: 0, driftKn: 0, refLat, refLon,
+    };
   }
   const periodH = tide.periodH ?? SEMI_DIURNAL_H;
   // Where in the flood/ebb cycle the race starts — the single biggest tidal
@@ -28,27 +34,45 @@ export function createTidalField(race: Race): TidalField {
       return wp ? { lat: wp.lat, lon: wp.lon, radiusNm: g.radiusNm, gain: g.gain } : null;
     })
     .filter((g): g is TideGate => g !== null);
-  return { floodDeg: tide.floodDeg, peakRateKn: tide.peakRateKn, periodH, phaseH, gates, refLat, refLon };
+  return {
+    floodDeg: tide.floodDeg, peakRateKn: tide.peakRateKn, periodH, phaseH, gates,
+    driftDeg, driftKn, refLat, refLon,
+  };
 }
 
 // The tidal stream at a point and time: a sinusoidal flood/ebb (flooding toward
 // `floodDeg`, ebbing back the other way), amplified near any tide gate the point
 // falls within. Pure and deterministic.
 export function sampleCurrent(field: TidalField, lat: number, lon: number, hours: number): CurrentSample {
-  if (field.peakRateKn <= 0) return { setDeg: field.floodDeg, rateKn: 0 };
-  const cycle = Math.sin((2 * Math.PI * (hours + field.phaseH)) / field.periodH);
-  let rate = field.peakRateKn * cycle;
-  let setDeg = field.floodDeg;
-  if (rate < 0) {
-    rate = -rate;
-    setDeg = (field.floodDeg + 180) % 360; // ebb sets the opposite way
-  }
+  const driftKn = field.driftKn ?? 0;
+  if (field.peakRateKn <= 0 && driftKn <= 0) return { setDeg: field.floodDeg, rateKn: 0 };
+
+  // Gate amplification (a headland/channel/current-core that runs harder).
   let gain = 1;
   for (const g of field.gates) {
     const d = haversineNm(lat, lon, g.lat, g.lon);
     if (d < g.radiusNm) gain += g.gain * (1 - d / g.radiusNm);
   }
-  return { setDeg, rateKn: rate * gain };
+
+  // The oscillating tide as a vector (flood↔ebb over the period), gate-amplified.
+  const cycle = Math.sin((2 * Math.PI * (hours + field.phaseH)) / field.periodH);
+  const tideRate = field.peakRateKn * cycle * gain; // signed: + flood, - ebb
+  const tideRad = (field.floodDeg * Math.PI) / 180;
+  let vx = Math.sin(tideRad) * tideRate;
+  let vy = Math.cos(tideRad) * tideRate;
+
+  // The steady ocean current as a vector (never reverses), gate-amplified too —
+  // a gate over a current core (the Gulf Stream axis) intensifies it.
+  if (driftKn > 0) {
+    const driftRad = ((field.driftDeg ?? 0) * Math.PI) / 180;
+    vx += Math.sin(driftRad) * driftKn * gain;
+    vy += Math.cos(driftRad) * driftKn * gain;
+  }
+
+  const rateKn = Math.hypot(vx, vy);
+  if (rateKn < 1e-6) return { setDeg: field.floodDeg, rateKn: 0 };
+  const setDeg = (Math.atan2(vx, vy) * 180) / Math.PI;
+  return { setDeg: (setDeg + 360) % 360, rateKn };
 }
 
 // Signed component of the stream along a heading (kn): positive = a fair tide
@@ -66,7 +90,7 @@ export function tideAlong(
   hours: number,
   courseDeg: number
 ): number {
-  if (!field || field.peakRateKn <= 0) return 0;
+  if (!field || (field.peakRateKn <= 0 && (field.driftKn ?? 0) <= 0)) return 0;
   return currentAlong(sampleCurrent(field, lat, lon, hours), courseDeg);
 }
 
@@ -104,7 +128,7 @@ export function sampleCurrentGrid(
   rows: number,
   hours: number
 ): CurrentArrow[] {
-  if (!field || field.peakRateKn <= 0) return [];
+  if (!field || (field.peakRateKn <= 0 && (field.driftKn ?? 0) <= 0)) return [];
   const arrows: CurrentArrow[] = [];
   const latStep = rows > 1 ? (bounds.maxLat - bounds.minLat) / (rows - 1) : 0;
   const lonStep = cols > 1 ? (bounds.maxLon - bounds.minLon) / (cols - 1) : 0;

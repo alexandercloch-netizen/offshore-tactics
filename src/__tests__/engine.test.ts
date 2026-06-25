@@ -387,7 +387,11 @@ describe('applyDecision', () => {
     };
     const state = baseState();
     const out = applyDecision(state, choice);
-    expect(out.progress.elapsedHours).toBeGreaterThanOrEqual(2);
+    // A decision's on-water time cost is softened and capped (see applyDecision)
+    // so one call can't leapfrog a tight fleet — a big authored penalty still adds
+    // real time, just bounded (~0.5h), not its full face value.
+    expect(out.progress.elapsedHours).toBeGreaterThan(0.3);
+    expect(out.progress.elapsedHours).toBeLessThanOrEqual(0.6);
     expect(out.condition.crewStamina).toBeLessThan(state.condition.crewStamina);
     expect(out.retired).toBe(false);
   });
@@ -570,7 +574,7 @@ describe('tactical decisions resolved against the wind field', () => {
     const goodLost = good.progress.elapsedHours - shifting.progress!.elapsedHours;
     const badLost = bad.progress.elapsedHours - flat.progress!.elapsedHours;
     expect(goodLost).toBeLessThan(0.05); // reading it right is near-free
-    expect(badLost).toBeGreaterThan(0.3); // a phantom corner costs real time
+    expect(badLost).toBeGreaterThan(goodLost + 0.1); // a phantom corner still costs real (softened) time
     expect(bad.condition.crewMorale).toBeLessThan(good.condition.crewMorale); // and stings the crew
   });
 

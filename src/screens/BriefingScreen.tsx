@@ -138,7 +138,8 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
   // One dense field drives both the smooth colour map and the flow animation.
   // Wind is the believed forecast (blurred by Navigator skill); tide is known
   // from the tables, so it's sampled true.
-  const hasTide = !!state.tidalField && state.tidalField.peakRateKn > 0;
+  const hasTide =
+    !!state.tidalField && (state.tidalField.peakRateKn > 0 || state.tidalField.driftKn > 0);
   const activeLayer: FlowLayer = mapLayer === 'tide' && hasTide ? 'tide' : 'wind';
   const flowField: FlowField =
     activeLayer === 'tide' && state.tidalField
@@ -289,13 +290,19 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
           <View style={styles.panel}>
             <Text style={styles.panelTitle}>Signature Challenge</Text>
             <Text style={styles.hazard}>{race.signatureHazard}</Text>
-            {race.tide && race.tide.peakRateKn > 0 ? (
+            {race.tide && (race.tide.peakRateKn > 0 || (race.tide.driftKn ?? 0) > 0) ? (
               <Text style={styles.tideNote}>
-                🌊 Tidal stream up to {race.tide.peakRateKn.toFixed(1)} kn
+                🌊{' '}
+                {race.tide.peakRateKn > 0
+                  ? `Tidal stream up to ${race.tide.peakRateKn.toFixed(1)} kn`
+                  : `A ${(race.tide.driftKn ?? 0).toFixed(1)} kn ocean current`}
+                {(race.tide.driftKn ?? 0) > 0 && race.tide.peakRateKn > 0
+                  ? ` over a steady ${(race.tide.driftKn ?? 0).toFixed(1)} kn current`
+                  : ''}
                 {race.tide.gates && race.tide.gates.length > 0
                   ? `, running hardest at ${race.tide.gates.map((g) => g.waypoint).join(' & ')}`
                   : ''}
-                . Time the gates — the fleet feels the same stream you do.
+                . Read the stream — the fleet feels the same water you do.
               </Text>
             ) : null}
             <View style={styles.factRow}>

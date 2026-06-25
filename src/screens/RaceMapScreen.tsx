@@ -84,7 +84,7 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
   // running stream — the tide. Tide-less courses stay on wind (the toggle hides).
   const windField = state.windField;
   const tidalField = state.tidalField;
-  const hasTide = !!tidalField && tidalField.peakRateKn > 0;
+  const hasTide = !!tidalField && (tidalField.peakRateKn > 0 || tidalField.driftKn > 0);
   const [mapLayer, setMapLayer] = useState<FlowLayer>('wind');
   const activeLayer: FlowLayer = mapLayer === 'tide' && hasTide ? 'tide' : 'wind';
 
