@@ -218,8 +218,22 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.windField, cockpitProgress]);
   const renderCockpitMap = useCallback(
-    (w: number, h: number) =>
-      race && cockpitProgress ? (
+    (w: number, h: number) => {
+      if (!race || !cockpitProgress) return null;
+      // Sample the colour/flow field for the cockpit chart's OWN viewport — the
+      // race-screen flowField is sized to that map's aspect, so reusing it here
+      // would leave the sea short of the edges (dark gaps). Grid rows track the
+      // viewport aspect so the cells stay roughly square.
+      const cols = 28;
+      const rows = Math.max(12, Math.min(40, Math.round(cols * (h / Math.max(w, 1)))));
+      const bounds = chartViewportBounds(race.waypoints, w, h);
+      let field: FlowField | undefined;
+      if (activeLayer === 'tide' && tidalField) {
+        field = { cells: tideCells(sampleTideField(tidalField, bounds, cols, rows, elapsedHourBucket)), cols, rows };
+      } else if (windField) {
+        field = { cells: windCells(sampleWindGrid(windField, bounds, cols, rows, elapsedHourBucket)), cols, rows };
+      }
+      return (
         <RouteMap
           waypoints={race.waypoints}
           route={cockpitProgress.route}
@@ -227,18 +241,19 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
           boat={{ lat: cockpitProgress.lat, lon: cockpitProgress.lon }}
           competitors={competitors}
           laylines={cockpitLayPaths}
-          field={flowField}
+          field={field}
           layer={activeLayer}
           windFeature={
-            state.windField ? featureState(state.windField, cockpitProgress.elapsedHours) : undefined
+            windField ? featureState(windField, cockpitProgress.elapsedHours) : undefined
           }
           nextMarkIndex={cockpitProgress.nextMarkIndex}
           land={LANDMASSES[race.id]}
           width={w}
           height={h}
         />
-      ) : null,
-    [race, cockpitProgress, competitors, cockpitLayPaths, flowField, activeLayer, state.windField]
+      );
+    },
+    [race, cockpitProgress, competitors, cockpitLayPaths, activeLayer, windField, tidalField, elapsedHourBucket]
   );
 
   const confirmRetire = useCallback(() => {

@@ -116,7 +116,11 @@ export const DecisionCockpit: React.FC<DecisionCockpitProps> = ({
   // On desktop the content reads as a centred column rather than stretching
   // edge-to-edge, matching the briefing/race screens.
   const CONTENT_MAX = 860;
-  const heroWidth = Math.min(width - spacing.lg * 2, CONTENT_MAX);
+  // RouteMap draws its OWN padded, bordered frame (~2×(spacing.sm + 1px border)).
+  // Reserve it so the framed chart lands flush inside the content column — no
+  // overflow, and the chart's own rounded frame is the only one.
+  const MAP_FRAME = 18;
+  const heroWidth = Math.min(width - spacing.lg * 2, CONTENT_MAX) - MAP_FRAME;
 
   const now = instruments?.now;
   // Condition gauges go red when they're getting dangerous, so a hull/crew problem
@@ -211,9 +215,10 @@ export const DecisionCockpit: React.FC<DecisionCockpitProps> = ({
               </View>
             ) : null}
 
-            {/* The chart — the hero. A window-relative height keeps it the largest
-                element without over-expanding into an empty gap. */}
-            <View style={[styles.hero, { height: heroHeight }]}>
+            {/* The chart — the hero. RouteMap brings its own framed box sized to
+                heroWidth×heroHeight, so this just centres it (no second frame to
+                clip against). */}
+            <View style={styles.hero}>
               {heroWidth > 1 ? renderMap(heroWidth, heroHeight) : null}
             </View>
 
@@ -409,10 +414,8 @@ const styles = StyleSheet.create({
   },
   hero: {
     marginVertical: spacing.md,
-    borderRadius: radius.md,
-    overflow: 'hidden',
+    alignSelf: 'stretch',
     alignItems: 'center',
-    justifyContent: 'center',
   },
   prompt: {
     color: colors.mist,
