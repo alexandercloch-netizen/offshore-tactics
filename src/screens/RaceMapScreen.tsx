@@ -48,7 +48,7 @@ import TutorialOverlay from '../components/TutorialOverlay';
 import WindIndicator from '../components/WindIndicator';
 import StatBar from '../components/StatBar';
 import NauticalButton from '../components/NauticalButton';
-import TacticalDecisionModal from '../components/TacticalDecisionModal';
+import DecisionCockpit from '../components/DecisionCockpit';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RaceMap'>;
 
@@ -437,13 +437,32 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
 
       <TutorialOverlay visible={showHelp} onClose={closeHelp} />
 
-      <TacticalDecisionModal
+      <DecisionCockpit
         visible={!!activeEvent}
         event={activeEvent}
         vmg={activeVmg}
         instruments={activeInstruments}
         read={activeRead}
         onSelect={handleChoice}
+        renderMap={(w, h) => (
+          <RouteMap
+            waypoints={race.waypoints}
+            route={progress.route}
+            trail={progress.trail}
+            boat={{ lat: progress.lat, lon: progress.lon }}
+            competitors={competitors}
+            laylines={layPaths}
+            field={flowField}
+            layer={activeLayer}
+            windFeature={
+              state.windField ? featureState(state.windField, progress.elapsedHours) : undefined
+            }
+            nextMarkIndex={progress.nextMarkIndex}
+            land={LANDMASSES[race.id]}
+            width={w}
+            height={h}
+          />
+        )}
       />
     </View>
   );
