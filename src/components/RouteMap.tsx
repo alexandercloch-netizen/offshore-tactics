@@ -195,6 +195,9 @@ export const RouteMap: React.FC<RouteMapProps> = ({
   // Marks change only when one is rounded (nextMarkIndex), not every tick.
   const marksLayer = useMemo(() => {
     if (!project) return null;
+    // Conservative declutter: where two labelled marks land close together on the
+    // chart, flip the later one's label below its dot so the names don't overlap.
+    const placed: { x: number; y: number }[] = [];
     return waypoints.map((wp, i) => {
       const p = project(wp.lat, wp.lon);
       const isStart = wp.type === 'start';
@@ -215,13 +218,22 @@ export const RouteMap: React.FC<RouteMapProps> = ({
       const endpointLabel = isStart ? (loopCourse ? 'START / FINISH' : 'START') : 'FINISH';
       const label = isStart || isFinish ? endpointLabel : wp.name;
       const showLabel = isStart || isFinish || wp.type === 'island' || wp.type === 'mark';
+      // Default sits the label above the dot; drop it below if a recent label is
+      // crowding this spot, so closely-spaced names stop stacking.
+      let below = false;
+      if (showLabel) {
+        const crowded = placed.some((q) => Math.abs(q.x - p.x) < 48 && Math.abs(q.y - p.y) < 14);
+        below = crowded;
+        placed.push({ x: p.x, y: below ? p.y + 16 : p.y - 9 });
+      }
+      const labelY = below ? p.y + 16 : p.y - 9;
       return (
         <React.Fragment key={`${wp.name}-${i}`}>
           <Circle cx={p.x} cy={p.y} r={r} fill={fill} stroke={colors.foam} strokeWidth={isStart || isFinish ? 1.5 : 1} />
           {showLabel ? (
             <SvgText
               x={p.x}
-              y={p.y - 9}
+              y={labelY}
               fill={colors.white}
               stroke={colors.abyss}
               strokeWidth={0.6}

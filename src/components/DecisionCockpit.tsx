@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
-  LayoutChangeEvent,
   Modal,
   Pressable,
   ScrollView,
@@ -84,8 +83,13 @@ function vmgColor(before: number, after: number): string {
   return colors.mist;
 }
 
-const Gauge: React.FC<{ label: string; value: string; tint?: string }> = ({ label, value, tint }) => (
-  <View style={styles.gauge}>
+const Gauge: React.FC<{ label: string; value: string; tint?: string; accessibilityLabel?: string }> = ({
+  label,
+  value,
+  tint,
+  accessibilityLabel,
+}) => (
+  <View style={styles.gauge} accessibilityLabel={accessibilityLabel ?? `${label} ${value}`}>
     <Text style={[styles.gaugeValue, tint ? { color: tint } : null]}>{value}</Text>
     <Text style={styles.gaugeLabel}>{label}</Text>
   </View>
@@ -100,27 +104,39 @@ export const DecisionCockpit: React.FC<DecisionCockpitProps> = ({
   renderMap,
   onSelect,
 }) => {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const [map, setMap] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
   const wide = width >= 820;
   const isMob = event?.kind === 'mob';
 
-  const onHeroLayout = (e: LayoutChangeEvent) => {
-    const { width: w, height: h } = e.nativeEvent.layout;
-    if (Math.abs(w - map.w) > 1 || Math.abs(h - map.h) > 1) setMap({ w, h });
-  };
+  // The chart stays the hero with a generous, window-relative height — clamped so
+  // it's tall on a phone yet never swallows the page on a laptop. The body scrolls,
+  // so the prompt/options never clip on short or landscape screens.
+  const heroHeight = Math.round(Math.max(220, Math.min(wide ? 520 : 440, height * (wide ? 0.5 : 0.42))));
+  // On desktop the content reads as a centred column rather than stretching
+  // edge-to-edge, matching the briefing/race screens.
+  const CONTENT_MAX = 860;
+  const heroWidth = Math.min(width - spacing.lg * 2, CONTENT_MAX);
 
   const now = instruments?.now;
   // Condition gauges go red when they're getting dangerous, so a hull/crew problem
   // jumps out while you're deciding.
   const cond = (v: number): string | undefined => (v < 35 ? colors.signalRed : v < 60 ? colors.warning : undefined);
+  // Spell the danger out for screen readers — colour alone isn't enough.
+  const condLabel = (label: string, v: number): string =>
+    `${label} ${round(v)}${v < 35 ? ', critical' : v < 60 ? ', low' : ''}`;
 
   return (
     <Modal visible={visible && !!event} animationType="fade" onRequestClose={() => undefined}>
-      <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingTop: insets.top, paddingBottom: insets.bottom + spacing.xl },
+        ]}
+      >
         {event ? (
-          <>
+          <View style={[styles.column, { maxWidth: CONTENT_MAX }]}>
             {/* Header: what's happening + where you stand. */}
             <View style={styles.header}>
               <View style={{ flex: 1 }}>
@@ -139,28 +155,42 @@ export const DecisionCockpit: React.FC<DecisionCockpitProps> = ({
               ) : null}
             </View>
 
-            {/* Instrument strip — the gauges you race with, enlarged. */}
+            {/* Instrument strip — the gauges you race with, enlarged. Wraps so every
+                gauge (incl. Hull/Crew/Morale) is visible without horizontal scroll. */}
             {now ? (
               <View style={styles.instrPanel}>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.gaugeBar}
-                  contentContainerStyle={styles.gaugeRow}
-                >
-                  <Gauge label="Boat" value={`${now.speedKn.toFixed(1)}`} />
-                  {vmg ? <Gauge label="VMG" value={`${vmg.before.toFixed(1)}`} /> : null}
-                  <Gauge label="Wind" value={`${round(now.windSpeedKn)}`} />
-                  <Gauge label="From" value={`${round(now.windDir)}°`} />
-                  <Gauge label="Sail" value={now.pointOfSail} />
-                  <Gauge label="To go" value={`${round(now.distanceToGoNm)}nm`} />
-                  <Gauge label="Hull" value={`${round(now.hull)}`} tint={cond(now.hull)} />
-                  <Gauge label="Crew" value={`${round(now.stamina)}`} tint={cond(now.stamina)} />
-                  <Gauge label="Morale" value={`${round(now.morale)}`} tint={cond(now.morale)} />
-                </ScrollView>
+                <View style={styles.gaugeRow}>
+                  <Gauge key="Boat" label="Boat" value={`${now.speedKn.toFixed(1)}`} />
+                  {vmg ? <Gauge key="VMG" label="VMG" value={`${vmg.before.toFixed(1)}`} /> : null}
+                  <Gauge key="Wind" label="Wind" value={`${round(now.windSpeedKn)}`} />
+                  <Gauge key="From" label="From" value={`${round(now.windDir)}°`} />
+                  <Gauge key="Sail" label="Sail" value={now.pointOfSail} />
+                  <Gauge key="To go" label="To go" value={`${round(now.distanceToGoNm)}nm`} />
+                  <Gauge
+                    key="Hull"
+                    label="Hull"
+                    value={`${round(now.hull)}`}
+                    tint={cond(now.hull)}
+                    accessibilityLabel={condLabel('Hull', now.hull)}
+                  />
+                  <Gauge
+                    key="Crew"
+                    label="Crew"
+                    value={`${round(now.stamina)}`}
+                    tint={cond(now.stamina)}
+                    accessibilityLabel={condLabel('Crew', now.stamina)}
+                  />
+                  <Gauge
+                    key="Morale"
+                    label="Morale"
+                    value={`${round(now.morale)}`}
+                    tint={cond(now.morale)}
+                    accessibilityLabel={condLabel('Morale', now.morale)}
+                  />
+                </View>
                 <View style={styles.telemetry}>
                   {instruments ? (
-                    <Text style={styles.legLine} numberOfLines={1}>
+                    <Text style={styles.legLine} numberOfLines={2}>
                       This leg {round(instruments.leg.nm)}nm · {shiftText(instruments.leg.windShiftDeg)},{' '}
                       {buildText(instruments.leg.windDeltaKn)} · {placesText(instruments.leg.placesGained)}
                     </Text>
@@ -181,9 +211,10 @@ export const DecisionCockpit: React.FC<DecisionCockpitProps> = ({
               </View>
             ) : null}
 
-            {/* The chart — the hero. Fills the space between the gauges and the calls. */}
-            <View style={styles.hero} onLayout={onHeroLayout}>
-              {map.w > 1 && map.h > 1 ? renderMap(map.w, map.h) : null}
+            {/* The chart — the hero. A window-relative height keeps it the largest
+                element without over-expanding into an empty gap. */}
+            <View style={[styles.hero, { height: heroHeight }]}>
+              {heroWidth > 1 ? renderMap(heroWidth, heroHeight) : null}
             </View>
 
             {/* The prompt + the Navigator's read, just above the calls. */}
@@ -201,10 +232,21 @@ export const DecisionCockpit: React.FC<DecisionCockpitProps> = ({
               {event.choices.map((choice) => {
                 const after = vmg?.after[choice.id];
                 const highRisk = choice.risk >= 0.2;
+                const impact = impactLine(choice);
+                const riskWord = choice.risk >= 0.2 ? 'high risk' : choice.risk >= 0.1 ? 'some risk' : 'low risk';
+                const a11y = [
+                  choice.label,
+                  after !== undefined ? `projected VMG ${after.toFixed(1)} knots` : null,
+                  riskWord,
+                ]
+                  .filter(Boolean)
+                  .join(', ');
                 return (
                   <Pressable
                     key={choice.id}
                     testID="decision-choice"
+                    accessibilityRole="button"
+                    accessibilityLabel={a11y}
                     onPress={() => onSelect(choice)}
                     style={({ pressed }) => [
                       styles.choiceCard,
@@ -223,15 +265,15 @@ export const DecisionCockpit: React.FC<DecisionCockpitProps> = ({
                           {vmgArrow(vmg.before, after)} VMG {after.toFixed(1)} kn
                         </Text>
                       ) : null}
-                      {impactLine(choice) ? <Text style={styles.impact}>{impactLine(choice)}</Text> : null}
+                      {impact ? <Text style={styles.impact}>{impact}</Text> : null}
                     </View>
                   </Pressable>
                 );
               })}
             </View>
-          </>
+          </View>
         ) : null}
-      </View>
+      </ScrollView>
     </Modal>
   );
 };
@@ -240,7 +282,14 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.abyss,
+  },
+  scrollContent: {
     paddingHorizontal: spacing.lg,
+    alignItems: 'center',
+  },
+  column: {
+    width: '100%',
+    alignSelf: 'center',
   },
   header: {
     flexDirection: 'row',
@@ -307,15 +356,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     marginTop: spacing.sm,
   },
-  // flexGrow:0 keeps the horizontal strip at its content height (a horizontal
-  // ScrollView otherwise grows and stretches its children tall on web).
-  gaugeBar: {
-    flexGrow: 0,
-    flexShrink: 0,
-  },
+  // A wrapping row shows every gauge without horizontal scroll on a phone; on a
+  // wide screen it still reads as a single clean row when it fits.
   gaugeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
-    gap: spacing.xl,
+    rowGap: spacing.sm,
+    columnGap: spacing.md,
   },
   gauge: {
     alignItems: 'flex-start',
@@ -326,7 +374,7 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.bold,
   },
   gaugeLabel: {
-    color: colors.slate,
+    color: colors.mist,
     fontSize: fontSize.xs,
     textTransform: 'uppercase',
     letterSpacing: 1,
@@ -349,7 +397,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   sparkLabel: {
-    color: colors.slate,
+    color: colors.mist,
     fontSize: fontSize.xs,
     textTransform: 'uppercase',
   },
@@ -360,8 +408,6 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   hero: {
-    flex: 1,
-    minHeight: 180,
     marginVertical: spacing.md,
     borderRadius: radius.md,
     overflow: 'hidden',
@@ -381,7 +427,7 @@ const styles = StyleSheet.create({
   },
   choices: {
     marginTop: spacing.md,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.lg,
     gap: spacing.md,
   },
   choicesRow: {
@@ -396,6 +442,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.cardBorder,
     padding: spacing.md,
+    minHeight: 52,
   },
   choiceCardWide: {
     flex: 1,

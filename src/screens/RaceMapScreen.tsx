@@ -208,6 +208,39 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
     [decide, goToResults]
   );
 
+  // The cockpit owns the chart's size and asks for it via renderMap; memoised so a
+  // re-render that didn't move the race or fleet reuses the same closure. Reads the
+  // live progress/laylines off state so it can sit above the loadout guard.
+  const cockpitProgress = state.progress;
+  const cockpitLayPaths = useMemo(() => {
+    const l = state.windField ? laylines(state) : null;
+    return l ? [[l.mark, l.ends[0]], [l.mark, l.ends[1]]] : undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.windField, cockpitProgress]);
+  const renderCockpitMap = useCallback(
+    (w: number, h: number) =>
+      race && cockpitProgress ? (
+        <RouteMap
+          waypoints={race.waypoints}
+          route={cockpitProgress.route}
+          trail={cockpitProgress.trail}
+          boat={{ lat: cockpitProgress.lat, lon: cockpitProgress.lon }}
+          competitors={competitors}
+          laylines={cockpitLayPaths}
+          field={flowField}
+          layer={activeLayer}
+          windFeature={
+            state.windField ? featureState(state.windField, cockpitProgress.elapsedHours) : undefined
+          }
+          nextMarkIndex={cockpitProgress.nextMarkIndex}
+          land={LANDMASSES[race.id]}
+          width={w}
+          height={h}
+        />
+      ) : null,
+    [race, cockpitProgress, competitors, cockpitLayPaths, flowField, activeLayer, state.windField]
+  );
+
   const confirmRetire = useCallback(() => {
     Alert.alert('Retire from Race', 'Abandon the race and head for port?', [
       { text: 'Keep Racing', style: 'cancel' },
@@ -444,25 +477,7 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
         instruments={activeInstruments}
         read={activeRead}
         onSelect={handleChoice}
-        renderMap={(w, h) => (
-          <RouteMap
-            waypoints={race.waypoints}
-            route={progress.route}
-            trail={progress.trail}
-            boat={{ lat: progress.lat, lon: progress.lon }}
-            competitors={competitors}
-            laylines={layPaths}
-            field={flowField}
-            layer={activeLayer}
-            windFeature={
-              state.windField ? featureState(state.windField, progress.elapsedHours) : undefined
-            }
-            nextMarkIndex={progress.nextMarkIndex}
-            land={LANDMASSES[race.id]}
-            width={w}
-            height={h}
-          />
-        )}
+        renderMap={renderCockpitMap}
       />
     </View>
   );
