@@ -13,7 +13,8 @@ import {
   raceDivision,
   stepRace,
 } from '../engine/gameEngine';
-import { planRoute } from '../engine/router';
+import { planRoute, WindSampler } from '../engine/router';
+import { sampleForecast } from '../engine/wind';
 import { haversineNm } from '../engine/geo';
 import { mulberry32, resetRng, setRng } from '../engine/rng';
 import { BoatCondition, GameState } from '../types';
@@ -206,6 +207,43 @@ describe('the planned course preview stays off land (all races)', () => {
         return !nearMark;
       });
       expect(onLand).toEqual([]);
+    });
+  });
+});
+
+// The briefing draws the route the crew *believes* it will sail — weather-routed
+// on the forecast (blurred away from truth by the Navigator's skill), for each of
+// the three start biases (left / optimal / right). That's the surface where a
+// planned line was seen crossing land, and it differs from the true-field preview
+// above: a fuzzier forecast bends the route, so a margin that's clear on truth can
+// still wander ashore. Mirror BriefingScreen's call exactly and guard every
+// combination — weakest Navigator (most blur) included.
+describe('the briefing forecast route stays off land (all races)', () => {
+  const MARGIN_NM = 6;
+  const NAV_SKILLS = [10, 55, 95]; // weak → club → ace; weak blurs the forecast most
+
+  RACES.filter((r) => LANDMASSES[r.id]?.length).forEach((race) => {
+    it(`${race.name} plans a forecast route in the water`, () => {
+      const land = LANDMASSES[race.id];
+      const boat = getBoatById('boat-mistral')!;
+      const start = { lat: race.waypoints[0].lat, lon: race.waypoints[0].lon };
+
+      for (const navSkill of NAV_SKILLS) {
+        const sampler: WindSampler = (f, lat, lon, h) => sampleForecast(f, lat, lon, h, navSkill);
+        for (const bias of [-1, 0, 1] as const) {
+          setRng(mulberry32(7));
+          const field = createWindField(race);
+          const route = planRoute(boat, field, start, race.waypoints, 1, 0, bias, land, sampler);
+          expect(route.length).toBeGreaterThan(2);
+
+          const onLand = route.filter((p) => {
+            if (!pointInLand(land, p.lat, p.lon)) return false;
+            return !race.waypoints.some((w) => haversineNm(p.lat, p.lon, w.lat, w.lon) <= MARGIN_NM);
+          });
+          // Surface which combination failed if it ever regresses.
+          expect({ navSkill, bias, onLand }).toEqual({ navSkill, bias, onLand: [] });
+        }
+      }
     });
   });
 });
