@@ -35,12 +35,12 @@ import {
 } from '../engine/gameEngine';
 import type { TacticalRead } from '../engine/gameEngine';
 import { competitorPoints } from '../engine/fleet';
-import { courseAspect, courseBounds } from '../engine/geo';
+import { courseAspect } from '../engine/geo';
 import { featureState, pressureHint, sampleWindGrid, weatherOutlook } from '../engine/wind';
 import { sampleCurrentGrid } from '../engine/current';
 import { buildInstrumentReport, InstrumentReport } from '../engine/instruments';
 import { EffortMode, RoutingBias } from '../types';
-import RouteMap from '../components/RouteMap';
+import RouteMap, { chartViewportBounds } from '../components/RouteMap';
 import WindScaleLegend from '../components/WindScaleLegend';
 import TutorialOverlay from '../components/TutorialOverlay';
 import WindIndicator from '../components/WindIndicator';
@@ -66,8 +66,20 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
   const race = getRaceById(state.selectedRaceId);
   const boat = resolveBoatById(state, state.selectedBoatId);
 
-  // Live wind field sampled across the course for the chart overlay. Recomputed
-  // each in-race hour (and when the field changes), not every animation tick.
+  // Chart dimensions — sized to the course shape and the viewport. Declared up
+  // here (not just before the <RouteMap/>) so the overlay grids below can be
+  // sampled to the whole chart, filling the map rather than the course box.
+  const CONTENT_MAX = 760;
+  const columnWidth = Math.min(width - spacing.lg * 2, CONTENT_MAX);
+  const mapWidth = columnWidth - spacing.sm * 2;
+  const mapAspect = race ? Math.max(0.55, Math.min(courseAspect(race.waypoints), 1.3)) : 1;
+  const mapHeight = Math.max(
+    300,
+    Math.min(Math.round(mapWidth * mapAspect), Math.round(height * 0.6))
+  );
+
+  // Live wind field sampled across the chart for the overlay. Recomputed each
+  // in-race hour (and when the field or map size changes), not every animation tick.
   const windField = state.windField;
   const elapsedHourBucket = state.progress ? Math.floor(state.progress.elapsedHours) : 0;
   // The background heatmap is far heavier than the arrows, so refresh it on a
@@ -77,8 +89,9 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
     if (!race || !windField) return [];
     const cols = 7;
     const rows = Math.max(4, Math.min(9, Math.round(cols * courseAspect(race.waypoints))));
-    return sampleWindGrid(windField, courseBounds(race.waypoints), cols, rows, elapsedHourBucket);
-  }, [race, windField, elapsedHourBucket]);
+    const bounds = chartViewportBounds(race.waypoints, mapWidth, mapHeight);
+    return sampleWindGrid(windField, bounds, cols, rows, elapsedHourBucket);
+  }, [race, windField, elapsedHourBucket, mapWidth, mapHeight]);
 
   // Grid for the wind-speed heatmap. Kept moderate (a soft backdrop, not an
   // instrument) so it's cheap to re-render: ~16×≤18 cells, not ~22×30.
@@ -88,8 +101,9 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
     : 0;
   const windHeat = useMemo(() => {
     if (!race || !windField) return [];
-    return sampleWindGrid(windField, courseBounds(race.waypoints), heatCols, heatRows, heatBucket);
-  }, [race, windField, heatRows, heatBucket]);
+    const bounds = chartViewportBounds(race.waypoints, mapWidth, mapHeight);
+    return sampleWindGrid(windField, bounds, heatCols, heatRows, heatBucket);
+  }, [race, windField, heatRows, heatBucket, mapWidth, mapHeight]);
 
   // Tidal stream sampled on a coarse grid; refreshed each in-race hour as the
   // flood/ebb turns. Empty on a slack course, so the chart simply omits it.
@@ -98,8 +112,9 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
     if (!race || !tidalField) return [];
     const cols = 6;
     const rows = Math.max(4, Math.min(8, Math.round(cols * courseAspect(race.waypoints))));
-    return sampleCurrentGrid(tidalField, courseBounds(race.waypoints), cols, rows, elapsedHourBucket);
-  }, [race, tidalField, elapsedHourBucket]);
+    const bounds = chartViewportBounds(race.waypoints, mapWidth, mapHeight);
+    return sampleCurrentGrid(tidalField, bounds, cols, rows, elapsedHourBucket);
+  }, [race, tidalField, elapsedHourBucket, mapWidth, mapHeight]);
 
   // Competitor map positions — recomputed only when the fleet advances (each tick),
   // memoised so the value is stable for any render that isn't a fleet update.
@@ -220,18 +235,6 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
       </View>
     );
   }
-
-  // Responsive layout: centre the content in a max-width column on wide
-  // screens, and size the chart to the course's shape and the viewport so it
-  // fills the space instead of sitting in a fixed letterbox.
-  const CONTENT_MAX = 760;
-  const columnWidth = Math.min(width - spacing.lg * 2, CONTENT_MAX);
-  const mapWidth = columnWidth - spacing.sm * 2;
-  const mapAspect = Math.max(0.55, Math.min(courseAspect(race.waypoints), 1.3));
-  const mapHeight = Math.max(
-    300,
-    Math.min(Math.round(mapWidth * mapAspect), Math.round(height * 0.6))
-  );
 
   const { progress, condition, weather } = state;
   const total = progress.totalDistanceNm;

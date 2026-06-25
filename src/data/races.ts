@@ -32,15 +32,22 @@ export const RACES: Race[] = [
         { waypoint: "St Catherine's Point", gain: 0.4, radiusNm: 5 },
       ],
     },
+    // Marks sit in navigable water and the rhumb legs between them clear the
+    // drawn Isle of Wight coastline (validated against the full-res landmass),
+    // so the course rounds the island instead of cutting across it. Clockwise
+    // from the RYS line in the Solent, out west to the Needles, down the back of
+    // the island past St Catherine's and Dunnose, then home up the eastern Solent.
     waypoints: [
-      { name: 'Cowes (RYS Line)', lat: 50.76, lon: -1.3, type: 'start' },
-      { name: 'Gurnard Ledge', lat: 50.765, lon: -1.4, type: 'turn' },
-      { name: 'Hamstead Ledge', lat: 50.72, lon: -1.52, type: 'turn' },
-      { name: 'The Needles', lat: 50.655, lon: -1.6, type: 'turn' },
-      { name: "St Catherine's Point", lat: 50.555, lon: -1.3, type: 'turn' },
-      { name: 'Bembridge Ledge Buoy', lat: 50.68, lon: -1.06, type: 'mark' },
-      { name: "No Man's Land Fort", lat: 50.74, lon: -1.09, type: 'mark' },
-      { name: 'Cowes (Finish)', lat: 50.76, lon: -1.3, type: 'finish' },
+      { name: 'Cowes (RYS Line)', lat: 50.7966, lon: -1.3017, type: 'start' },
+      { name: 'Gurnard Ledge', lat: 50.7563, lon: -1.4361, type: 'turn' },
+      { name: 'Hamstead Ledge', lat: 50.7172, lon: -1.5487, type: 'turn' },
+      { name: 'The Needles', lat: 50.6479, lon: -1.6431, type: 'turn' },
+      { name: "St Catherine's Point", lat: 50.5314, lon: -1.3022, type: 'turn' },
+      { name: 'Dunnose', lat: 50.5673, lon: -1.1158, type: 'turn' },
+      { name: 'Bembridge Ledge Buoy', lat: 50.6611, lon: -1.0138, type: 'mark' },
+      { name: "No Man's Land Fort", lat: 50.7494, lon: -1.0509, type: 'mark' },
+      { name: 'Ryde Middle', lat: 50.7702, lon: -1.1418, type: 'turn' },
+      { name: 'Cowes (Finish)', lat: 50.7966, lon: -1.3017, type: 'finish' },
     ],
     divisions: {
       corinthian: { entryFee: 400, prizeMoney: 2500, fleetSize: 30, paceTarget: 1.3 },

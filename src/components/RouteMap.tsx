@@ -14,7 +14,7 @@ import Svg, {
 import { colors, radius, spacing } from '../theme';
 import { CurrentArrow, GeoPoint, Waypoint } from '../types';
 import type { WindArrow } from '../engine/wind';
-import { isLoopCourse } from '../engine/geo';
+import { CourseBounds, isLoopCourse } from '../engine/geo';
 import { windHeatColor } from './windScale';
 import { LandPolygon } from '../data/landmasses';
 
@@ -52,35 +52,58 @@ interface XY {
   y: number;
 }
 
-// Equirectangular projection with longitude scaled by cos(mean latitude),
-// then fit to the viewport with padding.
-function buildProjector(waypoints: Waypoint[], width: number, height: number) {
+const CHART_PAD = 26;
+
+// Shared parameters of the equirectangular projection (longitude scaled by
+// cos(mean latitude)), fit to the viewport with padding and letterboxed on the
+// looser axis. Derived once so the projector and its inverse can't drift apart.
+function projectionParams(waypoints: { lat: number; lon: number }[], width: number, height: number) {
   const lats = waypoints.map((w) => w.lat);
   const lons = waypoints.map((w) => w.lon);
   const meanLat = (Math.min(...lats) + Math.max(...lats)) / 2;
   const k = Math.cos((meanLat * Math.PI) / 180) || 1;
 
-  const rawX = (lon: number) => lon * k;
-  const rawY = (lat: number) => -lat;
-
-  const xs = lons.map(rawX);
-  const ys = lats.map(rawY);
+  const xs = lons.map((lon) => lon * k);
+  const ys = lats.map((lat) => -lat);
   const minX = Math.min(...xs);
   const maxX = Math.max(...xs);
   const minY = Math.min(...ys);
   const maxY = Math.max(...ys);
 
-  const pad = 26;
   const spanX = maxX - minX || 1;
   const spanY = maxY - minY || 1;
-  const scale = Math.min((width - pad * 2) / spanX, (height - pad * 2) / spanY);
+  const scale = Math.min((width - CHART_PAD * 2) / spanX, (height - CHART_PAD * 2) / spanY);
   const offsetX = (width - spanX * scale) / 2;
   const offsetY = (height - spanY * scale) / 2;
+  return { k, minX, minY, scale, offsetX, offsetY };
+}
 
+function buildProjector(waypoints: Waypoint[], width: number, height: number) {
+  const { k, minX, minY, scale, offsetX, offsetY } = projectionParams(waypoints, width, height);
   return (lat: number, lon: number): XY => ({
-    x: offsetX + (rawX(lon) - minX) * scale,
-    y: offsetY + (rawY(lat) - minY) * scale,
+    x: offsetX + (lon * k - minX) * scale,
+    y: offsetY + (-lat - minY) * scale,
   });
+}
+
+// Geographic bounds of the *whole* chart viewport (0..width, 0..height), found
+// by inverting the projection at the corners. Sampling the weather/tide grids to
+// these bounds fills the entire map — the course bounding box leaves the padding
+// and letterbox margins bare.
+export function chartViewportBounds(
+  waypoints: Waypoint[],
+  width: number,
+  height: number
+): CourseBounds {
+  const { k, minX, minY, scale, offsetX, offsetY } = projectionParams(waypoints, width, height);
+  const lonAt = (x: number) => (minX + (x - offsetX) / scale) / k;
+  const latAt = (y: number) => -(minY + (y - offsetY) / scale);
+  return {
+    minLon: lonAt(0),
+    maxLon: lonAt(width),
+    minLat: latAt(height), // y grows downward, so the bottom edge is the south
+    maxLat: latAt(0),
+  };
 }
 
 function pathFrom(points: XY[]): string {
