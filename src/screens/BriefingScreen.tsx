@@ -34,7 +34,10 @@ import {
   sampleForecastGrid,
   weatherOutlook,
 } from '../engine/wind';
-import RouteMap, { chartViewportBounds } from '../components/RouteMap';
+import { sampleTideField } from '../engine/current';
+import RouteMap, { chartViewportBounds, FlowField } from '../components/RouteMap';
+import { FlowLayer, windCells, tideCells } from '../components/flowField';
+import MapLayerToggle from '../components/MapLayerToggle';
 import WindIndicator from '../components/WindIndicator';
 import NauticalButton from '../components/NauticalButton';
 import ForecastScrubber from '../components/ForecastScrubber';
@@ -53,6 +56,9 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
   const { state, beginRace, setStrategy } = useGame();
   // Forecast offset (hours from the start) the player is scrubbing through.
   const [forecastHour, setForecastHour] = useState(0);
+  // Which overlay the chart shows — the breeze or, where the course runs a tide,
+  // the stream. Stays on wind for tide-less courses (the toggle is hidden).
+  const [mapLayer, setMapLayer] = useState<FlowLayer>('wind');
 
   const race = getRaceById(state.selectedRaceId);
   const boat = resolveBoatById(state, state.selectedBoatId);
@@ -124,13 +130,28 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
   // are sampled to the whole chart viewport, not just the course box, so the
   // weather fills the map rather than sitting short of the edges.
   const bounds = chartViewportBounds(race.waypoints, mapWidth, mapHeight);
-  const heatCols = 22;
-  const heatRows = Math.max(10, Math.min(30, Math.round(heatCols * courseAspect(race.waypoints))));
+  const fieldCols = 28;
+  const fieldRows = Math.max(12, Math.min(34, Math.round(fieldCols * courseAspect(race.waypoints))));
   // The chart shows the crew's *forecast*, not ground truth: it grows fuzzier the
   // further out you scrub, and a sharp Navigator keeps it trustworthy for longer.
   const confidence = forecastConfidence(navSkill, forecastHour);
-  const windArrows = sampleForecastGrid(windField, bounds, 7, 6, forecastHour, navSkill);
-  const heat = sampleForecastGrid(windField, bounds, heatCols, heatRows, forecastHour, navSkill);
+  // One dense field drives both the smooth colour map and the flow animation.
+  // Wind is the believed forecast (blurred by Navigator skill); tide is known
+  // from the tables, so it's sampled true.
+  const hasTide = !!state.tidalField && state.tidalField.peakRateKn > 0;
+  const activeLayer: FlowLayer = mapLayer === 'tide' && hasTide ? 'tide' : 'wind';
+  const flowField: FlowField =
+    activeLayer === 'tide' && state.tidalField
+      ? {
+          cells: tideCells(sampleTideField(state.tidalField, bounds, fieldCols, fieldRows, forecastHour)),
+          cols: fieldCols,
+          rows: fieldRows,
+        }
+      : {
+          cells: windCells(sampleForecastGrid(windField, bounds, fieldCols, fieldRows, forecastHour, navSkill)),
+          cols: fieldCols,
+          rows: fieldRows,
+        };
   const feature = featureState(windField, forecastHour);
   const navigator = state.selectedCrewIds
     .map((id) => getCrewById(id))
@@ -185,22 +206,27 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
           </Text>
 
           <View style={styles.mapWrap}>
-            <RouteMap
-              waypoints={race.waypoints}
-              route={mine?.route ?? progress.route}
-              altRoute={offThePace ? fastest!.route : undefined}
-              boat={{ lat: progress.lat, lon: progress.lon }}
-              wind={windArrows}
-              heat={heat}
-              heatCols={heatCols}
-              heatRows={heatRows}
-              windFeature={feature}
-              land={LANDMASSES[race.id]}
-              width={mapWidth}
-              height={mapHeight}
-            />
             <View style={{ width: mapWidth }}>
-              <WindScaleLegend />
+              <RouteMap
+                waypoints={race.waypoints}
+                route={mine?.route ?? progress.route}
+                altRoute={offThePace ? fastest!.route : undefined}
+                boat={{ lat: progress.lat, lon: progress.lon }}
+                field={flowField}
+                layer={activeLayer}
+                windFeature={feature}
+                land={LANDMASSES[race.id]}
+                width={mapWidth}
+                height={mapHeight}
+              />
+              {hasTide ? (
+                <View style={styles.layerToggle}>
+                  <MapLayerToggle layer={activeLayer} onChange={setMapLayer} />
+                </View>
+              ) : null}
+            </View>
+            <View style={{ width: mapWidth }}>
+              <WindScaleLegend layer={activeLayer} />
               <ForecastScrubber
                 hour={forecastHour}
                 maxHour={maxForecastHour}
@@ -414,6 +440,7 @@ const styles = StyleSheet.create({
   raceName: { color: colors.foam, fontSize: fontSize.xl, fontWeight: fontWeight.bold },
   sub: { color: colors.mist, fontSize: fontSize.sm, marginTop: 2, marginBottom: spacing.md },
   mapWrap: { alignItems: 'center', marginBottom: spacing.md },
+  layerToggle: { position: 'absolute', top: spacing.md, right: spacing.md },
   panel: {
     backgroundColor: colors.card,
     borderRadius: radius.lg,

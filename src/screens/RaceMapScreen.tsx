@@ -37,10 +37,12 @@ import type { TacticalRead } from '../engine/gameEngine';
 import { competitorPoints } from '../engine/fleet';
 import { courseAspect } from '../engine/geo';
 import { featureState, pressureHint, sampleWindGrid, weatherOutlook } from '../engine/wind';
-import { sampleCurrentGrid } from '../engine/current';
+import { sampleTideField } from '../engine/current';
 import { buildInstrumentReport, InstrumentReport } from '../engine/instruments';
 import { EffortMode, RoutingBias } from '../types';
-import RouteMap, { chartViewportBounds } from '../components/RouteMap';
+import RouteMap, { chartViewportBounds, FlowField } from '../components/RouteMap';
+import { FlowLayer, windCells, tideCells } from '../components/flowField';
+import MapLayerToggle from '../components/MapLayerToggle';
 import WindScaleLegend from '../components/WindScaleLegend';
 import TutorialOverlay from '../components/TutorialOverlay';
 import WindIndicator from '../components/WindIndicator';
@@ -78,43 +80,35 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
     Math.min(Math.round(mapWidth * mapAspect), Math.round(height * 0.6))
   );
 
-  // Live wind field sampled across the chart for the overlay. Recomputed each
-  // in-race hour (and when the field or map size changes), not every animation tick.
+  // Which overlay the chart is showing: the breeze, or — where the course has a
+  // running stream — the tide. Tide-less courses stay on wind (the toggle hides).
   const windField = state.windField;
-  const elapsedHourBucket = state.progress ? Math.floor(state.progress.elapsedHours) : 0;
-  // The background heatmap is far heavier than the arrows, so refresh it on a
-  // coarser cadence (every 2 race-hours) — it's a soft backdrop, not an instrument.
-  const heatBucket = state.progress ? Math.floor(state.progress.elapsedHours / 2) : 0;
-  const windArrows = useMemo(() => {
-    if (!race || !windField) return [];
-    const cols = 7;
-    const rows = Math.max(4, Math.min(9, Math.round(cols * courseAspect(race.waypoints))));
-    const bounds = chartViewportBounds(race.waypoints, mapWidth, mapHeight);
-    return sampleWindGrid(windField, bounds, cols, rows, elapsedHourBucket);
-  }, [race, windField, elapsedHourBucket, mapWidth, mapHeight]);
-
-  // Grid for the wind-speed heatmap. Kept moderate (a soft backdrop, not an
-  // instrument) so it's cheap to re-render: ~16×≤18 cells, not ~22×30.
-  const heatCols = 16;
-  const heatRows = race
-    ? Math.max(8, Math.min(18, Math.round(heatCols * courseAspect(race.waypoints))))
-    : 0;
-  const windHeat = useMemo(() => {
-    if (!race || !windField) return [];
-    const bounds = chartViewportBounds(race.waypoints, mapWidth, mapHeight);
-    return sampleWindGrid(windField, bounds, heatCols, heatRows, heatBucket);
-  }, [race, windField, heatRows, heatBucket, mapWidth, mapHeight]);
-
-  // Tidal stream sampled on a coarse grid; refreshed each in-race hour as the
-  // flood/ebb turns. Empty on a slack course, so the chart simply omits it.
   const tidalField = state.tidalField;
-  const currentArrows = useMemo(() => {
-    if (!race || !tidalField) return [];
-    const cols = 6;
-    const rows = Math.max(4, Math.min(8, Math.round(cols * courseAspect(race.waypoints))));
+  const hasTide = !!tidalField && tidalField.peakRateKn > 0;
+  const [mapLayer, setMapLayer] = useState<FlowLayer>('wind');
+  const activeLayer: FlowLayer = mapLayer === 'tide' && hasTide ? 'tide' : 'wind';
+
+  const elapsedHourBucket = state.progress ? Math.floor(state.progress.elapsedHours) : 0;
+
+  // One dense, full grid drives both the smooth colour field and the flow
+  // animation. ~28 cols reads as a continuous gradient; sampling is pure analytic
+  // maths, so density is cheap — the SVG node count is the only cost, and it's
+  // memoised to change on the hour, not every tick.
+  const fieldCols = 28;
+  const fieldRows = race
+    ? Math.max(12, Math.min(34, Math.round(fieldCols * courseAspect(race.waypoints))))
+    : 0;
+  const flowField = useMemo<FlowField | undefined>(() => {
+    if (!race) return undefined;
     const bounds = chartViewportBounds(race.waypoints, mapWidth, mapHeight);
-    return sampleCurrentGrid(tidalField, bounds, cols, rows, elapsedHourBucket);
-  }, [race, tidalField, elapsedHourBucket, mapWidth, mapHeight]);
+    if (activeLayer === 'tide' && tidalField) {
+      const grid = sampleTideField(tidalField, bounds, fieldCols, fieldRows, elapsedHourBucket);
+      return { cells: tideCells(grid), cols: fieldCols, rows: fieldRows };
+    }
+    if (!windField) return undefined;
+    const grid = sampleWindGrid(windField, bounds, fieldCols, fieldRows, elapsedHourBucket);
+    return { cells: windCells(grid), cols: fieldCols, rows: fieldRows };
+  }, [race, activeLayer, windField, tidalField, fieldRows, elapsedHourBucket, mapWidth, mapHeight]);
 
   // Competitor map positions — recomputed only when the fleet advances (each tick),
   // memoised so the value is stable for any render that isn't a fleet update.
@@ -297,28 +291,32 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         ) : null}
 
-        <RouteMap
-          waypoints={race.waypoints}
-          route={progress.route}
-          trail={progress.trail}
-          boat={{ lat: progress.lat, lon: progress.lon }}
-          competitors={competitors}
-          laylines={layPaths}
-          wind={windArrows}
-          current={currentArrows}
-          heat={windHeat}
-          heatCols={heatCols}
-          heatRows={heatRows}
-          windFeature={
-            state.windField ? featureState(state.windField, progress.elapsedHours) : undefined
-          }
-          nextMarkIndex={progress.nextMarkIndex}
-          land={LANDMASSES[race.id]}
-          width={mapWidth}
-          height={mapHeight}
-        />
         <View style={{ width: mapWidth, alignSelf: 'center' }}>
-          <WindScaleLegend />
+          <RouteMap
+            waypoints={race.waypoints}
+            route={progress.route}
+            trail={progress.trail}
+            boat={{ lat: progress.lat, lon: progress.lon }}
+            competitors={competitors}
+            laylines={layPaths}
+            field={flowField}
+            layer={activeLayer}
+            windFeature={
+              state.windField ? featureState(state.windField, progress.elapsedHours) : undefined
+            }
+            nextMarkIndex={progress.nextMarkIndex}
+            land={LANDMASSES[race.id]}
+            width={mapWidth}
+            height={mapHeight}
+          />
+          {hasTide ? (
+            <View style={styles.layerToggle}>
+              <MapLayerToggle layer={activeLayer} onChange={setMapLayer} />
+            </View>
+          ) : null}
+        </View>
+        <View style={{ width: mapWidth, alignSelf: 'center' }}>
+          <WindScaleLegend layer={activeLayer} />
         </View>
 
         <View style={styles.progressTrack}>
@@ -547,6 +545,11 @@ const styles = StyleSheet.create({
   positionLabel: {
     color: colors.mist,
     fontSize: fontSize.xs,
+  },
+  layerToggle: {
+    position: 'absolute',
+    top: spacing.md,
+    right: spacing.md,
   },
   weatherWarning: {
     backgroundColor: 'rgba(201, 162, 39, 0.18)',

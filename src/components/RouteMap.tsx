@@ -12,11 +12,21 @@ import Svg, {
   Text as SvgText,
 } from 'react-native-svg';
 import { colors, radius, spacing } from '../theme';
-import { CurrentArrow, GeoPoint, Waypoint } from '../types';
-import type { WindArrow } from '../engine/wind';
+import { GeoPoint, Waypoint } from '../types';
 import { CourseBounds, isLoopCourse } from '../engine/geo';
-import { windHeatColor } from './windScale';
+import { tideHeatColor, windHeatColor } from './windScale';
+import WindParticles from './WindParticles';
+import { FlowCell, FlowLayer } from './flowField';
 import { LandPolygon } from '../data/landmasses';
+
+// The dense colour-field grid for the active layer (wind speed or tide rate),
+// row-major and full (no cells dropped) so the heatmap and the flow animation can
+// both index it. The screens build it for whichever layer is showing.
+export interface FlowField {
+  cells: FlowCell[];
+  cols: number;
+  rows: number;
+}
 
 interface RouteMapProps {
   waypoints: Waypoint[]; // fixed marks (also set the projection bounds)
@@ -26,25 +36,14 @@ interface RouteMapProps {
   trail?: GeoPoint[]; // track sailed so far
   boat?: GeoPoint; // current boat position
   competitors?: GeoPoint[]; // AI fleet positions
-  wind?: WindArrow[]; // sampled wind field, drawn as arrows
-  current?: CurrentArrow[]; // sampled tidal stream, drawn as arrows along the set
-  heat?: WindArrow[]; // denser wind grid, drawn as a colour heatmap under the arrows
-  heatCols?: number; // grid width of `heat`, to size the cells
-  heatRows?: number; // grid height of `heat`
+  field?: FlowField; // dense field for the active layer: colour heatmap + flow animation
+  layer?: FlowLayer; // 'wind' (speed ramp) or 'tide' (rate ramp); default 'wind'
+  animate?: boolean; // run the particle flow (default true); off for the static debrief
   windFeature?: { lat: number; lon: number; radiusNm: number; puff: boolean }; // puff/hole to shade
   nextMarkIndex?: number; // for shading rounded marks
   land?: LandPolygon[];
   width?: number;
   height?: number;
-}
-
-// Colour a wind arrow by strength, from light slate through to gale red.
-function windColor(speedKn: number): string {
-  if (speedKn <= 8) return colors.slate;
-  if (speedKn <= 14) return colors.signalGreen;
-  if (speedKn <= 20) return colors.brassLight;
-  if (speedKn <= 28) return colors.warning;
-  return colors.signalRed;
 }
 
 interface XY {
@@ -127,11 +126,9 @@ export const RouteMap: React.FC<RouteMapProps> = ({
   trail,
   boat,
   competitors,
-  wind,
-  current,
-  heat,
-  heatCols,
-  heatRows,
+  field,
+  layer = 'wind',
+  animate = true,
   windFeature,
   nextMarkIndex = 0,
   land,
@@ -156,25 +153,30 @@ export const RouteMap: React.FC<RouteMapProps> = ({
   // ~150ms tick. Memoising the rendered SVG keeps react-native-svg from
   // reconciling hundreds of nodes (the heatmap especially) several times a second
   // while the boat creeps forward.
-  const heatLayer = useMemo(() => {
-    if (!project || !heat || !heatCols || !heatRows || heatCols <= 1 || heatRows <= 1) return null;
-    const cw = (width / (heatCols - 1)) * 1.08;
-    const ch = (height / (heatRows - 1)) * 1.08;
-    return heat.map((h) => {
+  // The smooth, full-bleed colour field — the sea itself, coloured by the active
+  // layer (wind speed or tide rate). A dense grid of solid, slightly overlapping
+  // cells reads as a continuous gradient with no dark chart showing through, the
+  // PredictWind look. Memoised: it changes only on scrub/hour/layer/resize, never
+  // per tick.
+  const fieldLayer = useMemo(() => {
+    if (!project || !field || field.cols <= 1 || field.rows <= 1) return null;
+    const colour = layer === 'tide' ? tideHeatColor : windHeatColor;
+    const cw = (width / (field.cols - 1)) * 1.06;
+    const ch = (height / (field.rows - 1)) * 1.06;
+    return field.cells.map((h, i) => {
       const p = project(h.lat, h.lon);
       return (
         <Rect
-          key={`heat-${h.lat.toFixed(3)},${h.lon.toFixed(3)}`}
+          key={`f-${i}`}
           x={p.x - cw / 2}
           y={p.y - ch / 2}
           width={cw}
           height={ch}
-          fill={windHeatColor(h.speedKn)}
-          opacity={0.5}
+          fill={colour(h.speedKn)}
         />
       );
     });
-  }, [project, heat, heatCols, heatRows, width, height]);
+  }, [project, field, layer, width, height]);
 
   const landLayer = useMemo(() => {
     if (!project || !land) return null;
@@ -189,67 +191,6 @@ export const RouteMap: React.FC<RouteMapProps> = ({
       />
     ));
   }, [project, land]);
-
-  const currentLayer = useMemo(() => {
-    if (!project || !current) return null;
-    return current.map((cur) => {
-      const p = project(cur.lat, cur.lon);
-      const a = (cur.setDeg * Math.PI) / 180;
-      const dx = Math.sin(a);
-      const dy = -Math.cos(a);
-      const len = 8 + Math.max(0, Math.min(cur.rateKn / 2.5, 1)) * 12;
-      const tip = { x: p.x + dx * len * 0.5, y: p.y + dy * len * 0.5 };
-      const tail = { x: p.x - dx * len * 0.5, y: p.y - dy * len * 0.5 };
-      const hl = 4.5;
-      const left = (cur.setDeg + 150) * (Math.PI / 180);
-      const right = (cur.setDeg - 150) * (Math.PI / 180);
-      const barbL = { x: tip.x + Math.sin(left) * hl, y: tip.y - Math.cos(left) * hl };
-      const barbR = { x: tip.x + Math.sin(right) * hl, y: tip.y - Math.cos(right) * hl };
-      return (
-        <Path
-          key={`tide-${cur.lat.toFixed(3)},${cur.lon.toFixed(3)}`}
-          d={`M ${tail.x.toFixed(1)} ${tail.y.toFixed(1)} L ${tip.x.toFixed(1)} ${tip.y.toFixed(1)} M ${barbL.x.toFixed(1)} ${barbL.y.toFixed(1)} L ${tip.x.toFixed(1)} ${tip.y.toFixed(1)} L ${barbR.x.toFixed(1)} ${barbR.y.toFixed(1)}`}
-          stroke={colors.tide}
-          strokeWidth={2}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          fill="none"
-          opacity={0.6}
-        />
-      );
-    });
-  }, [project, current]);
-
-  const windLayer = useMemo(() => {
-    if (!project || !wind) return null;
-    return wind.map((w) => {
-      const p = project(w.lat, w.lon);
-      const toDeg = w.fromDeg + 180;
-      const a = (toDeg * Math.PI) / 180;
-      const dx = Math.sin(a);
-      const dy = -Math.cos(a);
-      const len = 9 + Math.max(0, Math.min((w.speedKn - 4) / 26, 1)) * 13;
-      const tip = { x: p.x + dx * len * 0.5, y: p.y + dy * len * 0.5 };
-      const tail = { x: p.x - dx * len * 0.5, y: p.y - dy * len * 0.5 };
-      const hl = 5;
-      const left = (toDeg + 150) * (Math.PI / 180);
-      const right = (toDeg - 150) * (Math.PI / 180);
-      const barbL = { x: tip.x + Math.sin(left) * hl, y: tip.y - Math.cos(left) * hl };
-      const barbR = { x: tip.x + Math.sin(right) * hl, y: tip.y - Math.cos(right) * hl };
-      return (
-        <Path
-          key={`wind-${w.lat.toFixed(3)},${w.lon.toFixed(3)}`}
-          d={`M ${tail.x.toFixed(1)} ${tail.y.toFixed(1)} L ${tip.x.toFixed(1)} ${tip.y.toFixed(1)} M ${barbL.x.toFixed(1)} ${barbL.y.toFixed(1)} L ${tip.x.toFixed(1)} ${tip.y.toFixed(1)} L ${barbR.x.toFixed(1)} ${barbR.y.toFixed(1)}`}
-          stroke={windColor(w.speedKn)}
-          strokeWidth={1.5}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          fill="none"
-          opacity={0.7}
-        />
-      );
-    });
-  }, [project, wind]);
 
   // Marks change only when one is rounded (nextMarkIndex), not every tick.
   const marksLayer = useMemo(() => {
@@ -268,12 +209,26 @@ export const RouteMap: React.FC<RouteMapProps> = ({
           : passed
             ? colors.brassLight
             : colors.hull;
-      const label = isStart ? (loopCourse ? 'START / FINISH' : 'START') : 'FINISH';
+      // Endpoints get their role; the real place-named marks in between (the
+      // Needles, St Catherine's…) get a quiet label, like the coastal names on a
+      // PredictWind chart. A dark halo keeps text legible over the bright field.
+      const endpointLabel = isStart ? (loopCourse ? 'START / FINISH' : 'START') : 'FINISH';
+      const label = isStart || isFinish ? endpointLabel : wp.name;
+      const showLabel = isStart || isFinish || wp.type === 'island' || wp.type === 'mark';
       return (
         <React.Fragment key={`${wp.name}-${i}`}>
           <Circle cx={p.x} cy={p.y} r={r} fill={fill} stroke={colors.foam} strokeWidth={isStart || isFinish ? 1.5 : 1} />
-          {isStart || isFinish ? (
-            <SvgText x={p.x} y={p.y - 9} fill={colors.mist} fontSize="9" textAnchor="middle">
+          {showLabel ? (
+            <SvgText
+              x={p.x}
+              y={p.y - 9}
+              fill={colors.white}
+              stroke={colors.abyss}
+              strokeWidth={0.6}
+              fontSize={isStart || isFinish ? 9 : 8}
+              fontWeight="600"
+              textAnchor="middle"
+            >
               {label}
             </SvgText>
           ) : null}
@@ -304,6 +259,11 @@ export const RouteMap: React.FC<RouteMapProps> = ({
       })()
     : null;
 
+  // Enough particles to read as a field, scaled to the drawable area and capped so
+  // even a big web chart stays light (one Path per fade tier, so this is cheap).
+  const particleCount = Math.max(70, Math.min(220, Math.round((width * height) / 2600)));
+  const flowColor = layer === 'tide' ? colors.tideFlow : colors.foam;
+
   return (
     <View style={styles.container}>
       <Svg width={width} height={height}>
@@ -321,55 +281,75 @@ export const RouteMap: React.FC<RouteMapProps> = ({
           </ClipPath>
         </Defs>
 
-        <Rect x={0} y={0} width={width} height={height} fill="url(#sea)" rx={radius.sm} />
+        {/* Deep-sea base, only visible before the field paints (or where absent). */}
+        <Rect x={0} y={0} width={width} height={height} fill={field ? colors.deepSea : 'url(#sea)'} rx={radius.sm} />
 
         <G clipPath="url(#frame)">
-          {heatLayer}
+          {fieldLayer}
           {landLayer}
 
-          {/* Drifting pressure system: a puff (more breeze) or a hole. */}
-          {feature ? (
+          {/* The live flow: particles drifting with the wind (or the tide). */}
+          {animate && field ? (
+            <WindParticles
+              cells={field.cells}
+              cols={field.cols}
+              rows={field.rows}
+              project={project}
+              layer={layer}
+              color={flowColor}
+              count={particleCount}
+              width={width}
+              height={height}
+            />
+          ) : null}
+
+          {/* Drifting pressure system (wind layer only): a puff or a hole. */}
+          {feature && layer === 'wind' ? (
             <>
               <Circle cx={feature.c.x} cy={feature.c.y} r={feature.rPx} fill={feature.puff ? colors.signalGreen : colors.steel} opacity={0.12} />
               <Circle
                 cx={feature.c.x}
                 cy={feature.c.y}
                 r={feature.rPx}
-                stroke={feature.puff ? colors.signalGreen : colors.steel}
+                stroke={feature.puff ? colors.signalGreen : colors.foam}
                 strokeWidth={1}
                 strokeDasharray="3 4"
                 fill="none"
                 opacity={0.7}
               />
-              <SvgText x={feature.c.x} y={feature.c.y + 3} fill={feature.puff ? colors.signalGreen : colors.mist} fontSize="9" textAnchor="middle">
+              <SvgText x={feature.c.x} y={feature.c.y + 3} fill={colors.white} fontSize="9" textAnchor="middle">
                 {feature.puff ? 'MORE BREEZE' : 'LIGHT PATCH'}
               </SvgText>
             </>
           ) : null}
 
-          {currentLayer}
-          {windLayer}
-
           {/* Laylines to the next mark (the close-hauled / running approach lines). */}
           {laylinePaths.map((seg, i) =>
             seg.length > 1 ? (
-              <Path key={`layline-${i}`} d={pathFrom(seg)} stroke={colors.steel} strokeWidth={1} strokeDasharray="2 4" fill="none" opacity={0.6} />
+              <Path key={`layline-${i}`} d={pathFrom(seg)} stroke={colors.foam} strokeWidth={1} strokeDasharray="2 4" fill="none" opacity={0.5} />
             ) : null
           )}
 
           {/* The faster alternative line, for contrast (drawn under the plan). */}
           {altRoutePts.length > 1 ? (
-            <Path d={pathFrom(altRoutePts)} stroke={colors.signalGreen} strokeWidth={2} strokeDasharray="2 6" fill="none" opacity={0.8} />
+            <Path d={pathFrom(altRoutePts)} stroke={colors.signalGreen} strokeWidth={2.5} strokeDasharray="2 6" fill="none" opacity={0.9} />
           ) : null}
 
-          {/* Planned weather-routed path still to sail (dashed). */}
+          {/* Planned weather-routed path still to sail — a dark casing under a
+              bright dash keeps it legible over the bright colour field. */}
           {routePts.length > 1 ? (
-            <Path d={pathFrom(routePts)} stroke={colors.mist} strokeWidth={2} strokeDasharray="4 5" fill="none" opacity={0.85} />
+            <>
+              <Path d={pathFrom(routePts)} stroke={colors.abyss} strokeWidth={4} fill="none" opacity={0.45} />
+              <Path d={pathFrom(routePts)} stroke={colors.white} strokeWidth={2} strokeDasharray="4 5" fill="none" opacity={0.95} />
+            </>
           ) : null}
 
-          {/* Track actually sailed, including the tacks (solid). */}
+          {/* Track actually sailed, including the tacks (solid, dark-cased). */}
           {trailPts.length > 1 ? (
-            <Path d={pathFrom(trailPts)} stroke={colors.brassLight} strokeWidth={3} fill="none" />
+            <>
+              <Path d={pathFrom(trailPts)} stroke={colors.abyss} strokeWidth={5} fill="none" opacity={0.45} />
+              <Path d={pathFrom(trailPts)} stroke={colors.brassLight} strokeWidth={3} fill="none" />
+            </>
           ) : null}
         </G>
 

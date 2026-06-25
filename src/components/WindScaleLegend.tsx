@@ -1,29 +1,36 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { colors, fontSize } from '../theme';
-import { windHeatColor } from './windScale';
+import { tideHeatColor, windHeatColor } from './windScale';
+import type { FlowLayer } from './flowField';
 
-// A compact key for the wind-speed heatmap: a colour bar with a few knot marks,
-// so the chart's colours are readable at a glance.
-const TICKS = [5, 10, 15, 20, 25, 30, 40];
-const BAR_MAX = 45; // kn spanned by the bar
+// A compact key for the chart's colour field: a colour bar with a few marks, so
+// the colours are readable at a glance. Switches scale with the active layer —
+// wind speed (to ~40 kn) or tidal stream rate (to ~4 kn).
+const WIND = { ticks: [5, 10, 15, 20, 25, 30, 40], max: 45, color: windHeatColor };
+const TIDE = { ticks: [0.5, 1, 1.5, 2, 2.5, 3], max: 4, color: tideHeatColor };
 
-export const WindScaleLegend: React.FC = () => {
+interface WindScaleLegendProps {
+  layer?: FlowLayer;
+}
+
+export const WindScaleLegend: React.FC<WindScaleLegendProps> = ({ layer = 'wind' }) => {
+  const scale = layer === 'tide' ? TIDE : WIND;
   const swatches = Array.from({ length: 24 }, (_, i) => {
-    const kn = (i / 23) * BAR_MAX;
-    return <View key={i} style={[styles.swatch, { backgroundColor: windHeatColor(kn) }]} />;
+    const v = (i / 23) * scale.max;
+    return <View key={i} style={[styles.swatch, { backgroundColor: scale.color(v) }]} />;
   });
 
   return (
     <View style={styles.wrap}>
       <View style={styles.bar}>{swatches}</View>
       <View style={styles.ticks}>
-        {TICKS.map((t) => (
-          <Text key={t} style={[styles.tick, { left: `${(t / BAR_MAX) * 100}%` }]}>
+        {scale.ticks.map((t) => (
+          <Text key={t} style={[styles.tick, { left: `${(t / scale.max) * 100}%` }]}>
             {t}
           </Text>
         ))}
-        <Text style={styles.unit}>kts</Text>
+        <Text style={styles.unit}>{layer === 'tide' ? 'kn' : 'kts'}</Text>
       </View>
     </View>
   );
