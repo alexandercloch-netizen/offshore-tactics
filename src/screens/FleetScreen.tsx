@@ -72,7 +72,7 @@ export const FleetScreen: React.FC<Props> = ({ navigation }) => {
                 onPress={() => navigation.navigate('SailLocker', { boatId: boat.id })}
               >
                 <Text style={styles.lockerBtnText}>
-                  Sail Locker{(boat.sails?.length ?? 0) > 0 ? ` · ${boat.sails!.length} aboard` : ''}
+                  Sail Locker{boat.sails && boat.sails.length > 0 ? ` · ${boat.sails.length} aboard` : ''}
                 </Text>
               </Pressable>
             </View>

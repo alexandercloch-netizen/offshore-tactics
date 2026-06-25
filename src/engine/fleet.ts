@@ -1,5 +1,5 @@
-import { Boat, Competitor, GeoPoint, Race, RaceDivision, TidalField, Waypoint, WindField } from '../types';
-import { bearing, movePoint, pointAtFraction } from './geo';
+import { Boat, Competitor, GeoPoint, Race, RaceDivision, TidalField, WindField } from '../types';
+import { angularDelta, bearing, movePoint, pointAtFraction } from './geo';
 import { bestVmgAngles, polarSpeed } from './polar';
 import { pressureHint, sampleWind } from './wind';
 import { tideAlong } from './current';
@@ -141,7 +141,7 @@ export function createFleet(
 // the local wind — straight at the mark, or via the upwind/downwind VMG angle
 // when the mark is too close to dead up/down wind to sail at directly.
 export function madeGoodSpeed(boat: Boat, legBearing: number, windFromDeg: number, windKn: number): number {
-  const twa = Math.abs(((legBearing - windFromDeg + 540) % 360) - 180); // 0..180
+  const twa = angularDelta(legBearing, windFromDeg); // 0..180
   const straight = polarSpeed(boat, twa, windKn); // heading straight at the mark
   const vmg = bestVmgAngles(boat, windKn);
   if (twa < 90) return Math.max(straight, vmg.upVmg);
@@ -201,7 +201,7 @@ function favouredSide(
 function competitorState(race: Race, c: Competitor): { pos: GeoPoint; courseDeg: number } {
   const total = race.distanceNm;
   const land = LANDMASSES[race.id];
-  const path = coursePath(race) as unknown as Waypoint[]; // pointAtFraction only reads lat/lon
+  const path = coursePath(race); // GeoPoint[]; pointAtFraction reads only lat/lon
   const fraction = clamp(c.distanceNm / total, 0, 1);
   const base = pointAtFraction(path, fraction);
   const ahead = pointAtFraction(path, clamp(fraction + 0.01, 0, 1));

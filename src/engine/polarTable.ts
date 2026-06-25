@@ -84,7 +84,10 @@ export function polarBestVmg(
   twsKn: number
 ): { upAngle: number; downAngle: number; upVmg: number; downVmg: number } {
   const w = bracket(polar.tws, twsKn);
-  const blend = (arr: number[]) => arr[w.i] + (arr[w.i + 1] - arr[w.i]) * w.frac;
+  const blend = (arr: number[]) => {
+    const next = arr[w.i + 1] ?? arr[w.i];
+    return arr[w.i] + (next - arr[w.i]) * w.frac;
+  };
   const t = polar.targets;
   const upAngle = blend(t.beatAngle);
   const downAngle = blend(t.runAngle);
