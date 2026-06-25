@@ -13,29 +13,11 @@ interface Box {
   maxLat: number;
 }
 
-// Coastline detail is far finer than routing granularity, so for point tests we
-// use a decimated copy of each ring (every Nth vertex) — a big ray-cast saving
-// on large landmasses with no meaningful accuracy loss. The detailed polygons
-// are still used for drawing the chart.
-const DECIMATE = 3;
-const simplifiedCache = new WeakMap<LandPolygon[], LandPolygon[]>();
-
-function decimateRing(ring: [number, number][]): [number, number][] {
-  if (ring.length <= 8) return ring;
-  const out: [number, number][] = [];
-  for (let i = 0; i < ring.length; i += DECIMATE) out.push(ring[i]);
-  const last = ring[ring.length - 1];
-  if (out[out.length - 1] !== last) out.push(last);
-  return out;
-}
-
-function simplifiedFor(polys: LandPolygon[]): LandPolygon[] {
-  const cached = simplifiedCache.get(polys);
-  if (cached) return cached;
-  const simple = polys.map((poly) => poly.map(decimateRing));
-  simplifiedCache.set(polys, simple);
-  return simple;
-}
+// Point tests run against the *same* full-resolution rings that are drawn on the
+// chart, so the router can never thread a gap that isn't there: a routed track
+// stays in the water you can see. A per-polygon bounding box (below) rejects the
+// vast majority of rings before any ray-cast, so testing the detailed coastline
+// stays cheap even on the island-dense passages.
 
 // Cache each polygon's outer-ring bounding box (per land set) for a cheap reject
 // before the full ray-cast. Keyed on the array identity (stable per race).
@@ -112,11 +94,10 @@ export function snapToWater(
 export function pointInLand(polys: LandPolygon[] | undefined, lat: number, lon: number): boolean {
   if (!polys || polys.length === 0) return false;
   const boxes = boxesFor(polys);
-  const simple = simplifiedFor(polys);
-  for (let i = 0; i < simple.length; i += 1) {
+  for (let i = 0; i < polys.length; i += 1) {
     const b = boxes[i];
     if (lon < b.minLon || lon > b.maxLon || lat < b.minLat || lat > b.maxLat) continue;
-    if (pointInPolygon(simple[i], lon, lat)) return true;
+    if (pointInPolygon(polys[i], lon, lat)) return true;
   }
   return false;
 }
