@@ -70,6 +70,30 @@ export function tideAlong(
   return currentAlong(sampleCurrent(field, lat, lon, hours), courseDeg);
 }
 
+// Sample the tidal stream on a *full* regular grid (row-major, no cells dropped),
+// for the tide colour field and the flow animation — both index the grid by
+// position, so every cell must be present even where the stream is slack.
+export function sampleTideField(
+  field: TidalField | undefined,
+  bounds: CourseBounds,
+  cols: number,
+  rows: number,
+  hours: number
+): CurrentArrow[] {
+  const arrows: CurrentArrow[] = [];
+  const latStep = rows > 1 ? (bounds.maxLat - bounds.minLat) / (rows - 1) : 0;
+  const lonStep = cols > 1 ? (bounds.maxLon - bounds.minLon) / (cols - 1) : 0;
+  for (let r = 0; r < rows; r += 1) {
+    for (let c = 0; c < cols; c += 1) {
+      const lat = bounds.minLat + latStep * r;
+      const lon = bounds.minLon + lonStep * c;
+      const s = field ? sampleCurrent(field, lat, lon, hours) : { setDeg: 0, rateKn: 0 };
+      arrows.push({ lat, lon, setDeg: s.setDeg, rateKn: s.rateKn });
+    }
+  }
+  return arrows;
+}
+
 // Sample the tidal stream on a regular lat/lon grid spanning the given bounds, so
 // the chart can draw current arrows across the course (rate & set, gates and all).
 // Slack/near-slack cells are dropped so the chart isn't littered with stubs.

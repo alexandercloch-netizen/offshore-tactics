@@ -16,6 +16,7 @@ export const colors = {
   signalGreen: '#2EC4B6',
   warning: '#F4A259',
   tide: '#49B6FF',
+  tideFlow: '#CFEFFF', // pale cyan streaks for the tidal-flow animation
   white: '#FFFFFF',
   black: '#000000',
   overlay: 'rgba(3, 10, 18, 0.85)',
