@@ -1,4 +1,4 @@
-import { PointOfSail, Waypoint } from '../types';
+import { GeoPoint, PointOfSail, Waypoint } from '../types';
 
 const R_NM = 3440.065; // Earth radius in nautical miles
 const toRad = (deg: number): number => (deg * Math.PI) / 180;
@@ -39,7 +39,7 @@ export function bearing(
 }
 
 // Cumulative along-track distances (nm) at each waypoint; index 0 is 0.
-export function cumulativeDistances(waypoints: Waypoint[]): number[] {
+export function cumulativeDistances(waypoints: GeoPoint[]): number[] {
   const cumulative: number[] = [0];
   for (let i = 1; i < waypoints.length; i += 1) {
     const prev = waypoints[i - 1];
@@ -66,7 +66,7 @@ export interface TrackPoint {
 // Position along the real course at a given fraction (0..1) of the total
 // geographic length, with the bearing of the segment it lies on.
 export function pointAtFraction(
-  waypoints: Waypoint[],
+  waypoints: GeoPoint[],
   fraction: number
 ): TrackPoint {
   if (waypoints.length === 0) {

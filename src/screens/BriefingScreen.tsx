@@ -25,7 +25,7 @@ import {
   resolveBoatById,
 } from '../engine/gameEngine';
 import { planRoute, WindSampler } from '../engine/router';
-import { courseAspect, courseBounds } from '../engine/geo';
+import { courseAspect } from '../engine/geo';
 import {
   featureState,
   forecastConfidence,
@@ -34,7 +34,7 @@ import {
   sampleForecastGrid,
   weatherOutlook,
 } from '../engine/wind';
-import RouteMap from '../components/RouteMap';
+import RouteMap, { chartViewportBounds } from '../components/RouteMap';
 import WindIndicator from '../components/WindIndicator';
 import NauticalButton from '../components/NauticalButton';
 import ForecastScrubber from '../components/ForecastScrubber';
@@ -120,8 +120,10 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
 
   // The wind chart reflects the scrubbed forecast hour: arrows for direction, a
   // dense grid for the speed heatmap, and the drifting pressure feature. (Plain
-  // calls — they must sit after the loading guard, so no hooks here.)
-  const bounds = courseBounds(race.waypoints);
+  // calls — they must sit after the loading guard, so no hooks here.) The grids
+  // are sampled to the whole chart viewport, not just the course box, so the
+  // weather fills the map rather than sitting short of the edges.
+  const bounds = chartViewportBounds(race.waypoints, mapWidth, mapHeight);
   const heatCols = 22;
   const heatRows = Math.max(10, Math.min(30, Math.round(heatCols * courseAspect(race.waypoints))));
   // The chart shows the crew's *forecast*, not ground truth: it grows fuzzier the

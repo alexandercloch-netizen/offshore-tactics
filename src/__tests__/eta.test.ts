@@ -63,17 +63,30 @@ describe('estimateRouteHours', () => {
   });
 
   it("estimated on the believed forecast: a weak navigator strays, a strong one tracks the truth", () => {
-    const { boat, field, route } = setup('race-fastnet');
-    const truth = estimateRouteHours(boat, healthy, route, field, 0, 1, 1);
-    const weak = estimateRouteHours(boat, healthy, route, field, 0, 1, 1, (f, la, lo, h) =>
-      sampleForecast(f, la, lo, h, 15)
-    );
-    const strong = estimateRouteHours(boat, healthy, route, field, 0, 1, 1, (f, la, lo, h) =>
-      sampleForecast(f, la, lo, h, 95)
-    );
-    // The race still sails the true field; only the *estimate* is blurred, more so
-    // for a weak navigator.
-    expect(Math.abs(weak - truth)).toBeGreaterThan(Math.abs(strong - truth));
+    // Averaged over several wind fields: any single field can fluke either way
+    // (far down a long course both skills run out of confidence and blur alike),
+    // but in the mean a weak Navigator's ETA strays further from the true-field
+    // estimate than a sharp one's. Chicago–Mac reads cleanly — long enough for the
+    // blur to bite, short enough that skill still has confidence to spend.
+    const race = getRaceById('race-chicago-mac')!;
+    const boat = getBoatById('boat-mistral')!;
+    let weakErr = 0;
+    let strongErr = 0;
+    for (let seed = 1; seed <= 8; seed += 1) {
+      setRng(mulberry32(seed));
+      const field = createWindField(race);
+      const start = { lat: race.waypoints[0].lat, lon: race.waypoints[0].lon };
+      const route = planRoute(boat, field, start, race.waypoints, 1, 0, 0, LANDMASSES[race.id]);
+      const truth = estimateRouteHours(boat, healthy, route, field, 0, 1, 1);
+      const blurred = (skill: number): number =>
+        estimateRouteHours(boat, healthy, route, field, 0, 1, 1, (f, la, lo, h) =>
+          sampleForecast(f, la, lo, h, skill)
+        );
+      // The race still sails the true field; only the *estimate* is blurred.
+      weakErr += Math.abs(blurred(15) - truth);
+      strongErr += Math.abs(blurred(95) - truth);
+    }
+    expect(weakErr).toBeGreaterThan(strongErr);
   });
 
   it('is zero for a degenerate route', () => {

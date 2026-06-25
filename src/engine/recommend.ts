@@ -25,7 +25,7 @@ export function recommendedRace(
   if (player) {
     const regional = (REGION_RACES[player.region] ?? [])
       .map((id) => RACES.find((r) => r.id === id))
-      .filter((r): r is Race => Boolean(r) && isRaceUnlocked(r as Race, history));
+      .filter((r): r is Race => !!r && isRaceUnlocked(r, history));
     // Prefer a home-waters race they haven't won; if those are all won, suggest
     // the next unlocked race instead; only then fall back to a won regional one.
     const freshRegional = regional.find((r) => !won.has(r.id));

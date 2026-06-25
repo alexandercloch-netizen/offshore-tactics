@@ -320,7 +320,7 @@ export function pressureHint(field: WindField, lat: number, lon: number, hours: 
 
   const magnitude = Math.hypot(north, east);
   const bearing = (Math.atan2(east, north) * 180) / Math.PI;
-  const norm = ((bearing % 360) + 360) % 360;
+  const norm = norm360(bearing);
   return {
     bearing: norm,
     compass: COMPASS[Math.round(norm / 45) % 8],
