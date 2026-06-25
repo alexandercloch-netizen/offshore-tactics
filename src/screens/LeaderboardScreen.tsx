@@ -59,6 +59,7 @@ export const LeaderboardScreen: React.FC<Props> = () => {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        style={styles.filterBar}
         contentContainerStyle={styles.filters}
       >
         <Chip label="All Races" active={!raceId} onPress={() => setRaceId(undefined)} />
@@ -144,12 +145,22 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 22,
   },
+  // The bar must hug its content height — without flexGrow:0 a horizontal
+  // ScrollView grows to fill the column on web, and `alignItems: center` keeps the
+  // chips at their natural height instead of stretching tall (which turned the
+  // pill radius into giant ovals).
+  filterBar: {
+    flexGrow: 0,
+    flexShrink: 0,
+  },
   filters: {
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     gap: spacing.sm,
+    alignItems: 'center',
   },
   chip: {
+    alignSelf: 'center',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: radius.pill,
