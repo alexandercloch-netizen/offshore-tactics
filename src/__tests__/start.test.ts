@@ -30,7 +30,7 @@ function steady(fromDeg: number, speedKn = 12): WindField {
 
 // A near-constant tide setting toward `floodDeg` (very long period parked at peak).
 function steadyTide(floodDeg: number, peakRateKn: number): TidalField {
-  return { floodDeg, peakRateKn, periodH: 1e6, phaseH: 2.5e5, gates: [], refLat: 50.7, refLon: -1.3 };
+  return { floodDeg, peakRateKn, periodH: 1e6, phaseH: 2.5e5, gates: [], driftDeg: 0, driftKn: 0, refLat: 50.7, refLon: -1.3 };
 }
 
 const plan = (p: Partial<StartPlan>): StartPlan => ({ end: 'mid', approach: 'timed', beat: 'clear', ...p });

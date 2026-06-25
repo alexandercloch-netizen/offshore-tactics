@@ -135,6 +135,12 @@ export interface TideProfile {
   peakRateKn: number; // peak (springs-ish) stream rate at mid-flood/ebb
   periodH?: number; // tidal period; defaults to the semidiurnal 12.42h
   gates?: { waypoint: string; gain: number; radiusNm: number }[]; // amplify near a mark
+  // A persistent ocean current on top of (or instead of) the oscillating tide —
+  // the Gulf Stream, the EAC, a trade-wind drift. Unlike the tide it does NOT
+  // reverse; it's a steady vector, gate-amplified like the tide. peakRateKn may be
+  // 0 for a pure-current course (no shelf tide).
+  driftDeg?: number; // direction the steady current sets TOWARD
+  driftKn?: number; // steady current rate
 }
 
 // Resolved, race-ready tidal field: an oscillating stream evolving with elapsed
@@ -145,6 +151,8 @@ export interface TidalField {
   periodH: number;
   phaseH: number; // where in the cycle the gun fires (seeded at race setup)
   gates: TideGate[];
+  driftDeg: number; // steady (non-reversing) ocean current set
+  driftKn: number; // steady current rate (0 = none)
   refLat: number;
   refLon: number;
 }
