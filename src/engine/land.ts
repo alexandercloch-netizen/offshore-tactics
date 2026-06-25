@@ -44,6 +44,59 @@ function boxesFor(polys: LandPolygon[]): Box[] {
   return boxes;
 }
 
+// A coarse uniform grid over all the polygons' bounding boxes, each cell listing
+// the polygons that reach into it. On an island-dense course (R2AK has 154
+// polygons strung along a 750 nm coast) a point test then weighs only the handful
+// of polygons near it instead of scanning every box — and since the per-polygon
+// box check still runs, the answer is unchanged.
+interface PolyGrid {
+  minLon: number;
+  minLat: number;
+  invLon: number;
+  invLat: number;
+  cols: number;
+  rows: number;
+  cells: number[][];
+}
+const gridCache = new WeakMap<LandPolygon[], PolyGrid>();
+
+function gridFor(polys: LandPolygon[]): PolyGrid {
+  const cached = gridCache.get(polys);
+  if (cached) return cached;
+  const boxes = boxesFor(polys);
+  let minLon = Infinity;
+  let minLat = Infinity;
+  let maxLon = -Infinity;
+  let maxLat = -Infinity;
+  for (const b of boxes) {
+    if (b.minLon < minLon) minLon = b.minLon;
+    if (b.maxLon > maxLon) maxLon = b.maxLon;
+    if (b.minLat < minLat) minLat = b.minLat;
+    if (b.maxLat > maxLat) maxLat = b.maxLat;
+  }
+  const G = Math.max(1, Math.min(48, Math.round(Math.sqrt(polys.length)) * 2));
+  const cols = G;
+  const rows = G;
+  const invLon = cols / ((maxLon - minLon) || 1e-9);
+  const invLat = rows / ((maxLat - minLat) || 1e-9);
+  const cells: number[][] = Array.from({ length: cols * rows }, () => []);
+  for (let i = 0; i < boxes.length; i += 1) {
+    const b = boxes[i];
+    let c0 = Math.floor((b.minLon - minLon) * invLon);
+    let c1 = Math.floor((b.maxLon - minLon) * invLon);
+    let r0 = Math.floor((b.minLat - minLat) * invLat);
+    let r1 = Math.floor((b.maxLat - minLat) * invLat);
+    if (c0 < 0) c0 = 0;
+    if (c1 > cols - 1) c1 = cols - 1;
+    if (r0 < 0) r0 = 0;
+    if (r1 > rows - 1) r1 = rows - 1;
+    for (let r = r0; r <= r1; r += 1) for (let c = c0; c <= c1; c += 1) cells[r * cols + c].push(i);
+  }
+  const grid: PolyGrid = { minLon, minLat, invLon, invLat, cols, rows, cells };
+  gridCache.set(polys, grid);
+  return grid;
+}
+
 // Ray-casting point-in-ring needs only the edges that straddle the query
 // latitude. Index each ring's edges into latitude bands once, so a test on a big
 // coastline ring scans a handful of candidate edges instead of all of them — the
@@ -148,7 +201,19 @@ export function snapToWater(
 export function pointInLand(polys: LandPolygon[] | undefined, lat: number, lon: number): boolean {
   if (!polys || polys.length === 0) return false;
   const boxes = boxesFor(polys);
-  for (let i = 0; i < polys.length; i += 1) {
+  const grid = gridFor(polys);
+  // Clamp to the grid (rather than reject) so a point exactly on the outer edge
+  // still weighs the boundary cell's polygons — keeping the answer identical to a
+  // full scan, just over far fewer candidates.
+  let c = Math.floor((lon - grid.minLon) * grid.invLon);
+  let r = Math.floor((lat - grid.minLat) * grid.invLat);
+  if (c < 0) c = 0;
+  else if (c > grid.cols - 1) c = grid.cols - 1;
+  if (r < 0) r = 0;
+  else if (r > grid.rows - 1) r = grid.rows - 1;
+  const cand = grid.cells[r * grid.cols + c];
+  for (let k = 0; k < cand.length; k += 1) {
+    const i = cand[k];
     const b = boxes[i];
     if (lon < b.minLon || lon > b.maxLon || lat < b.minLat || lat > b.maxLat) continue;
     if (pointInPolygon(polys[i], lon, lat)) return true;
