@@ -44,12 +44,66 @@ function boxesFor(polys: LandPolygon[]): Box[] {
   return boxes;
 }
 
-// Ray-casting point-in-ring; ring points are [lon, lat].
+// Ray-casting point-in-ring needs only the edges that straddle the query
+// latitude. Index each ring's edges into latitude bands once, so a test on a big
+// coastline ring scans a handful of candidate edges instead of all of them — the
+// hot path for the router, which probes land thousands of times per route. The
+// result is bit-for-bit the original ray-cast: bucketing only skips edges that
+// provably can't cross the query line.
+interface RingIndex {
+  minLat: number;
+  inv: number; // 1 / band height
+  bands: number[][]; // per band: start-vertex indices of edges spanning it (edge = ring[i]→ring[i-1])
+}
+const ringIndexCache = new WeakMap<[number, number][], RingIndex>();
+
+function ringIndexFor(ring: [number, number][]): RingIndex {
+  const cached = ringIndexCache.get(ring);
+  if (cached) return cached;
+  const n = ring.length;
+  let minLat = Infinity;
+  let maxLat = -Infinity;
+  for (let i = 0; i < n; i += 1) {
+    const y = ring[i][1];
+    if (y < minLat) minLat = y;
+    if (y > maxLat) maxLat = y;
+  }
+  const B = Math.max(1, Math.min(256, Math.floor(Math.sqrt(n))));
+  const h = (maxLat - minLat) / B || 1e-9;
+  const inv = 1 / h;
+  const bands: number[][] = Array.from({ length: B }, () => []);
+  for (let i = 0, j = n - 1; i < n; j = i, i += 1) {
+    const ylo = ring[i][1] < ring[j][1] ? ring[i][1] : ring[j][1];
+    const yhi = ring[i][1] > ring[j][1] ? ring[i][1] : ring[j][1];
+    let b0 = Math.floor((ylo - minLat) * inv);
+    let b1 = Math.floor((yhi - minLat) * inv);
+    if (b0 < 0) b0 = 0;
+    if (b1 > B - 1) b1 = B - 1;
+    for (let b = b0; b <= b1; b += 1) bands[b].push(i);
+  }
+  const idx: RingIndex = { minLat, inv, bands };
+  ringIndexCache.set(ring, idx);
+  return idx;
+}
+
+// Ray-casting point-in-ring; ring points are [lon, lat]. Tests only the edges in
+// the query latitude's band (see ringIndexFor) — identical to scanning them all.
 function pointInRing(ring: [number, number][], lon: number, lat: number): boolean {
+  const n = ring.length;
+  if (n < 3) return false;
+  const idx = ringIndexFor(ring);
+  let b = Math.floor((lat - idx.minLat) * idx.inv);
+  if (b < 0) b = 0;
+  else if (b > idx.bands.length - 1) b = idx.bands.length - 1;
+  const cand = idx.bands[b];
   let inside = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
-    const [xi, yi] = ring[i];
-    const [xj, yj] = ring[j];
+  for (let c = 0; c < cand.length; c += 1) {
+    const i = cand[c];
+    const j = i === 0 ? n - 1 : i - 1;
+    const xi = ring[i][0];
+    const yi = ring[i][1];
+    const xj = ring[j][0];
+    const yj = ring[j][1];
     const intersects =
       yi > lat !== yj > lat &&
       lon < ((xj - xi) * (lat - yi)) / (yj - yi || 1e-12) + xi;
