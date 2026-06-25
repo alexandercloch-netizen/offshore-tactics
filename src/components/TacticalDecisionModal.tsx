@@ -84,7 +84,7 @@ export const TacticalDecisionModal: React.FC<TacticalDecisionModalProps> = ({
 }) => {
   const isMob = event?.kind === 'mob';
   const { width } = useWindowDimensions();
-  // On a roomy screen show a centred dialog; on a phone-width screen use a
+  // On a roomy screen dock the panel to the side; on a phone-width screen use a
   // bottom sheet. Either way the backdrop stays barely dimmed so the chart,
   // fleet and wind behind remain readable while the player decides (the sim is
   // frozen meanwhile).
@@ -207,8 +207,11 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   backdropWide: {
-    alignItems: 'center',
+    // Dock the panel to the right edge rather than centring it over the chart, so
+    // the map, fleet and wind stay visible alongside the decision.
+    alignItems: 'flex-end',
     justifyContent: 'center',
+    padding: spacing.lg,
   },
   card: {
     backgroundColor: colors.card,
