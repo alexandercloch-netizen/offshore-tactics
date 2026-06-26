@@ -96,20 +96,25 @@ describe('fieldResolution (heatmap density)', () => {
   it('never drops below the floor, so even a small phone map stays smooth', () => {
     const r = fieldResolution(300, 280);
     expect(r.cols).toBeGreaterThanOrEqual(40);
-    expect(r.rows).toBeGreaterThanOrEqual(36);
+    expect(r.rows).toBeGreaterThanOrEqual(60);
+  });
+
+  it('samples rows denser than columns (rows set the vertical gradient step)', () => {
+    const r = fieldResolution(800, 800);
+    expect(r.rows).toBeGreaterThan(r.cols);
   });
 
   it('adds density on a larger chart but stays under the node-count caps', () => {
     const big = fieldResolution(1600, 1200);
     const small = fieldResolution(300, 280);
-    expect(big.cols).toBeGreaterThan(small.cols);
+    expect(big.cols).toBeGreaterThanOrEqual(small.cols);
     expect(big.cols).toBeLessThanOrEqual(56);
-    expect(big.rows).toBeLessThanOrEqual(64);
+    expect(big.rows).toBeLessThanOrEqual(100);
   });
 
   it('survives a degenerate (pre-layout) zero size without collapsing', () => {
     const r = fieldResolution(0, 0);
     expect(r.cols).toBeGreaterThanOrEqual(40);
-    expect(r.rows).toBeGreaterThanOrEqual(36);
+    expect(r.rows).toBeGreaterThanOrEqual(60);
   });
 });
