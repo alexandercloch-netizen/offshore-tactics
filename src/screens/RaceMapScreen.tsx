@@ -41,7 +41,7 @@ import { sampleTideField } from '../engine/current';
 import { buildInstrumentReport, InstrumentReport } from '../engine/instruments';
 import { EffortMode, RoutingBias } from '../types';
 import RouteMap, { chartViewportBounds, FlowField } from '../components/RouteMap';
-import { FlowLayer, windCells, tideCells } from '../components/flowField';
+import { FlowLayer, windCells, tideCells, fieldResolution } from '../components/flowField';
 import MapLayerToggle from '../components/MapLayerToggle';
 import WindScaleLegend from '../components/WindScaleLegend';
 import TutorialOverlay from '../components/TutorialOverlay';
@@ -91,13 +91,12 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
   const elapsedHourBucket = state.progress ? Math.floor(state.progress.elapsedHours) : 0;
 
   // One dense, full grid drives both the smooth colour field and the flow
-  // animation. ~28 cols reads as a continuous gradient; sampling is pure analytic
-  // maths, so density is cheap — the SVG node count is the only cost, and it's
-  // memoised to change on the hour, not every tick.
-  const fieldCols = 28;
-  const fieldRows = race
-    ? Math.max(12, Math.min(34, Math.round(fieldCols * courseAspect(race.waypoints))))
-    : 0;
+  // animation. Density is sized to the chart pixels (fieldResolution) so the field
+  // reads as a continuous gradient on any course — a coarse fixed grid tiles on a
+  // long passage. Sampling is pure analytic maths, so density is cheap; the SVG
+  // node count is the only cost, and it's memoised to change on the hour, not every
+  // tick.
+  const { cols: fieldCols, rows: fieldRows } = fieldResolution(mapWidth, mapHeight);
   const flowField = useMemo<FlowField | undefined>(() => {
     if (!race) return undefined;
     const bounds = chartViewportBounds(race.waypoints, mapWidth, mapHeight);
@@ -224,12 +223,12 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
       // race-screen flowField is sized to that map's aspect, so reusing it here
       // would leave the sea short of the edges (dark gaps). Grid rows track the
       // viewport aspect so the cells stay roughly square.
-      const cols = 28;
-      // Track the viewport aspect so cells stay roughly square — but guard a
-      // zero/non-finite height (a chart box measured before layout settles) so
-      // the grid falls back to a sane row count instead of collapsing to 0.
-      const aspect = w > 1 && Number.isFinite(h) && h > 1 ? h / w : 1;
-      const rows = Math.max(12, Math.min(40, Math.round(cols * aspect))) || 20;
+      // Same pixel-sized density as the race/briefing charts so the cockpit field
+      // reads as a smooth gradient (guarding a pre-layout zero size).
+      const { cols, rows } = fieldResolution(
+        w > 1 ? w : 1,
+        Number.isFinite(h) && h > 1 ? h : w > 1 ? w : 1
+      );
       const bounds = chartViewportBounds(race.waypoints, w, h);
       let field: FlowField | undefined;
       if (activeLayer === 'tide' && tidalField) {

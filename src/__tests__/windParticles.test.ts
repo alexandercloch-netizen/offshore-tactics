@@ -1,4 +1,11 @@
-import { buildFlowField, sampleFlow, windCells, tideCells, FlowCell } from '../components/flowField';
+import {
+  buildFlowField,
+  sampleFlow,
+  windCells,
+  tideCells,
+  fieldResolution,
+  FlowCell,
+} from '../components/flowField';
 import { sampleTideField, sampleCurrentGrid, createTidalField } from '../engine/current';
 import { getRaceById } from '../data';
 import { mulberry32, resetRng, setRng } from '../engine/rng';
@@ -82,5 +89,27 @@ describe('cell adapters', () => {
   it('tideCells carries setDeg as the direction and rate as the speed', () => {
     const out = tideCells([{ lat: 1, lon: 2, setDeg: 80, rateKn: 1.5 }]);
     expect(out[0]).toEqual({ lat: 1, lon: 2, dirDeg: 80, speedKn: 1.5 });
+  });
+});
+
+describe('fieldResolution (heatmap density)', () => {
+  it('never drops below the floor, so even a small phone map stays smooth', () => {
+    const r = fieldResolution(300, 280);
+    expect(r.cols).toBeGreaterThanOrEqual(40);
+    expect(r.rows).toBeGreaterThanOrEqual(36);
+  });
+
+  it('adds density on a larger chart but stays under the node-count caps', () => {
+    const big = fieldResolution(1600, 1200);
+    const small = fieldResolution(300, 280);
+    expect(big.cols).toBeGreaterThan(small.cols);
+    expect(big.cols).toBeLessThanOrEqual(56);
+    expect(big.rows).toBeLessThanOrEqual(64);
+  });
+
+  it('survives a degenerate (pre-layout) zero size without collapsing', () => {
+    const r = fieldResolution(0, 0);
+    expect(r.cols).toBeGreaterThanOrEqual(40);
+    expect(r.rows).toBeGreaterThanOrEqual(36);
   });
 });
