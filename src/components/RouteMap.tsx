@@ -172,22 +172,56 @@ export const RouteMap: React.FC<RouteMapProps> = ({
   const fieldLayer = useMemo(() => {
     if (!project || !field || field.cols <= 1 || field.rows <= 1) return null;
     const colour = layer === 'tide' ? tideHeatColor : windHeatColor;
-    const cw = (width / (field.cols - 1)) * 1.06;
-    const ch = (height / (field.rows - 1)) * 1.06;
-    return field.cells.map((h, i) => {
-      const p = project(h.lat, h.lon);
-      return (
-        <Rect
-          key={`f-${i}`}
-          x={p.x - cw / 2}
-          y={p.y - ch / 2}
-          width={cw}
-          height={ch}
-          fill={colour(h.speedKn)}
-        />
+    const { cols, rows, cells } = field;
+    // The chart projection is affine (screen x depends only on lon, y only on lat),
+    // so each sampled row is a horizontal line and each column a vertical one. That
+    // lets us paint the field as one smooth *horizontal gradient per row* instead of
+    // a grid of solid cells: the colour interpolates continuously across the row
+    // (no hard column edges — the "tiles"), and stacking thin rows gives a fine
+    // vertical step. This is the PredictWind look without an SVG blur filter (which
+    // react-native-svg lacks). Overlap the strips slightly so no seam shows.
+    const xLeft = project(cells[0].lat, cells[0].lon).x;
+    const xRight = project(cells[cols - 1].lat, cells[cols - 1].lon).x;
+    const ch = (height / (rows - 1)) * 1.15;
+    const gradients: React.ReactElement[] = [];
+    const strips: React.ReactElement[] = [];
+    for (let r = 0; r < rows; r += 1) {
+      const base = r * cols;
+      const yc = project(cells[base].lat, cells[base].lon).y;
+      const gid = `fg-${uid}-${r}`;
+      const stops: React.ReactElement[] = [];
+      for (let c = 0; c < cols; c += 1) {
+        stops.push(
+          <Stop key={c} offset={c / (cols - 1)} stopColor={colour(cells[base + c].speedKn)} />
+        );
+      }
+      gradients.push(
+        // userSpaceOnUse + pad spread: the gradient runs between the first and last
+        // column centres and holds the edge colours out to the chart border, so the
+        // full-width strip fills cleanly.
+        <LinearGradient
+          key={r}
+          id={gid}
+          gradientUnits="userSpaceOnUse"
+          x1={xLeft}
+          y1={0}
+          x2={xRight}
+          y2={0}
+        >
+          {stops}
+        </LinearGradient>
       );
-    });
-  }, [project, field, layer, width, height]);
+      strips.push(
+        <Rect key={r} x={0} y={yc - ch / 2} width={width} height={ch} fill={`url(#${gid})`} />
+      );
+    }
+    return (
+      <>
+        <Defs>{gradients}</Defs>
+        {strips}
+      </>
+    );
+  }, [project, field, layer, width, height, uid]);
 
   const landLayer = useMemo(() => {
     if (!project || !land) return null;

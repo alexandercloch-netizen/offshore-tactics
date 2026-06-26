@@ -133,13 +133,13 @@ export function sampleFlow(
 // to a small pixel pitch keeps the colour step between neighbours below perception
 // on any course, and the caps keep the (memoised, static) SVG node count sane.
 export function fieldResolution(width: number, height: number): { cols: number; rows: number } {
-  const PITCH = 12; // px per cell on a big chart — fine enough to blend
-  // The floor is the real lever: a long passage varies enough across the chart
-  // that even a small phone map needs plenty of samples or the colour steps tile.
-  // The pixel term only adds density on larger charts; the caps bound the (static,
-  // memoised) node count.
-  const cols = Math.max(40, Math.min(56, Math.round((width || 1) / PITCH)));
-  const rows = Math.max(36, Math.min(64, Math.round((height || 1) / PITCH)));
+  // The field is painted as one smooth horizontal gradient per row (see RouteMap),
+  // so columns set the (already-interpolated) horizontal shape — a moderate count
+  // is plenty — while rows set the vertical step, which must be fine or thin
+  // horizontal bands show between strips. Hence rows are sampled denser than cols.
+  // Caps bound the (static, memoised) gradient/stop node count.
+  const cols = Math.max(40, Math.min(56, Math.round((width || 1) / 12)));
+  const rows = Math.max(60, Math.min(100, Math.round((height || 1) / 7)));
   return { cols, rows };
 }
 
