@@ -309,9 +309,11 @@ export const RouteMap: React.FC<RouteMapProps> = ({
 
         <G clipPath={`url(#${frameId})`}>
           {fieldLayer}
-          {landLayer}
 
-          {/* The live flow: particles drifting with the wind (or the tide). */}
+          {/* The live flow: particles drifting with the wind (or the tide). Drawn
+              *under* the land so the coastline occludes them — the colour field is
+              already hidden on land, and tide/wind streaks shouldn't run over the
+              island. */}
           {animate && field ? (
             <WindParticles
               cells={field.cells}
@@ -325,6 +327,8 @@ export const RouteMap: React.FC<RouteMapProps> = ({
               height={height}
             />
           ) : null}
+
+          {landLayer}
 
           {/* Drifting pressure system (wind layer only): a puff or a hole. */}
           {feature && layer === 'wind' ? (
