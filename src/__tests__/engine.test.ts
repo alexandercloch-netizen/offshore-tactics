@@ -443,6 +443,24 @@ describe('buildResult', () => {
     expect(result.prizeMoney).toBe(0);
     expect(result.retired).toBe(true);
   });
+
+  it('captures finish-drama facts (winner, nearest rival, gap) on a finish', () => {
+    const result = buildResult(baseState(), terminalOutcome(3, true, false));
+    // The corrected winner is named, and the player has a nearest neighbour with
+    // a non-negative corrected gap — all read off the finishing fleet.
+    expect(typeof result.correctedWinnerName).toBe('string');
+    expect(result.correctedWinnerName!.length).toBeGreaterThan(0);
+    expect(typeof result.nearestRivalName).toBe('string');
+    expect(result.nearestCorrectedGapSeconds).toBeGreaterThanOrEqual(0);
+    expect(typeof result.nearestRivalAhead).toBe('boolean');
+  });
+
+  it('carries no finish-drama facts on a retirement', () => {
+    const result = buildResult(baseState(), terminalOutcome(20, false, true));
+    expect(result.correctedWinnerName).toBeUndefined();
+    expect(result.nearestRivalName).toBeUndefined();
+    expect(result.nearestCorrectedGapSeconds).toBeUndefined();
+  });
 });
 
 describe('data integrity', () => {

@@ -312,6 +312,69 @@ export function finalPosition(fleet: Competitor[], playerElapsedHours: number): 
   return ahead + 1;
 }
 
+// One boat in the corrected-time standings: its name, its handicap time so far,
+// and whether it's the player (so the UI can highlight the player's line and the
+// debrief can name a neighbour). `correctedHours` is the boat's elapsed (actual
+// or projected) × its rating — the same number that ranks `correctedPosition`.
+export interface CorrectedStanding {
+  id: string;
+  name: string;
+  correctedHours: number;
+  isPlayer: boolean;
+}
+
+// The whole fleet ranked on CORRECTED (handicap) time — the player folded in —
+// at the given moment. Read-only over the existing competitor state: it projects
+// each still-racing boat's finish from its pace exactly as `correctedPosition`
+// does, so the live strip and the finish facts agree with the official result.
+// Retired boats drop out. Pure.
+export function correctedStandings(
+  fleet: Competitor[],
+  totalNm: number,
+  playerElapsedHours: number,
+  playerTcc: number,
+  playerName: string
+): CorrectedStanding[] {
+  const rows: CorrectedStanding[] = fleet
+    .filter((c) => !c.retired)
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
+      correctedHours: projectedElapsed(c, playerElapsedHours, totalNm) * c.ratingTcc,
+      isPlayer: false,
+    }));
+  rows.push({
+    id: 'player',
+    name: playerName,
+    correctedHours: playerElapsedHours * playerTcc,
+    isPlayer: true,
+  });
+  // Ties broken so the order is deterministic (player ahead on an exact tie).
+  return rows.sort(
+    (a, b) =>
+      a.correctedHours - b.correctedHours ||
+      Number(b.isPlayer) - Number(a.isPlayer) ||
+      a.id.localeCompare(b.id)
+  );
+}
+
+// The corrected-time gap, in seconds, between the player and the boat nearest to
+// them in the corrected standings (the one just ahead or just astern, whichever
+// is closer). Undefined if the player is alone. Drives the photo-finish hold and
+// the finish-debrief line. Pure, derived only from existing corrected times.
+export function nearestCorrectedGapSeconds(standings: CorrectedStanding[]): number | undefined {
+  const idx = standings.findIndex((s) => s.isPlayer);
+  if (idx < 0) return undefined;
+  const player = standings[idx].correctedHours;
+  let bestH: number | undefined;
+  for (let i = 0; i < standings.length; i += 1) {
+    if (i === idx) continue;
+    const gap = Math.abs(standings[i].correctedHours - player);
+    if (bestH === undefined || gap < bestH) bestH = gap;
+  }
+  return bestH === undefined ? undefined : bestH * 3600;
+}
+
 // Map positions of competitors still on the course, for the chart. Boats are
 // shown from the gun (distance 0 = on the start line) so the fleet is visible
 // immediately, not only once it has sailed clear of the start.

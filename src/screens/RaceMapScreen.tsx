@@ -27,6 +27,7 @@ import {
   laylines,
   polarTargetSpeed,
   raceDivision,
+  ratingTccFor,
   resolveBoatById,
   speedMadeGood,
   tacticalRead,
@@ -49,6 +50,7 @@ import WindIndicator from '../components/WindIndicator';
 import StatBar from '../components/StatBar';
 import NauticalButton from '../components/NauticalButton';
 import DecisionCockpit from '../components/DecisionCockpit';
+import LiveStandings from '../components/LiveStandings';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RaceMap'>;
 
@@ -64,6 +66,9 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
   const [activeRead, setActiveRead] = useState<TacticalRead | null>(null);
   const [paused, setPaused] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  // The live-standings strip updates on a calm cadence (~2s), not every 150ms
+  // tick, so it reads like a navigator's glance rather than a twitchy ticker.
+  const [standingsBeat, setStandingsBeat] = useState(0);
 
   const race = getRaceById(state.selectedRaceId);
   const boat = resolveBoatById(state, state.selectedBoatId);
@@ -134,6 +139,8 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
   const eventActiveRef = useRef(false);
   const helpRef = useRef(false);
   helpRef.current = showHelp;
+  // Counts ticks so the standings strip can refresh on a calm cadence (~2s).
+  const standingsTickRef = useRef(0);
 
   const goToResults = useCallback(() => {
     navigation.reset({ index: 0, routes: [{ name: 'Results' }] });
@@ -157,6 +164,9 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
     const id = setInterval(() => {
       if (paused || eventActiveRef.current || helpRef.current) return;
       const outcome = tickRef.current();
+      // Calm cadence: nudge the standings strip about every 2s (~13 ticks).
+      standingsTickRef.current += 1;
+      if (standingsTickRef.current % 13 === 0) setStandingsBeat((b) => b + 1);
       if (outcome.event) {
         eventActiveRef.current = true;
         const tempState: GameState = {
@@ -369,6 +379,19 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
         <View style={{ width: mapWidth, alignSelf: 'center' }}>
           <WindScaleLegend layer={activeLayer} />
         </View>
+
+        {state.fleet && state.fleet.length > 0 ? (
+          <View style={{ width: mapWidth, alignSelf: 'center', marginTop: spacing.md }}>
+            <LiveStandings
+              fleet={state.fleet}
+              totalNm={race.distanceNm}
+              playerElapsedHours={progress.elapsedHours}
+              playerTcc={ratingTccFor(boat)}
+              playerName={boat.name}
+              cadenceKey={standingsBeat}
+            />
+          </View>
+        ) : null}
 
         <View style={styles.progressTrack}>
           <View style={[styles.progressFill, { width: `${pct}%` }]} />

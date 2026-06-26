@@ -577,6 +577,13 @@ export interface RaceResult {
   // the matching debrief beat text, captured at finish for the results screen.
   signatureOutcome?: SignatureOutcome;
   storyDebrief?: string;
+  // ---- Finish drama ("The Duel") — additive, read-only facts about THIS race,
+  // derived from the finishing fleet's corrected times. Optional/back-compatible:
+  // old saves and the live race path are unaffected. Presentation only.
+  nearestCorrectedGapSeconds?: number; // corrected-time gap to the nearest boat (drives the photo-finish hold)
+  nearestRivalName?: string; // the boat just ahead/astern of the player on corrected time
+  nearestRivalAhead?: boolean; // true if that boat beat the player on corrected time (player chased it)
+  correctedWinnerName?: string; // who took line honours on corrected time (may be the player)
 }
 
 export interface GameState {
