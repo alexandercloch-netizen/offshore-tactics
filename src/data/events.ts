@@ -425,6 +425,8 @@ export const HAZARD_EVENTS: Record<HazardKey, GameEvent> = {
       'The tide is about to turn foul at The Needles. Push hard to make the gate before it shuts, or take the safe line in shore?',
     kind: 'hazard',
     hazard: 'tidal_gate',
+    pinToWaypoint: 'The Needles', // the signature gate — fired as the boat reaches the mark
+    storyBeat: 'race-round-island',
     choices: [
       {
         id: 'evt-hz-tidal-push',
@@ -436,6 +438,16 @@ export const HAZARD_EVENTS: Record<HazardKey, GameEvent> = {
         hullDelta: -2,
         risk: 0.4,
         field: true,
+      },
+      {
+        id: 'evt-hz-tidal-shade',
+        label: 'Shade toward the gate',
+        description: 'Edge for the fair stream without betting the lap on the timing.',
+        timeDelta: -0.3,
+        staminaDelta: -5,
+        moraleDelta: 2,
+        hullDelta: -1,
+        risk: 0.22,
       },
       {
         id: 'evt-hz-tidal-safe',
@@ -451,16 +463,18 @@ export const HAZARD_EVENTS: Record<HazardKey, GameEvent> = {
   },
   light_air: {
     id: 'evt-hz-light',
-    title: 'The Parking Lot',
+    title: 'Inside or Outside the Manitous',
     prompt:
-      'The breeze has died and boats ahead are sitting still. Do you head inshore chasing a thermal, or hold offshore and wait it out?',
+      'The Manitou Islands split the fleet. Cut inside through the passage — short and sheltered, but it can go glassy — or hold outside in the open lake for live breeze and more miles?',
     kind: 'hazard',
     hazard: 'light_air',
+    pinToWaypoint: 'Manitou Passage', // the inside/outside fork — fired at the islands
+    storyBeat: 'race-chicago-mac',
     choices: [
       {
-        id: 'evt-hz-light-inshore',
-        label: 'Chase the inshore thermal',
-        description: 'Gybe in toward the shore and gamble on a sea breeze filling.',
+        id: 'evt-hz-light-inside',
+        label: 'Cut inside the islands',
+        description: 'Take the short, sheltered passage and gamble the breeze holds in the lee.',
         timeDelta: -1.5,
         staminaDelta: -6,
         moraleDelta: 4,
@@ -469,9 +483,19 @@ export const HAZARD_EVENTS: Record<HazardKey, GameEvent> = {
         field: true,
       },
       {
-        id: 'evt-hz-light-offshore',
-        label: 'Hold offshore',
-        description: 'Stay on the rhumb line and trust the gradient breeze to return.',
+        id: 'evt-hz-light-split',
+        label: 'Edge in, keep an exit',
+        description: 'Shade toward the passage but hold a lane back out to the open lake.',
+        timeDelta: -0.3,
+        staminaDelta: -4,
+        moraleDelta: 1,
+        hullDelta: 0,
+        risk: 0.22,
+      },
+      {
+        id: 'evt-hz-light-outside',
+        label: 'Hold outside in open water',
+        description: 'Sail the extra miles for breeze you can trust to keep blowing.',
         timeDelta: 0.6,
         staminaDelta: -2,
         moraleDelta: -1,
@@ -487,11 +511,13 @@ export const HAZARD_EVENTS: Record<HazardKey, GameEvent> = {
       'The current through the strait runs hard. Time it right and it slingshots you through; time it wrong and you crawl.',
     kind: 'hazard',
     hazard: 'med_fickle',
+    pinToWaypoint: 'Strait of Messina', // the current ribbon — fired in the narrows
+    storyBeat: 'race-middle-sea',
     choices: [
       {
         id: 'evt-hz-med-time',
-        label: 'Time the current',
-        description: 'Trust the navigator and commit to the tidal window.',
+        label: 'Ride the fair-tide ribbon',
+        description: 'Trust the navigator and commit to the stream\'s slingshot window.',
         timeDelta: -1.3,
         staminaDelta: -6,
         moraleDelta: 5,
@@ -500,9 +526,19 @@ export const HAZARD_EVENTS: Record<HazardKey, GameEvent> = {
         field: true,
       },
       {
+        id: 'evt-hz-med-edge',
+        label: 'Work toward the stream',
+        description: 'Edge for the fair tide without fully committing to the window.',
+        timeDelta: -0.3,
+        staminaDelta: -4,
+        moraleDelta: 2,
+        hullDelta: 0,
+        risk: 0.2,
+      },
+      {
         id: 'evt-hz-med-steady',
-        label: 'Sail it steady',
-        description: 'Take the conservative line and accept an average passage.',
+        label: 'Hold a steady line',
+        description: 'Take the conservative line down the middle and accept an average passage.',
         timeDelta: 0.5,
         staminaDelta: -2,
         moraleDelta: 0,
@@ -599,11 +635,13 @@ export const HAZARD_EVENTS: Record<HazardKey, GameEvent> = {
   },
   island_accel: {
     id: 'evt-hz-island',
-    title: 'Acceleration Zone',
+    title: 'The Saba Funnel',
     prompt:
-      'Between the islands the trade wind funnels into a screaming gust. Sail high to load up for the blast, or bear away and play it safe?',
+      'The trade wind funnels round Saba into a screaming acceleration zone. Sail high to load up for the blast, or bear away and play it safe?',
     kind: 'hazard',
     hazard: 'island_accel',
+    pinToWaypoint: 'Saba', // the acceleration zone — fired in the Saba channel
+    storyBeat: 'race-caribbean-600',
     choices: [
       {
         id: 'evt-hz-island-high',
@@ -615,6 +653,16 @@ export const HAZARD_EVENTS: Record<HazardKey, GameEvent> = {
         hullDelta: -5,
         risk: 0.33,
         field: true,
+      },
+      {
+        id: 'evt-hz-island-work',
+        label: 'Work a trimmed angle',
+        description: 'Load up part-way but keep the boat on her feet through the gust.',
+        timeDelta: -0.3,
+        staminaDelta: -5,
+        moraleDelta: 2,
+        hullDelta: -2,
+        risk: 0.2,
       },
       {
         id: 'evt-hz-island-low',
@@ -678,6 +726,8 @@ export const HAZARD_EVENTS: Record<HazardKey, GameEvent> = {
       'The Narrows runs at up to sixteen knots. Hit the last of the ebb and you shoot through; mistime it and the flood stops you dead — or worse.',
     kind: 'hazard',
     hazard: 'tidal_rapids',
+    pinToWaypoint: 'Seymour Narrows', // the slack-water gate — fired at the Narrows
+    storyBeat: 'race-r2ak',
     choices: [
       {
         id: 'evt-hz-rapids-send',
@@ -689,6 +739,16 @@ export const HAZARD_EVENTS: Record<HazardKey, GameEvent> = {
         hullDelta: -2,
         risk: 0.4,
         field: true,
+      },
+      {
+        id: 'evt-hz-rapids-edge',
+        label: 'Feel for the easing boil',
+        description: 'Edge in as the ebb slackens — neither charging the gate nor sitting it out.',
+        timeDelta: -0.2,
+        staminaDelta: -4,
+        moraleDelta: 2,
+        hullDelta: -1,
+        risk: 0.22,
       },
       {
         id: 'evt-hz-rapids-wait',
@@ -709,6 +769,8 @@ export const HAZARD_EVENTS: Record<HazardKey, GameEvent> = {
       'Routing models disagree on the High. Dive south for stronger breeze and extra miles, or take the shorter great-circle route and risk parking?',
     kind: 'hazard',
     hazard: 'doldrums',
+    pinToWaypoint: 'Mid-Pacific (Trades)', // the High south-dive — fired at the routing fork
+    storyBeat: 'race-transpac',
     choices: [
       {
         id: 'evt-hz-doldrums-south',
@@ -720,6 +782,16 @@ export const HAZARD_EVENTS: Record<HazardKey, GameEvent> = {
         hullDelta: 0,
         risk: 0.3,
         field: true,
+      },
+      {
+        id: 'evt-hz-doldrums-shade',
+        label: 'Shade south, keep miles in hand',
+        description: 'Edge toward the trades without committing to the deep detour.',
+        timeDelta: -0.2,
+        staminaDelta: -5,
+        moraleDelta: 1,
+        hullDelta: 0,
+        risk: 0.22,
       },
       {
         id: 'evt-hz-doldrums-rhumb',
