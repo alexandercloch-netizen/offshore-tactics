@@ -11,7 +11,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EffortMode, RootStackParamList, RoutingBias } from '../types';
 import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
-import { getCrewById, getRaceById } from '../data';
+import { getCrewById, getRaceById, storylineForRace } from '../data';
 import { LANDMASSES } from '../data/landmasses';
 import { useGame } from '../store/GameContext';
 import {
@@ -62,6 +62,9 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
 
   const race = getRaceById(state.selectedRaceId);
   const boat = resolveBoatById(state, state.selectedBoatId);
+  // The race's storyline, if one is authored (text-only briefing additions).
+  const story = storylineForRace(state.selectedRaceId);
+  const briefingBeat = story?.beats.find((b) => b.kind === 'briefing');
   // Everything the player sees is the crew's *believed* forecast, read through
   // their Navigator: routes and ETAs are estimated on it, so a weak Navigator
   // plans on a fuzzier picture (and can back the wrong side). The race itself
@@ -288,6 +291,18 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
             </Text>
           </View>
 
+          {story ? (
+            <View style={styles.panel} testID="briefing-storyline">
+              <Text style={styles.panelTitle}>The Race Ahead</Text>
+              <Text style={styles.storyTheme}>{story.theme}</Text>
+              <Text style={styles.storyStakes}>{story.stakes}</Text>
+              {briefingBeat ? (
+                <Text style={styles.storyBody}>{briefingBeat.body}</Text>
+              ) : null}
+              <Text style={styles.storyCoached}>{story.coached}</Text>
+            </View>
+          ) : null}
+
           <View style={styles.panel}>
             <Text style={styles.panelTitle}>Signature Challenge</Text>
             <Text style={styles.hazard}>{race.signatureHazard}</Text>
@@ -478,6 +493,21 @@ const styles = StyleSheet.create({
   hint: { color: colors.signalGreen, fontSize: fontSize.sm, marginTop: spacing.xs },
   firstLeg: { color: colors.mist, fontSize: fontSize.sm, marginTop: spacing.xs },
   hazard: { color: colors.mist, fontSize: fontSize.sm, lineHeight: 20 },
+  storyTheme: {
+    color: colors.brassLight,
+    fontSize: fontSize.md,
+    fontWeight: fontWeight.bold,
+    lineHeight: 22,
+  },
+  storyStakes: { color: colors.foam, fontSize: fontSize.sm, lineHeight: 20, marginTop: spacing.sm },
+  storyBody: { color: colors.mist, fontSize: fontSize.sm, lineHeight: 20, marginTop: spacing.sm },
+  storyCoached: {
+    color: colors.signalGreen,
+    fontSize: fontSize.sm,
+    lineHeight: 20,
+    marginTop: spacing.md,
+    fontStyle: 'italic',
+  },
   tideNote: { color: colors.tide, fontSize: fontSize.sm, lineHeight: 20, marginTop: spacing.sm },
   factRow: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.md },
   fact: {

@@ -1,4 +1,4 @@
-import { GameEvent, HazardKey } from '../types';
+import { GameEvent, HazardKey, SignatureOutcome } from '../types';
 import { rnd, rndPick } from '../engine/rng';
 
 // ---------------------------------------------------------------------------
@@ -518,6 +518,8 @@ export const HAZARD_EVENTS: Record<HazardKey, GameEvent> = {
       'The navigator has found a warm eddy spinning off the Stream. Divert to ride the favourable current, or hold the direct line?',
     kind: 'hazard',
     hazard: 'gulf_stream',
+    pinToWaypoint: 'Gulf Stream', // the warm-eddy hunt — fired at the Stream crossing
+    storyBeat: 'race-newport-bermuda',
     choices: [
       {
         id: 'evt-hz-gulf-ride',
@@ -529,6 +531,16 @@ export const HAZARD_EVENTS: Record<HazardKey, GameEvent> = {
         hullDelta: 0,
         risk: 0.34,
         field: true,
+      },
+      {
+        id: 'evt-hz-gulf-shade',
+        label: 'Shade toward the warm water',
+        description: 'Edge off the rhumb for a touch of the push without fully committing.',
+        timeDelta: -0.4,
+        staminaDelta: -5,
+        moraleDelta: 2,
+        hullDelta: 0,
+        risk: 0.22,
       },
       {
         id: 'evt-hz-gulf-direct',
@@ -549,6 +561,8 @@ export const HAZARD_EVENTS: Record<HazardKey, GameEvent> = {
       'A gale is building as you approach the Rock. Carry sail to round it quickly, or back off and round it safe in the rising sea?',
     kind: 'hazard',
     hazard: 'celtic_weather',
+    pinToWaypoint: 'Fastnet Rock', // the race's signature set-piece, fired at the mark
+    storyBeat: 'race-fastnet',
     choices: [
       {
         id: 'evt-hz-celtic-press',
@@ -560,6 +574,16 @@ export const HAZARD_EVENTS: Record<HazardKey, GameEvent> = {
         hullDelta: -10,
         risk: 0.36,
         field: true,
+      },
+      {
+        id: 'evt-hz-celtic-shade',
+        label: 'Carry a shortened rig',
+        description: 'A reef in but still driving — round her quick-ish without burying the boat.',
+        timeDelta: 0.2,
+        staminaDelta: -7,
+        moraleDelta: 2,
+        hullDelta: -5,
+        risk: 0.2,
       },
       {
         id: 'evt-hz-celtic-ease',
@@ -611,6 +635,8 @@ export const HAZARD_EVENTS: Record<HazardKey, GameEvent> = {
       'A violent southerly change slams across Bass Strait. Drive the boat hard into it for the miles, or run off and survive the worst?',
     kind: 'hazard',
     hazard: 'bass_strait',
+    pinToWaypoint: 'Bass Strait', // the Buster positioning — fired in the Strait
+    storyBeat: 'race-sydney-hobart',
     choices: [
       {
         id: 'evt-hz-bass-drive',
@@ -622,6 +648,16 @@ export const HAZARD_EVENTS: Record<HazardKey, GameEvent> = {
         hullDelta: -14,
         risk: 0.42,
         field: true,
+      },
+      {
+        id: 'evt-hz-bass-work',
+        label: 'Work a holding angle',
+        description: 'Crack off a little and work the boat through the change under control.',
+        timeDelta: 0.1,
+        staminaDelta: -8,
+        moraleDelta: 2,
+        hullDelta: -7,
+        risk: 0.24,
       },
       {
         id: 'evt-hz-bass-run',
@@ -734,4 +770,20 @@ export function pickEventForRace(shown: string[] = []): GameEvent {
   // repeating until all of them have been seen.
   const everyday = [...WEATHER_EVENTS, ...MORALE_EVENTS, ...GENERIC_EVENTS];
   return pickFresh(everyday, seen);
+}
+
+// Classify which signature choice the player made for the storyline debrief.
+// The fork is authored as bold (the field-resolved gamble) / safe (the lowest-
+// risk, dependable option) / hedge (the middle). Derived from the choices
+// themselves so a re-tuned event keeps mapping correctly without a second list.
+export function signatureOutcomeFor(
+  event: GameEvent,
+  choiceId: string
+): SignatureOutcome {
+  const bold = event.choices.find((c) => c.field);
+  if (bold && choiceId === bold.id) return 'bold';
+  // The safe option is the calmest call: the lowest authored risk.
+  const safe = event.choices.reduce((a, b) => (b.risk < a.risk ? b : a), event.choices[0]);
+  if (safe && choiceId === safe.id) return 'safe';
+  return 'hedge';
 }

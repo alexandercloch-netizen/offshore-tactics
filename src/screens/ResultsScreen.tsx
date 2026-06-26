@@ -124,6 +124,13 @@ export const ResultsScreen: React.FC<Props> = ({ navigation }) => {
         <Text style={styles.summary}>{result.summary}</Text>
       </View>
 
+      {result.storyDebrief ? (
+        <View style={styles.summaryCard} testID="results-debrief">
+          <Text style={styles.storyTitle}>The Story of the Race</Text>
+          <Text style={styles.summary}>{result.storyDebrief}</Text>
+        </View>
+      ) : null}
+
       <Debrief result={result} width={width} />
 
       <View style={styles.fundsCard}>
@@ -282,6 +289,14 @@ const styles = StyleSheet.create({
     color: colors.foam,
     fontSize: fontSize.md,
     lineHeight: 22,
+  },
+  storyTitle: {
+    color: colors.brassLight,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.bold,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: spacing.sm,
   },
   debriefTitle: {
     color: colors.foam,
