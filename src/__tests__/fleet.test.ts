@@ -2,10 +2,12 @@ import {
   advanceFleet,
   competitorPoints,
   correctedPosition,
+  correctedStandings,
   createFleet,
   finalPosition,
   livePosition,
   madeGoodSpeed,
+  nearestCorrectedGapSeconds,
 } from '../engine/fleet';
 import { mulberry32, resetRng, setRng } from '../engine/rng';
 import { createWindField } from '../engine/wind';
@@ -170,6 +172,82 @@ describe('standings', () => {
       { id: 'a', name: 'A', speedMul: 1, ratingTcc: 1, targetHours: 100, distanceNm: race.distanceNm / 2, finishedHours: null, retired: false },
     ];
     expect(correctedPosition(stillRacing, race.distanceNm, 50, 1.0)).toBe(1);
+  });
+});
+
+describe('correctedStandings & nearest gap (The Duel)', () => {
+  const finished: Competitor[] = [
+    // A: fast on the water (40h) but rates high — corrected 52h.
+    { id: 'a', name: 'A', speedMul: 1.2, ratingTcc: 1.3, targetHours: 100, distanceNm: race.distanceNm, finishedHours: 40, retired: false },
+    // B: slower (50h), rates 1.0 — corrected 50h.
+    { id: 'b', name: 'B', speedMul: 0.9, ratingTcc: 1.0, targetHours: 100, distanceNm: race.distanceNm, finishedHours: 50, retired: false },
+    // C: retired — must drop out of the standings.
+    { id: 'c', name: 'C', speedMul: 1, ratingTcc: 1, targetHours: 100, distanceNm: 10, finishedHours: null, retired: true },
+  ];
+
+  it('ranks the whole fleet plus the player on corrected time, ascending', () => {
+    // Player: 48h elapsed at TCC 1.0 → corrected 48h, the fastest corrected.
+    const s = correctedStandings(finished, race.distanceNm, 48, 1.0, 'Me');
+    expect(s.map((r) => r.name)).toEqual(['Me', 'B', 'A']); // 48 < 50 < 52
+    expect(s.filter((r) => r.isPlayer)).toHaveLength(1);
+    // Retired boats are excluded.
+    expect(s.some((r) => r.name === 'C')).toBe(false);
+    // Sorted ascending and agrees with correctedPosition (player is 1st).
+    for (let i = 1; i < s.length; i += 1) {
+      expect(s[i].correctedHours).toBeGreaterThanOrEqual(s[i - 1].correctedHours);
+    }
+    expect(s.findIndex((r) => r.isPlayer) + 1).toBe(
+      correctedPosition(finished, race.distanceNm, 48, 1.0)
+    );
+  });
+
+  it('reports the corrected gap to the nearest boat in seconds', () => {
+    // Player corrected 51h: nearest is B (50h) at 1h = 3600s, not A (52h, also 1h).
+    const s = correctedStandings(finished, race.distanceNm, 51, 1.0, 'Me');
+    const gap = nearestCorrectedGapSeconds(s);
+    expect(gap).toBeCloseTo(3600, 0);
+  });
+
+  it('returns undefined for a nearest gap when the player is alone', () => {
+    const solo = correctedStandings([], race.distanceNm, 50, 1.0, 'Me');
+    expect(nearestCorrectedGapSeconds(solo)).toBeUndefined();
+  });
+
+  it('makes a ~10s photo finish reachable but rare across plausible finishes', () => {
+    // Sail a real seeded fleet to the finish, then sweep the player's finish time
+    // finely across the band the fleet finishes in. A sub-10s corrected gap must
+    // occur for SOME finish times (so the photo-finish beat is genuinely
+    // reachable) yet stay a small fraction of them (so it isn't the default) —
+    // which validates the ~10s threshold is plausible, not always/never.
+    const PHOTO = 10;
+    setRng(mulberry32(7));
+    const field = createWindField(race);
+    let fleet = createFleet(race, race.divisions.pro, undefined, boat);
+    for (let i = 0; i < 80 && fleet.some((c) => c.finishedHours === null && !c.retired); i += 1) {
+      fleet = advanceFleet(fleet, race, field, i * 2, 2);
+    }
+    const tcc = boat.ratingTcc ?? 1;
+    // The fleet's corrected-time span sets a realistic player-finish band.
+    const corrected = fleet
+      .filter((c) => !c.retired)
+      .map((c) => (c.finishedHours ?? race.recordTimeHours * 2) * c.ratingTcc);
+    const lo = Math.min(...corrected) / tcc;
+    const hi = Math.max(...corrected) / tcc;
+    let tight = 0;
+    let total = 0;
+    const steps = 400;
+    for (let k = 0; k <= steps; k += 1) {
+      const playerHours = lo + ((hi - lo) * k) / steps;
+      const s = correctedStandings(fleet, race.distanceNm, playerHours, tcc, boat.name);
+      const gap = nearestCorrectedGapSeconds(s);
+      if (gap !== undefined) {
+        total += 1;
+        if (gap <= PHOTO) tight += 1;
+      }
+    }
+    expect(total).toBeGreaterThan(0);
+    expect(tight).toBeGreaterThan(0); // reachable
+    expect(tight / total).toBeLessThan(0.25); // but rare, not the default
   });
 });
 

@@ -48,6 +48,13 @@ test('a full race can be played from start to finish', async ({ page }) => {
   // Sail to the finish, answering any tactical decisions that interrupt.
   await playToResults(page);
 
+  // The staged finish reveal plays over the results; tap it to skip straight to
+  // the debrief (it also auto-advances, so this only hurries it along).
+  const reveal = page.getByTestId('finish-reveal-overlay');
+  if (await reveal.isVisible().catch(() => false)) {
+    await reveal.click().catch(() => undefined);
+  }
+
   await expect(page.getByRole('button', { name: 'Enter Another Race' })).toBeVisible({
     timeout: 30_000,
   });

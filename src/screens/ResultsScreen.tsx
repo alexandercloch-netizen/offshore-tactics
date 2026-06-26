@@ -1,16 +1,20 @@
-import React from 'react';
-import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { RootStackParamList } from '../types';
+import { RaceResult, RootStackParamList } from '../types';
 import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
 import { getRaceById } from '../data';
 import { LANDMASSES } from '../data/landmasses';
 import { useGame } from '../store/GameContext';
-import { formatDuration } from '../engine/gameEngine';
+import { formatDuration, formatGap } from '../engine/gameEngine';
 import { courseAspect } from '../engine/geo';
 import NauticalButton from '../components/NauticalButton';
 import RouteMap from '../components/RouteMap';
+
+// A corrected gap this tight (seconds) is a photo finish — rare by design — and
+// earns the extra suspense beat before the corrected result is shown.
+const PHOTO_FINISH_SECONDS = 10;
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Results'>;
 
@@ -25,6 +29,9 @@ export const ResultsScreen: React.FC<Props> = ({ navigation }) => {
   const { width } = useWindowDimensions();
   const { state, prepareNextRace, money } = useGame();
   const result = state.lastResult;
+  // The staged finish reveal plays once over the results, then reveals the full
+  // debrief. A finisher gets the staged sequence; a retirement/DNF skips it.
+  const [revealDone, setRevealDone] = useState(!result?.finished);
 
   const goHome = () => {
     prepareNextRace();
@@ -47,6 +54,11 @@ export const ResultsScreen: React.FC<Props> = ({ navigation }) => {
 
   const podium = result.finished && result.position <= 3;
   const won = result.finished && result.position === 1;
+
+  // The facts-only finish line: who took line honours on corrected time, and how
+  // the player fared against their nearest neighbour. Only true facts about THIS
+  // race — never invented tactics or reasons.
+  const finishLine = finishDebriefLine(result);
   const headline = result.retired
     ? 'RETIRED'
     : won
@@ -63,6 +75,7 @@ export const ResultsScreen: React.FC<Props> = ({ navigation }) => {
         : colors.foam;
 
   return (
+    <View style={styles.screen} testID="results-reveal">
     <ScrollView
       style={styles.screen}
       contentContainerStyle={[
@@ -124,6 +137,12 @@ export const ResultsScreen: React.FC<Props> = ({ navigation }) => {
         <Text style={styles.summary}>{result.summary}</Text>
       </View>
 
+      {finishLine ? (
+        <View style={styles.finishLineCard} testID="finish-debrief-line">
+          <Text style={styles.finishLineText}>{finishLine}</Text>
+        </View>
+      ) : null}
+
       {result.storyDebrief ? (
         <View style={styles.summaryCard} testID="results-debrief">
           <Text style={styles.storyTitle}>The Story of the Race</Text>
@@ -154,8 +173,103 @@ export const ResultsScreen: React.FC<Props> = ({ navigation }) => {
         <NauticalButton label="Back to Harbour" variant="secondary" onPress={goHome} />
       </View>
     </ScrollView>
+      {!revealDone ? (
+        <FinishReveal result={result} insets={insets} onDone={() => setRevealDone(true)} />
+      ) : null}
+    </View>
   );
 };
+
+// The staged finish reveal: a short, restrained sequence that lands the handicap
+// drama. Stage 1 shows the line-honours placing + elapsed, Stage 2 holds while
+// the handicap is applied (with a rare photo-finish beat first), then it lifts to
+// reveal the full results underneath. Tap anywhere to skip straight through — so
+// replays and e2e are never gated on the animation. Pure setTimeout timers, so it
+// runs identically on iOS, Android and web.
+type RevealStage = 'crossed' | 'photo' | 'correcting';
+
+const FinishReveal: React.FC<{
+  result: RaceResult;
+  insets: { top: number; bottom: number };
+  onDone: () => void;
+}> = ({ result, insets, onDone }) => {
+  const isPhotoFinish =
+    result.nearestCorrectedGapSeconds != null &&
+    result.nearestCorrectedGapSeconds <= PHOTO_FINISH_SECONDS;
+  const [stage, setStage] = useState<RevealStage>('crossed');
+  // Guard against a double-fire (a skip tap racing the final timer).
+  const finished = useRef(false);
+  const finish = () => {
+    if (finished.current) return;
+    finished.current = true;
+    onDone();
+  };
+
+  useEffect(() => {
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    // Stage 1 → (photo) → correcting → done.
+    timers.push(setTimeout(() => setStage(isPhotoFinish ? 'photo' : 'correcting'), 1000));
+    if (isPhotoFinish) {
+      timers.push(setTimeout(() => setStage('correcting'), 1000 + 1500));
+    }
+    const correctingAt = 1000 + (isPhotoFinish ? 1500 : 0);
+    timers.push(setTimeout(finish, correctingAt + 1800));
+    return () => timers.forEach(clearTimeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPhotoFinish]);
+
+  const onWater = result.onWaterPosition ?? result.position;
+
+  return (
+    <Pressable
+      style={[styles.revealOverlay, { paddingTop: insets.top, paddingBottom: insets.bottom }]}
+      onPress={finish}
+      testID="finish-reveal-overlay"
+    >
+      {stage === 'crossed' ? (
+        <View style={styles.revealStage}>
+          <Text style={styles.revealKicker}>CROSSED THE LINE</Text>
+          <Text style={styles.revealPlace}>{ordinal(onWater)}</Text>
+          <Text style={styles.revealSub}>on the water</Text>
+          <Text style={styles.revealTime}>{formatDuration(result.elapsedHours)} elapsed</Text>
+        </View>
+      ) : stage === 'photo' ? (
+        <View style={styles.revealStage}>
+          <Text style={styles.revealKicker}>PHOTO FINISH</Text>
+          <Text style={styles.revealCorrecting}>Analyzing the line…</Text>
+        </View>
+      ) : (
+        <View style={styles.revealStage}>
+          <Text style={styles.revealKicker}>CORRECTING TIME…</Text>
+          <Text style={styles.revealCorrecting}>Applying the handicap</Text>
+        </View>
+      )}
+      <Text style={styles.revealSkip}>Tap to skip</Text>
+    </Pressable>
+  );
+};
+
+// The facts-only finish line: line honours on corrected time + the player's
+// nearest neighbour and the margin between them. Strictly true facts captured at
+// the finish — never a reason a boat won, never invented rivalry.
+function finishDebriefLine(result: RaceResult): string | null {
+  if (!result.finished || result.retired) return null;
+  const parts: string[] = [];
+  if (result.correctedWinnerName) {
+    parts.push(`Line honours to ${result.correctedWinnerName} on corrected time.`);
+  }
+  if (result.nearestRivalName && result.nearestCorrectedGapSeconds != null) {
+    const margin = formatGap(result.nearestCorrectedGapSeconds);
+    // Truthful framing of the margin: if the nearest boat beat the player on
+    // corrected time the player chased it; otherwise the player held it off.
+    if (result.nearestRivalAhead) {
+      parts.push(`${result.nearestRivalName} edged you by ${margin} on corrected time.`);
+    } else {
+      parts.push(`You held off ${result.nearestRivalName} by ${margin} on corrected time.`);
+    }
+  }
+  return parts.length ? parts.join(' ') : null;
+}
 
 // The tactician's debrief: the line you sailed (solid) against the weather-optimal
 // line (green dashed), and how your time compared with a clean run on it.
@@ -361,6 +475,68 @@ const styles = StyleSheet.create({
   },
   actions: {
     gap: spacing.md,
+  },
+  finishLineCard: {
+    backgroundColor: colors.navy,
+    borderRadius: radius.md,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.brass,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+  finishLineText: {
+    color: colors.foam,
+    fontSize: fontSize.sm,
+    lineHeight: 20,
+  },
+  revealOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: colors.abyss,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xl,
+  },
+  revealStage: {
+    alignItems: 'center',
+  },
+  revealKicker: {
+    color: colors.mist,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.bold,
+    letterSpacing: 4,
+    textTransform: 'uppercase',
+    marginBottom: spacing.md,
+  },
+  revealPlace: {
+    color: colors.foam,
+    fontSize: 72,
+    fontWeight: fontWeight.bold,
+  },
+  revealSub: {
+    color: colors.mist,
+    fontSize: fontSize.md,
+    marginTop: spacing.xs,
+  },
+  revealTime: {
+    color: colors.brassLight,
+    fontSize: fontSize.md,
+    fontWeight: fontWeight.bold,
+    marginTop: spacing.md,
+  },
+  revealCorrecting: {
+    color: colors.foam,
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.medium,
+    marginTop: spacing.xs,
+  },
+  revealSkip: {
+    position: 'absolute',
+    bottom: spacing.xxl,
+    color: colors.slate,
+    fontSize: fontSize.xs,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
   },
 });
 

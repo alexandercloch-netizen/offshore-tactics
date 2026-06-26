@@ -57,7 +57,14 @@ import { clearPolyline, planRoute, WindSampler } from './router';
 import { currentAlong, sampleCurrent, tideAlong } from './current';
 import { LANDMASSES, LandPolygon } from '../data/landmasses';
 import { pointInLand, segmentCrossesLand, snapToWater } from './land';
-import { advanceFleet, correctedPosition, finalPosition, livePosition } from './fleet';
+import {
+  advanceFleet,
+  correctedPosition,
+  correctedStandings,
+  finalPosition,
+  livePosition,
+  nearestCorrectedGapSeconds,
+} from './fleet';
 
 export const clamp = (value: number, min = 0, max = 100): number =>
   Math.max(min, Math.min(max, value));
@@ -1524,6 +1531,40 @@ export function buildResult(state: GameState, outcome: StepResult): RaceResult {
     storyDebrief = debriefBeat(story, signatureOutcome)?.body;
   }
 
+  // Finish drama facts ("The Duel"): rank the whole fleet — the player folded in —
+  // on corrected time at the line, then read off the corrected winner, the
+  // player's nearest neighbour, and the gap to them. Pure, read-only over the
+  // existing competitor state; computed only for a genuine finish so a retirement
+  // or DNF carries none of it.
+  let nearestGapSeconds: number | undefined;
+  let nearestRivalName: string | undefined;
+  let nearestRivalAhead: boolean | undefined;
+  let correctedWinnerName: string | undefined;
+  if (finished && !retired) {
+    const standings = correctedStandings(
+      state.fleet ?? [],
+      race.distanceNm,
+      elapsedHours,
+      tcc,
+      boat?.name ?? 'Your boat'
+    );
+    correctedWinnerName = standings[0]?.name;
+    nearestGapSeconds = nearestCorrectedGapSeconds(standings);
+    const playerIdx = standings.findIndex((s) => s.isPlayer);
+    if (playerIdx >= 0) {
+      const player = standings[playerIdx].correctedHours;
+      let best: { name: string; gap: number; ahead: boolean } | undefined;
+      standings.forEach((s, i) => {
+        if (i === playerIdx) return;
+        const gap = Math.abs(s.correctedHours - player);
+        // ahead = this boat is faster on corrected time (the player chased it).
+        if (!best || gap < best.gap) best = { name: s.name, gap, ahead: s.correctedHours < player };
+      });
+      nearestRivalName = best?.name;
+      nearestRivalAhead = best?.ahead;
+    }
+  }
+
   return {
     raceId: race.id,
     raceName: race.name,
@@ -1544,6 +1585,10 @@ export function buildResult(state: GameState, outcome: StepResult): RaceResult {
     optimalHours,
     signatureOutcome,
     storyDebrief,
+    nearestCorrectedGapSeconds: nearestGapSeconds,
+    nearestRivalName,
+    nearestRivalAhead,
+    correctedWinnerName,
   };
 }
 
@@ -1556,4 +1601,19 @@ export function formatDuration(hours: number): string {
   const days = Math.floor(hours / 24);
   const remHours = Math.round(hours - days * 24);
   return `${days}d ${remHours}h`;
+}
+
+// A short corrected-time gap (the duel margins): seconds → "3m 12s", "8s",
+// "1h 04m". Used by the finish debrief and the photo-finish copy.
+export function formatGap(seconds: number): string {
+  const s = Math.max(0, Math.round(seconds));
+  if (s < 60) return `${s}s`;
+  if (s < 3600) {
+    const m = Math.floor(s / 60);
+    const rem = s % 60;
+    return `${m}m ${rem.toString().padStart(2, '0')}s`;
+  }
+  const h = Math.floor(s / 3600);
+  const m = Math.round((s - h * 3600) / 60);
+  return `${h}h ${m.toString().padStart(2, '0')}m`;
 }
