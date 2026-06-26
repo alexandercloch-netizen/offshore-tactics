@@ -126,6 +126,23 @@ export function sampleFlow(
   return { vx: bil(field.vx), vy: bil(field.vy), kn: bil(field.speed) };
 }
 
+// Heatmap sampling density, sized to the chart's pixel dimensions rather than a
+// fixed grid. A coarse grid only reads as a smooth gradient when the wind barely
+// varies across the chart (a short course); over a long passage like Sydney–Hobart
+// the field changes enough cell-to-cell that big cells show as hard tiles. Sizing
+// to a small pixel pitch keeps the colour step between neighbours below perception
+// on any course, and the caps keep the (memoised, static) SVG node count sane.
+export function fieldResolution(width: number, height: number): { cols: number; rows: number } {
+  const PITCH = 12; // px per cell on a big chart — fine enough to blend
+  // The floor is the real lever: a long passage varies enough across the chart
+  // that even a small phone map needs plenty of samples or the colour steps tile.
+  // The pixel term only adds density on larger charts; the caps bound the (static,
+  // memoised) node count.
+  const cols = Math.max(40, Math.min(56, Math.round((width || 1) / PITCH)));
+  const rows = Math.max(36, Math.min(64, Math.round((height || 1) / PITCH)));
+  return { cols, rows };
+}
+
 // Adapt the engine's sampled grids to the flow input. Wind names its direction by
 // origin (fromDeg); tide by set (downstream) — buildFlowField handles the 180°.
 export function windCells(arrows: WindArrow[]): FlowCell[] {

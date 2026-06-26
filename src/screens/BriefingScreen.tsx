@@ -36,7 +36,7 @@ import {
 } from '../engine/wind';
 import { sampleTideField } from '../engine/current';
 import RouteMap, { chartViewportBounds, FlowField } from '../components/RouteMap';
-import { FlowLayer, windCells, tideCells } from '../components/flowField';
+import { FlowLayer, windCells, tideCells, fieldResolution } from '../components/flowField';
 import MapLayerToggle from '../components/MapLayerToggle';
 import WindIndicator from '../components/WindIndicator';
 import NauticalButton from '../components/NauticalButton';
@@ -130,8 +130,9 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
   // are sampled to the whole chart viewport, not just the course box, so the
   // weather fills the map rather than sitting short of the edges.
   const bounds = chartViewportBounds(race.waypoints, mapWidth, mapHeight);
-  const fieldCols = 28;
-  const fieldRows = Math.max(12, Math.min(34, Math.round(fieldCols * courseAspect(race.waypoints))));
+  // Density sized to the chart pixels so the heatmap stays a smooth gradient even
+  // on a long passage (a coarse fixed grid tiles on Sydney–Hobart-scale courses).
+  const { cols: fieldCols, rows: fieldRows } = fieldResolution(mapWidth, mapHeight);
   // The chart shows the crew's *forecast*, not ground truth: it grows fuzzier the
   // further out you scrub, and a sharp Navigator keeps it trustworthy for longer.
   const confidence = forecastConfidence(navSkill, forecastHour);
