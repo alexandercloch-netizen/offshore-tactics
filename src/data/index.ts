@@ -18,7 +18,14 @@ export {
   HAZARD_EVENTS,
   pickEvent,
   pickEventForRace,
+  signatureOutcomeFor,
 } from './events';
+export {
+  STORYLINES,
+  storylineForRace,
+  signatureBeat,
+  debriefBeat,
+} from './storylines';
 
 export const STARTING_FUNDS = 250000;
 

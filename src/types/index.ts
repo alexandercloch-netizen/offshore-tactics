@@ -395,7 +395,43 @@ export interface GameEvent {
   kind: EventKind;
   pointOfSail?: PointOfSail;
   hazard?: HazardKey; // present on hazard-specific events
+  // Storyline wiring (optional, back-compatible). A storied race's signature
+  // event is pinned to a course mark: it fires deterministically as the boat
+  // reaches `pinToWaypoint`, exactly once, and links the narrative `storyBeat`
+  // shown in the modal. Un-storied events leave both undefined and behave as
+  // before (drawn on the everyday cadence near their hazard mark).
+  pinToWaypoint?: string; // waypoint name where this signature decision fires
+  storyBeat?: string; // id of the Storyline beat this decision belongs to
   choices: TacticalChoice[];
+}
+
+// ---- Race storylines ----
+
+// How a signature choice is categorised for the debrief: the bold (field-
+// resolved) gamble, the dependable safe option, or a middle hedge. Mapped from
+// the choice the player actually made at the pinned signature decision.
+export type SignatureOutcome = 'bold' | 'safe' | 'hedge';
+
+// A single authored narrative beat in a race's storyline. `briefing` beats set
+// the scene before the gun; the pinned `beat` is the signature decision's framing
+// (tied to a course mark via `pinnedWaypoint`); `debrief` beats are the post-race
+// payoff, keyed to which signature outcome the player chose.
+export interface StoryBeat {
+  kind: 'briefing' | 'beat' | 'debrief';
+  body: string; // cockpit-legible narrative prose
+  pinnedWaypoint?: string; // for the signature beat: the mark it fires at
+  outcome?: SignatureOutcome; // for debrief beats: the choice this beat answers
+}
+
+// A self-contained per-race storyline: a theme, the stakes, and a small set of
+// beats (a briefing scene, the pinned signature beat, and bold/safe/hedge
+// debriefs). No cross-race continuity and no persisted meta-state.
+export interface Storyline {
+  raceId: string;
+  theme: string; // one-line framing shown under the briefing header
+  stakes: string; // what's on the line — the dramatic hook
+  coached: string; // the Navigator's tactical note for the signature challenge
+  beats: StoryBeat[];
 }
 
 // Velocity-made-good preview shown in the tactical decision modal: the current
@@ -444,6 +480,12 @@ export interface RaceProgress {
   // speed multiplier that fades linearly to 1 over `startFadeNm` of progress.
   startSpeedMul?: number; // 1 = neutral; >1 clean air, <1 buried/dirty air
   startFadeNm?: number; // distance over which the start advantage decays
+  // Storyline state (storied races only — undefined leaves behaviour identical).
+  // The signature decision is a guaranteed set-piece: this latch flips true once
+  // it has fired, so it can never fire twice or be skipped. `signatureChoiceId`
+  // records the choice the player made, so the debrief can pick its matching beat.
+  signatureFired?: boolean;
+  signatureChoiceId?: string; // id of the TacticalChoice taken at the signature decision
 }
 
 // ---- Race start sequence ----
@@ -531,6 +573,10 @@ export interface RaceResult {
   trail?: GeoPoint[]; // the track actually sailed
   optimalRoute?: GeoPoint[]; // the weather-optimal line for contrast
   optimalHours?: number; // ETA a clean run on the optimal line would have made
+  // Storyline debrief (storied races only): which signature choice was made and
+  // the matching debrief beat text, captured at finish for the results screen.
+  signatureOutcome?: SignatureOutcome;
+  storyDebrief?: string;
 }
 
 export interface GameState {

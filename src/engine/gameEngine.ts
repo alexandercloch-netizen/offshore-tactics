@@ -39,7 +39,8 @@ import {
   getRaceById,
   pickEventForRace,
 } from '../data';
-import { HAZARD_EVENTS } from '../data/events';
+import { HAZARD_EVENTS, signatureOutcomeFor } from '../data/events';
+import { debriefBeat, storylineForRace } from '../data/storylines';
 import { rnd, rndRange } from './rng';
 import {
   angularDelta,
@@ -1146,6 +1147,8 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
     legStartNm: prev.legStartNm ?? 0,
     startSpeedMul: prev.startSpeedMul,
     startFadeNm: prev.startFadeNm,
+    signatureFired: prev.signatureFired,
+    signatureChoiceId: prev.signatureChoiceId,
   };
 
   // Advance the AI fleet through the same elapsed time, wind and tide, then rank.
@@ -1161,14 +1164,49 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
   // are drawn on the usual geometric cadence, never repeating until exhausted.
   let event: GameEvent | null = null;
   const canDecide = !finished && !retired && prev.decisionsTaken < MAX_DECISIONS;
-  const hazardId = HAZARD_EVENTS[race.hazard].id;
+  const hazardEvent = HAZARD_EVENTS[race.hazard];
+  const hazardId = hazardEvent.id;
+  // A storied race pins its signature decision to a named mark and guarantees it
+  // exactly once via the `signatureFired` latch on progress; an un-storied race
+  // keeps the original behaviour untouched (gated on shownEventIds), so its
+  // stepRace output stays byte-identical and deterministic.
+  const story = storylineForRace(race.id);
+  const pinName = story ? hazardEvent.pinToWaypoint : undefined;
+  const pinnedMark = pinName ? marks.find((m) => m.name === pinName) : undefined;
   const hazardMark = marks.find((m) => m.name === race.hazardWaypoint);
   const nearHazard =
     hazardMark !== undefined &&
     haversineNm(adv.pos.lat, adv.pos.lon, hazardMark.lat, hazardMark.lon) <
       Math.max(total * 0.07, stepNm * 3);
+  // Has the boat reached/passed the pinned mark? It's pinned by name, so the
+  // trigger fires the first tick the boat is within striking distance of it OR
+  // has already rounded past it (so a fast step that overshoots can't skip it).
+  const reachedPinned =
+    pinnedMark !== undefined &&
+    (haversineNm(adv.pos.lat, adv.pos.lon, pinnedMark.lat, pinnedMark.lon) <
+      Math.max(total * 0.07, stepNm * 3) ||
+      nextMarkIndex > marks.indexOf(pinnedMark));
 
-  if (canDecide && nearHazard && !progress.shownEventIds.includes(hazardId)) {
+  if (canDecide && pinnedMark !== undefined) {
+    // Storied race: fire the pinned signature decision once, at its mark.
+    if (!progress.signatureFired && reachedPinned) {
+      event = hazardEvent;
+      progress.signatureFired = true;
+      progress.decisionsTaken = prev.decisionsTaken + 1;
+      progress.shownEventIds = [...progress.shownEventIds, event.id];
+      progress.nextDecisionAtNm =
+        distanceCoveredNm + rndRange(DECISION_MIN, DECISION_MAX) * total;
+    } else if (distanceCoveredNm >= prev.nextDecisionAtNm) {
+      // Suppress the generic draw on the signature tick (the branch above), but
+      // otherwise the everyday cadence runs as normal — never drawing the
+      // signature hazard (the picker excludes it).
+      progress.decisionsTaken = prev.decisionsTaken + 1;
+      progress.nextDecisionAtNm =
+        distanceCoveredNm + rndRange(DECISION_MIN, DECISION_MAX) * total;
+      event = pickEventForRace(progress.shownEventIds);
+      progress.shownEventIds = [...progress.shownEventIds, event.id];
+    }
+  } else if (canDecide && nearHazard && !progress.shownEventIds.includes(hazardId)) {
     event = HAZARD_EVENTS[race.hazard];
     progress.decisionsTaken = prev.decisionsTaken + 1;
     progress.shownEventIds = [...progress.shownEventIds, event.id];
@@ -1254,6 +1292,16 @@ export function applyDecision(state: GameState, choice: TacticalChoice): StepRes
   const DECISION_TIME_SCALE = 0.65;
   const DECISION_TIME_CAP_H = 0.5; // absolute: one call costs ~30 min on the water at most
   const lostHours = Math.min(Math.max(extraHours, 0) * DECISION_TIME_SCALE, DECISION_TIME_CAP_H);
+  // If this decision was the storied race's signature set-piece, record which
+  // choice was taken so the debrief can pick its matching beat. Detected by the
+  // choice belonging to the race's pinned hazard event — purely from the choice,
+  // so it needs no extra plumbing through the context.
+  const story = storylineForRace(race.id);
+  const hazardEvent = HAZARD_EVENTS[race.hazard];
+  const isSignatureChoice =
+    !!story &&
+    !!hazardEvent.pinToWaypoint &&
+    hazardEvent.choices.some((c) => c.id === choice.id);
   const progress: RaceProgress = {
     ...state.progress,
     elapsedHours: state.progress.elapsedHours + lostHours,
@@ -1261,6 +1309,7 @@ export function applyDecision(state: GameState, choice: TacticalChoice): StepRes
     // the next decision's "this leg" trend measures from this point.
     legStartNm: state.progress.distanceCoveredNm,
     readings: (state.progress.readings ?? []).slice(-1),
+    signatureChoiceId: isSignatureChoice ? choice.id : state.progress.signatureChoiceId,
   };
 
   // While the player handles the decision, the fleet sails on — a costly call
@@ -1463,6 +1512,18 @@ export function buildResult(state: GameState, outcome: StepResult): RaceResult {
     summary = `${ordinal(position)} of ${division.fleetSize} on corrected time in ${race.name}.${swingNote} Not the result you wanted — back to the drawing board.`;
   }
 
+  // Storyline debrief: for a storied race where the signature decision was made,
+  // map the chosen option to its outcome (bold/safe/hedge) and pull the matching
+  // beat. Absent on un-storied races, or if the player retired before the mark.
+  const story = storylineForRace(race.id);
+  const signatureChoiceId = state.progress?.signatureChoiceId;
+  let signatureOutcome: RaceResult['signatureOutcome'];
+  let storyDebrief: string | undefined;
+  if (story && signatureChoiceId) {
+    signatureOutcome = signatureOutcomeFor(HAZARD_EVENTS[race.hazard], signatureChoiceId);
+    storyDebrief = debriefBeat(story, signatureOutcome)?.body;
+  }
+
   return {
     raceId: race.id,
     raceName: race.name,
@@ -1481,6 +1542,8 @@ export function buildResult(state: GameState, outcome: StepResult): RaceResult {
     trail,
     optimalRoute,
     optimalHours,
+    signatureOutcome,
+    storyDebrief,
   };
 }
 
