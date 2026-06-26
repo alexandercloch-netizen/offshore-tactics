@@ -137,6 +137,17 @@ export const RouteMap: React.FC<RouteMapProps> = ({
 }) => {
   const ready = !!waypoints && waypoints.length >= 2;
 
+  // SVG ids must be unique per instance: two RouteMaps on the page (the race chart
+  // and the decision-cockpit chart) both define a "frame" clip and "sea"/"land"
+  // gradients. A bare url(#frame) resolves to the *first* match in the document, so
+  // the cockpit chart would clip its field to the race chart's smaller frame and
+  // leave the sea short of the edges. Scoping the ids keeps each chart's defs its own.
+  const rawId = React.useId();
+  const uid = rawId.replace(/[^a-zA-Z0-9]/g, '');
+  const frameId = `frame-${uid}`;
+  const seaId = `sea-${uid}`;
+  const landId = `land-${uid}`;
+
   // The projection is fixed for the course — recompute only on resize, not on
   // every race tick.
   const project = useMemo(
@@ -184,17 +195,20 @@ export const RouteMap: React.FC<RouteMapProps> = ({
       <Path
         key={`land-${i}`}
         d={landPath(polygon, project)}
-        fill="url(#land)"
+        fill={`url(#${landId})`}
         stroke={colors.coastline}
         strokeWidth={0.8}
         fillRule="evenodd"
       />
     ));
-  }, [project, land]);
+  }, [project, land, landId]);
 
   // Marks change only when one is rounded (nextMarkIndex), not every tick.
   const marksLayer = useMemo(() => {
     if (!project) return null;
+    // Conservative declutter: where two labelled marks land close together on the
+    // chart, flip the later one's label below its dot so the names don't overlap.
+    const placed: { x: number; y: number }[] = [];
     return waypoints.map((wp, i) => {
       const p = project(wp.lat, wp.lon);
       const isStart = wp.type === 'start';
@@ -215,13 +229,22 @@ export const RouteMap: React.FC<RouteMapProps> = ({
       const endpointLabel = isStart ? (loopCourse ? 'START / FINISH' : 'START') : 'FINISH';
       const label = isStart || isFinish ? endpointLabel : wp.name;
       const showLabel = isStart || isFinish || wp.type === 'island' || wp.type === 'mark';
+      // Default sits the label above the dot; drop it below if a recent label is
+      // crowding this spot, so closely-spaced names stop stacking.
+      let below = false;
+      if (showLabel) {
+        const crowded = placed.some((q) => Math.abs(q.x - p.x) < 48 && Math.abs(q.y - p.y) < 14);
+        below = crowded;
+        placed.push({ x: p.x, y: below ? p.y + 16 : p.y - 9 });
+      }
+      const labelY = below ? p.y + 16 : p.y - 9;
       return (
         <React.Fragment key={`${wp.name}-${i}`}>
           <Circle cx={p.x} cy={p.y} r={r} fill={fill} stroke={colors.foam} strokeWidth={isStart || isFinish ? 1.5 : 1} />
           {showLabel ? (
             <SvgText
               x={p.x}
-              y={p.y - 9}
+              y={labelY}
               fill={colors.white}
               stroke={colors.abyss}
               strokeWidth={0.6}
@@ -268,23 +291,23 @@ export const RouteMap: React.FC<RouteMapProps> = ({
     <View style={styles.container}>
       <Svg width={width} height={height}>
         <Defs>
-          <LinearGradient id="land" x1="0" y1="0" x2="0" y2="1">
+          <LinearGradient id={landId} x1="0" y1="0" x2="0" y2="1">
             <Stop offset="0" stopColor={colors.landHigh} />
             <Stop offset="1" stopColor={colors.land} />
           </LinearGradient>
-          <LinearGradient id="sea" x1="0" y1="0" x2="0" y2="1">
+          <LinearGradient id={seaId} x1="0" y1="0" x2="0" y2="1">
             <Stop offset="0" stopColor={colors.navy} />
             <Stop offset="1" stopColor={colors.abyss} />
           </LinearGradient>
-          <ClipPath id="frame">
+          <ClipPath id={frameId}>
             <Rect x={0} y={0} width={width} height={height} />
           </ClipPath>
         </Defs>
 
         {/* Deep-sea base, only visible before the field paints (or where absent). */}
-        <Rect x={0} y={0} width={width} height={height} fill={field ? colors.deepSea : 'url(#sea)'} rx={radius.sm} />
+        <Rect x={0} y={0} width={width} height={height} fill={field ? colors.deepSea : `url(#${seaId})`} rx={radius.sm} />
 
-        <G clipPath="url(#frame)">
+        <G clipPath={`url(#${frameId})`}>
           {fieldLayer}
           {landLayer}
 

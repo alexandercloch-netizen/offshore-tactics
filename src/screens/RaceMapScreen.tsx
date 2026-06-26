@@ -48,7 +48,7 @@ import TutorialOverlay from '../components/TutorialOverlay';
 import WindIndicator from '../components/WindIndicator';
 import StatBar from '../components/StatBar';
 import NauticalButton from '../components/NauticalButton';
-import TacticalDecisionModal from '../components/TacticalDecisionModal';
+import DecisionCockpit from '../components/DecisionCockpit';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RaceMap'>;
 
@@ -206,6 +206,58 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
       }
     },
     [decide, goToResults]
+  );
+
+  // The cockpit owns the chart's size and asks for it via renderMap; memoised so a
+  // re-render that didn't move the race or fleet reuses the same closure. Reads the
+  // live progress/laylines off state so it can sit above the loadout guard.
+  const cockpitProgress = state.progress;
+  const cockpitLayPaths = useMemo(() => {
+    const l = state.windField ? laylines(state) : null;
+    return l ? [[l.mark, l.ends[0]], [l.mark, l.ends[1]]] : undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.windField, cockpitProgress]);
+  const renderCockpitMap = useCallback(
+    (w: number, h: number) => {
+      if (!race || !cockpitProgress) return null;
+      // Sample the colour/flow field for the cockpit chart's OWN viewport — the
+      // race-screen flowField is sized to that map's aspect, so reusing it here
+      // would leave the sea short of the edges (dark gaps). Grid rows track the
+      // viewport aspect so the cells stay roughly square.
+      const cols = 28;
+      // Track the viewport aspect so cells stay roughly square — but guard a
+      // zero/non-finite height (a chart box measured before layout settles) so
+      // the grid falls back to a sane row count instead of collapsing to 0.
+      const aspect = w > 1 && Number.isFinite(h) && h > 1 ? h / w : 1;
+      const rows = Math.max(12, Math.min(40, Math.round(cols * aspect))) || 20;
+      const bounds = chartViewportBounds(race.waypoints, w, h);
+      let field: FlowField | undefined;
+      if (activeLayer === 'tide' && tidalField) {
+        field = { cells: tideCells(sampleTideField(tidalField, bounds, cols, rows, elapsedHourBucket)), cols, rows };
+      } else if (windField) {
+        field = { cells: windCells(sampleWindGrid(windField, bounds, cols, rows, elapsedHourBucket)), cols, rows };
+      }
+      return (
+        <RouteMap
+          waypoints={race.waypoints}
+          route={cockpitProgress.route}
+          trail={cockpitProgress.trail}
+          boat={{ lat: cockpitProgress.lat, lon: cockpitProgress.lon }}
+          competitors={competitors}
+          laylines={cockpitLayPaths}
+          field={field}
+          layer={activeLayer}
+          windFeature={
+            windField ? featureState(windField, cockpitProgress.elapsedHours) : undefined
+          }
+          nextMarkIndex={cockpitProgress.nextMarkIndex}
+          land={LANDMASSES[race.id]}
+          width={w}
+          height={h}
+        />
+      );
+    },
+    [race, cockpitProgress, competitors, cockpitLayPaths, activeLayer, windField, tidalField, elapsedHourBucket]
   );
 
   const confirmRetire = useCallback(() => {
@@ -437,13 +489,14 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
 
       <TutorialOverlay visible={showHelp} onClose={closeHelp} />
 
-      <TacticalDecisionModal
+      <DecisionCockpit
         visible={!!activeEvent}
         event={activeEvent}
         vmg={activeVmg}
         instruments={activeInstruments}
         read={activeRead}
         onSelect={handleChoice}
+        renderMap={renderCockpitMap}
       />
     </View>
   );
