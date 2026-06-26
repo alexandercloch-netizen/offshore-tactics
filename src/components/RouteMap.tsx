@@ -137,6 +137,17 @@ export const RouteMap: React.FC<RouteMapProps> = ({
 }) => {
   const ready = !!waypoints && waypoints.length >= 2;
 
+  // SVG ids must be unique per instance: two RouteMaps on the page (the race chart
+  // and the decision-cockpit chart) both define a "frame" clip and "sea"/"land"
+  // gradients. A bare url(#frame) resolves to the *first* match in the document, so
+  // the cockpit chart would clip its field to the race chart's smaller frame and
+  // leave the sea short of the edges. Scoping the ids keeps each chart's defs its own.
+  const rawId = React.useId();
+  const uid = rawId.replace(/[^a-zA-Z0-9]/g, '');
+  const frameId = `frame-${uid}`;
+  const seaId = `sea-${uid}`;
+  const landId = `land-${uid}`;
+
   // The projection is fixed for the course — recompute only on resize, not on
   // every race tick.
   const project = useMemo(
@@ -184,13 +195,13 @@ export const RouteMap: React.FC<RouteMapProps> = ({
       <Path
         key={`land-${i}`}
         d={landPath(polygon, project)}
-        fill="url(#land)"
+        fill={`url(#${landId})`}
         stroke={colors.coastline}
         strokeWidth={0.8}
         fillRule="evenodd"
       />
     ));
-  }, [project, land]);
+  }, [project, land, landId]);
 
   // Marks change only when one is rounded (nextMarkIndex), not every tick.
   const marksLayer = useMemo(() => {
@@ -280,23 +291,23 @@ export const RouteMap: React.FC<RouteMapProps> = ({
     <View style={styles.container}>
       <Svg width={width} height={height}>
         <Defs>
-          <LinearGradient id="land" x1="0" y1="0" x2="0" y2="1">
+          <LinearGradient id={landId} x1="0" y1="0" x2="0" y2="1">
             <Stop offset="0" stopColor={colors.landHigh} />
             <Stop offset="1" stopColor={colors.land} />
           </LinearGradient>
-          <LinearGradient id="sea" x1="0" y1="0" x2="0" y2="1">
+          <LinearGradient id={seaId} x1="0" y1="0" x2="0" y2="1">
             <Stop offset="0" stopColor={colors.navy} />
             <Stop offset="1" stopColor={colors.abyss} />
           </LinearGradient>
-          <ClipPath id="frame">
+          <ClipPath id={frameId}>
             <Rect x={0} y={0} width={width} height={height} />
           </ClipPath>
         </Defs>
 
         {/* Deep-sea base, only visible before the field paints (or where absent). */}
-        <Rect x={0} y={0} width={width} height={height} fill={field ? colors.deepSea : 'url(#sea)'} rx={radius.sm} />
+        <Rect x={0} y={0} width={width} height={height} fill={field ? colors.deepSea : `url(#${seaId})`} rx={radius.sm} />
 
-        <G clipPath="url(#frame)">
+        <G clipPath={`url(#${frameId})`}>
           {fieldLayer}
           {landLayer}
 

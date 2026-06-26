@@ -225,7 +225,11 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
       // would leave the sea short of the edges (dark gaps). Grid rows track the
       // viewport aspect so the cells stay roughly square.
       const cols = 28;
-      const rows = Math.max(12, Math.min(40, Math.round(cols * (h / Math.max(w, 1)))));
+      // Track the viewport aspect so cells stay roughly square — but guard a
+      // zero/non-finite height (a chart box measured before layout settles) so
+      // the grid falls back to a sane row count instead of collapsing to 0.
+      const aspect = w > 1 && Number.isFinite(h) && h > 1 ? h / w : 1;
+      const rows = Math.max(12, Math.min(40, Math.round(cols * aspect))) || 20;
       const bounds = chartViewportBounds(race.waypoints, w, h);
       let field: FlowField | undefined;
       if (activeLayer === 'tide' && tidalField) {

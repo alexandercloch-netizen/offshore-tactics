@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
+  LayoutChangeEvent,
   Modal,
   Pressable,
   ScrollView,
@@ -15,10 +16,14 @@ import { InstrumentReport } from '../engine/instruments';
 import type { TacticalRead } from '../engine/gameEngine';
 import Sparkline from './Sparkline';
 
-// The race decision presented as a full-screen "nav station": the live chart is
-// the hero, a wide instrument strip sits above it, and the options are comparison
-// cards along the bottom — so the player reads the situation and makes the call in
-// one view, instead of squinting at a card docked over a dimmed map.
+// The race decision presented as a full-screen "nav station" that fills the
+// viewport. On a wide screen (desktop / landscape tablet) it splits into two
+// panes — the live chart is the hero on the left, the calls stack in a fixed
+// sidebar on the right — so there are no dead side gutters. On a phone it stacks
+// vertically, the chart flexing to absorb the slack so the option cards anchor
+// near the bottom (and the body scrolls when the content is taller than the
+// window). Either way the player reads the situation and makes the call in one
+// view, instead of squinting at a card docked over a dimmed map.
 
 interface DecisionCockpitProps {
   visible: boolean;
@@ -31,6 +36,14 @@ interface DecisionCockpitProps {
   renderMap: (width: number, height: number) => React.ReactNode;
   onSelect: (choice: TacticalChoice) => void;
 }
+
+// RouteMap draws its OWN padded, bordered frame (~2×(spacing.sm + 1px border)).
+// Reserve it so the framed chart lands flush inside the hero box — no overflow,
+// and the chart's own rounded frame is the only one.
+const MAP_FRAME = 18;
+// Desktop / landscape-tablet splits into chart + sidebar; tablet portrait (~834)
+// and phones stay stacked.
+const TWO_PANE_MIN = 900;
 
 const round = (n: number): number => Math.round(n);
 
@@ -83,6 +96,8 @@ function vmgColor(before: number, after: number): string {
   return colors.mist;
 }
 
+const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v));
+
 const Gauge: React.FC<{ label: string; value: string; tint?: string; accessibilityLabel?: string }> = ({
   label,
   value,
@@ -106,21 +121,19 @@ export const DecisionCockpit: React.FC<DecisionCockpitProps> = ({
 }) => {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const wide = width >= 820;
+  const twoPane = width >= TWO_PANE_MIN;
   const isMob = event?.kind === 'mob';
 
-  // The chart stays the hero with a generous, window-relative height — clamped so
-  // it's tall on a phone yet never swallows the page on a laptop. The body scrolls,
-  // so the prompt/options never clip on short or landscape screens.
-  const heroHeight = Math.round(Math.max(220, Math.min(wide ? 520 : 440, height * (wide ? 0.5 : 0.42))));
-  // On desktop the content reads as a centred column rather than stretching
-  // edge-to-edge, matching the briefing/race screens.
-  const CONTENT_MAX = 860;
-  // RouteMap draws its OWN padded, bordered frame (~2×(spacing.sm + 1px border)).
-  // Reserve it so the framed chart lands flush inside the content column — no
-  // overflow, and the chart's own rounded frame is the only one.
-  const MAP_FRAME = 18;
-  const heroWidth = Math.min(width - spacing.lg * 2, CONTENT_MAX) - MAP_FRAME;
+  // The chart hero is measured rather than computed: it takes whatever room the
+  // flex layout gives it, then renders the map to fit. Debounced so onLayout
+  // round-trips don't churn state.
+  const [chart, setChart] = useState({ w: 0, h: 0 });
+  const onChartLayout = (e: LayoutChangeEvent): void => {
+    const { width: w, height: h } = e.nativeEvent.layout;
+    setChart((prev) =>
+      Math.abs(prev.w - w) > 1 || Math.abs(prev.h - h) > 1 ? { w, h } : prev
+    );
+  };
 
   const now = instruments?.now;
   // Condition gauges go red when they're getting dangerous, so a hull/crew problem
@@ -130,155 +143,238 @@ export const DecisionCockpit: React.FC<DecisionCockpitProps> = ({
   const condLabel = (label: string, v: number): string =>
     `${label} ${round(v)}${v < 35 ? ', critical' : v < 60 ? ', low' : ''}`;
 
-  return (
-    <Modal visible={visible && !!event} animationType="fade" onRequestClose={() => undefined}>
-      <ScrollView
-        style={styles.screen}
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingTop: insets.top, paddingBottom: insets.bottom + spacing.xl },
-        ]}
-      >
-        {event ? (
-          <View style={[styles.column, { maxWidth: CONTENT_MAX }]}>
-            {/* Header: what's happening + where you stand. */}
-            <View style={styles.header}>
-              <View style={{ flex: 1 }}>
-                {isMob ? (
-                  <Text style={styles.mobTag}>EMERGENCY</Text>
-                ) : event.pointOfSail ? (
-                  <Text style={styles.tag}>{event.pointOfSail}</Text>
-                ) : null}
-                <Text style={[styles.title, isMob && { color: colors.signalRed }]}>{event.title}</Text>
-              </View>
-              {now ? (
-                <View style={styles.placeBox}>
-                  <Text style={styles.placeValue}>{now.position}</Text>
-                  <Text style={styles.placeLabel}>of {now.fleetSize}</Text>
-                </View>
-              ) : null}
-            </View>
+  // The decision sidebar on a wide screen: a fixed slice of the width so the chart
+  // gets the lion's share (~62–66%) and the cards never stretch awkwardly wide.
+  const sidebarWidth = clamp(Math.min(width * 0.34, 420), 320, 440);
 
-            {/* Instrument strip — the gauges you race with, enlarged. Wraps so every
-                gauge (incl. Hull/Crew/Morale) is visible without horizontal scroll. */}
-            {now ? (
-              <View style={styles.instrPanel}>
-                <View style={styles.gaugeRow}>
-                  <Gauge key="Boat" label="Boat" value={`${now.speedKn.toFixed(1)}`} />
-                  {vmg ? <Gauge key="VMG" label="VMG" value={`${vmg.before.toFixed(1)}`} /> : null}
-                  <Gauge key="Wind" label="Wind" value={`${round(now.windSpeedKn)}`} />
-                  <Gauge key="From" label="From" value={`${round(now.windDir)}°`} />
-                  <Gauge key="Sail" label="Sail" value={now.pointOfSail} />
-                  <Gauge key="To go" label="To go" value={`${round(now.distanceToGoNm)}nm`} />
-                  <Gauge
-                    key="Hull"
-                    label="Hull"
-                    value={`${round(now.hull)}`}
-                    tint={cond(now.hull)}
-                    accessibilityLabel={condLabel('Hull', now.hull)}
-                  />
-                  <Gauge
-                    key="Crew"
-                    label="Crew"
-                    value={`${round(now.stamina)}`}
-                    tint={cond(now.stamina)}
-                    accessibilityLabel={condLabel('Crew', now.stamina)}
-                  />
-                  <Gauge
-                    key="Morale"
-                    label="Morale"
-                    value={`${round(now.morale)}`}
-                    tint={cond(now.morale)}
-                    accessibilityLabel={condLabel('Morale', now.morale)}
-                  />
-                </View>
-                <View style={styles.telemetry}>
-                  {instruments ? (
-                    <Text style={styles.legLine} numberOfLines={2}>
-                      This leg {round(instruments.leg.nm)}nm · {shiftText(instruments.leg.windShiftDeg)},{' '}
-                      {buildText(instruments.leg.windDeltaKn)} · {placesText(instruments.leg.placesGained)}
-                    </Text>
-                  ) : null}
-                  {instruments && instruments.windSeries.length >= 2 ? (
-                    <View style={styles.sparkRow}>
-                      <Text style={styles.sparkLabel}>Wind</Text>
-                      <Sparkline values={instruments.windSeries} />
-                    </View>
-                  ) : null}
-                </View>
-                {instruments?.outlook.warn ? (
-                  <Text style={styles.outlookLine} numberOfLines={1}>
-                    ⚠ {instruments.outlook.headline} · {round(instruments.outlook.peakKn)} kn
-                    {instruments.outlook.trend === 'building' ? ' ahead' : ''}
-                  </Text>
-                ) : null}
-              </View>
-            ) : null}
+  // --- Shared content blocks (rendered into either layout) ---------------------
 
-            {/* The chart — the hero. RouteMap brings its own framed box sized to
-                heroWidth×heroHeight, so this just centres it (no second frame to
-                clip against). */}
-            <View style={styles.hero}>
-              {heroWidth > 1 ? renderMap(heroWidth, heroHeight) : null}
-            </View>
+  const Header = (
+    <View style={styles.header}>
+      <View style={{ flex: 1 }}>
+        {isMob ? (
+          <Text style={styles.mobTag}>EMERGENCY</Text>
+        ) : event?.pointOfSail ? (
+          <Text style={styles.tag}>{event.pointOfSail}</Text>
+        ) : null}
+        <Text style={[styles.title, isMob && { color: colors.signalRed }]}>{event?.title}</Text>
+      </View>
+      {now ? (
+        <View style={styles.placeBox}>
+          <Text style={styles.placeValue}>{now.position}</Text>
+          <Text style={styles.placeLabel}>of {now.fleetSize}</Text>
+        </View>
+      ) : null}
+    </View>
+  );
 
-            {/* The prompt + the Navigator's read, just above the calls. */}
-            <Text style={styles.prompt} numberOfLines={wide ? 2 : 3}>
-              {event.prompt}
-            </Text>
-            {read && event.choices.some((c) => c.field) ? (
-              <Text style={styles.read} numberOfLines={2}>
-                🧭 Navigator: {read.hint}
-              </Text>
-            ) : null}
-
-            {/* The calls, as comparison cards. */}
-            <View style={[styles.choices, wide ? styles.choicesRow : styles.choicesCol]}>
-              {event.choices.map((choice) => {
-                const after = vmg?.after[choice.id];
-                const highRisk = choice.risk >= 0.2;
-                const impact = impactLine(choice);
-                const riskWord = choice.risk >= 0.2 ? 'high risk' : choice.risk >= 0.1 ? 'some risk' : 'low risk';
-                const a11y = [
-                  choice.label,
-                  after !== undefined ? `projected VMG ${after.toFixed(1)} knots` : null,
-                  riskWord,
-                ]
-                  .filter(Boolean)
-                  .join(', ');
-                return (
-                  <Pressable
-                    key={choice.id}
-                    testID="decision-choice"
-                    accessibilityRole="button"
-                    accessibilityLabel={a11y}
-                    onPress={() => onSelect(choice)}
-                    style={({ pressed }) => [
-                      styles.choiceCard,
-                      wide ? styles.choiceCardWide : null,
-                      highRisk && styles.choiceCardRisk,
-                      pressed && styles.choiceCardPressed,
-                    ]}
-                  >
-                    <Text style={styles.choiceLabel}>{choice.label}</Text>
-                    <Text style={styles.choiceDesc} numberOfLines={2}>
-                      {choice.description}
-                    </Text>
-                    <View style={styles.choiceFoot}>
-                      {vmg && after !== undefined ? (
-                        <Text style={[styles.vmgAfter, { color: vmgColor(vmg.before, after) }]}>
-                          {vmgArrow(vmg.before, after)} VMG {after.toFixed(1)} kn
-                        </Text>
-                      ) : null}
-                      {impact ? <Text style={styles.impact}>{impact}</Text> : null}
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </View>
+  // Instrument strip — the gauges you race with. Wraps so every gauge (incl.
+  // Hull/Crew/Morale) is visible without horizontal scroll.
+  const Instruments = now ? (
+    <View style={styles.instrPanel}>
+      <View style={styles.gaugeRow}>
+        <Gauge key="Boat" label="Boat" value={`${now.speedKn.toFixed(1)}`} />
+        {vmg ? <Gauge key="VMG" label="VMG" value={`${vmg.before.toFixed(1)}`} /> : null}
+        <Gauge key="Wind" label="Wind" value={`${round(now.windSpeedKn)}`} />
+        <Gauge key="From" label="From" value={`${round(now.windDir)}°`} />
+        <Gauge key="Sail" label="Sail" value={now.pointOfSail} />
+        <Gauge key="To go" label="To go" value={`${round(now.distanceToGoNm)}nm`} />
+        <Gauge
+          key="Hull"
+          label="Hull"
+          value={`${round(now.hull)}`}
+          tint={cond(now.hull)}
+          accessibilityLabel={condLabel('Hull', now.hull)}
+        />
+        <Gauge
+          key="Crew"
+          label="Crew"
+          value={`${round(now.stamina)}`}
+          tint={cond(now.stamina)}
+          accessibilityLabel={condLabel('Crew', now.stamina)}
+        />
+        <Gauge
+          key="Morale"
+          label="Morale"
+          value={`${round(now.morale)}`}
+          tint={cond(now.morale)}
+          accessibilityLabel={condLabel('Morale', now.morale)}
+        />
+      </View>
+      <View style={styles.telemetry}>
+        {instruments ? (
+          <Text style={styles.legLine} numberOfLines={2}>
+            This leg {round(instruments.leg.nm)}nm · {shiftText(instruments.leg.windShiftDeg)},{' '}
+            {buildText(instruments.leg.windDeltaKn)} · {placesText(instruments.leg.placesGained)}
+          </Text>
+        ) : null}
+        {instruments && instruments.windSeries.length >= 2 ? (
+          <View style={styles.sparkRow}>
+            <Text style={styles.sparkLabel}>Wind</Text>
+            <Sparkline values={instruments.windSeries} />
           </View>
         ) : null}
-      </ScrollView>
+      </View>
+      {instruments?.outlook.warn ? (
+        <Text style={styles.outlookLine} numberOfLines={1}>
+          ⚠ {instruments.outlook.headline} · {round(instruments.outlook.peakKn)} kn
+          {instruments.outlook.trend === 'building' ? ' ahead' : ''}
+        </Text>
+      ) : null}
+    </View>
+  ) : null;
+
+  // The chart — the hero. Measured by onLayout, then RouteMap is drawn to fit its
+  // box (minus its own frame). Renders only once we have a real size.
+  const Chart = (
+    <View style={styles.hero} onLayout={onChartLayout}>
+      {chart.w > 1 && chart.h > 1
+        ? renderMap(chart.w - MAP_FRAME, chart.h - MAP_FRAME)
+        : null}
+    </View>
+  );
+
+  const Prompt = (
+    <>
+      <Text style={styles.prompt} numberOfLines={twoPane ? 4 : 3}>
+        {event?.prompt}
+      </Text>
+      {read && event?.choices.some((c) => c.field) ? (
+        <Text style={styles.read} numberOfLines={2}>
+          🧭 Navigator: {read.hint}
+        </Text>
+      ) : null}
+    </>
+  );
+
+  // On a stacked-but-roomy window (e.g. tablet portrait) lay the calls out in a
+  // row; on a narrow phone stack them. In two-pane they always stack in the
+  // sidebar.
+  const stackedRow = !twoPane && width >= 640;
+
+  const renderChoice = (choice: TacticalChoice): React.ReactNode => {
+    const after = vmg?.after[choice.id];
+    const highRisk = choice.risk >= 0.2;
+    const impact = impactLine(choice);
+    const riskWord = choice.risk >= 0.2 ? 'high risk' : choice.risk >= 0.1 ? 'some risk' : 'low risk';
+    const a11y = [
+      choice.label,
+      after !== undefined ? `projected VMG ${after.toFixed(1)} knots` : null,
+      riskWord,
+    ]
+      .filter(Boolean)
+      .join(', ');
+    return (
+      <Pressable
+        key={choice.id}
+        testID="decision-choice"
+        accessibilityRole="button"
+        accessibilityLabel={a11y}
+        onPress={() => onSelect(choice)}
+        style={({ pressed }) => [
+          styles.choiceCard,
+          // In two-pane the cards stack full sidebar width; in stacked-wide rows
+          // they share the row evenly.
+          !twoPane && stackedRow ? styles.choiceCardFlex : null,
+          highRisk && styles.choiceCardRisk,
+          pressed && styles.choiceCardPressed,
+        ]}
+      >
+        <Text style={styles.choiceLabel}>{choice.label}</Text>
+        <Text style={styles.choiceDesc} numberOfLines={2}>
+          {choice.description}
+        </Text>
+        <View style={styles.choiceFoot}>
+          {vmg && after !== undefined ? (
+            <Text style={[styles.vmgAfter, { color: vmgColor(vmg.before, after) }]}>
+              {vmgArrow(vmg.before, after)} VMG {after.toFixed(1)} kn
+            </Text>
+          ) : null}
+          {impact ? <Text style={styles.impact}>{impact}</Text> : null}
+        </View>
+      </Pressable>
+    );
+  };
+
+  const Choices = (
+    <View style={[styles.choices, stackedRow ? styles.choicesRow : styles.choicesCol]}>
+      {event?.choices.map(renderChoice)}
+    </View>
+  );
+
+  return (
+    <Modal visible={visible && !!event} animationType="fade" onRequestClose={() => undefined}>
+      {!event ? (
+        <View style={styles.screen} />
+      ) : twoPane ? (
+        // --- TWO-PANE: fills width & height, no outer scroll ---------------------
+        // Explicit height: inside a Modal the flex chain has no definite height on
+        // web, so flex:1 panes would content-size and the chart wouldn't fill.
+        <View style={[styles.screen, { height }]}>
+          <View style={styles.twoPaneRow}>
+            {/* LEFT: header + instruments + chart hero (chart absorbs the slack). */}
+            <View
+              style={[
+                styles.leftPane,
+                {
+                  paddingLeft: insets.left + spacing.lg,
+                  paddingTop: insets.top + spacing.md,
+                  paddingBottom: insets.bottom + spacing.md,
+                },
+              ]}
+            >
+              {Header}
+              {Instruments}
+              {Chart}
+            </View>
+            {/* RIGHT: fixed-width decision sidebar; scrolls internally if tall. */}
+            <View
+              style={[
+                styles.rightPane,
+                {
+                  width: sidebarWidth,
+                  paddingRight: insets.right + spacing.lg,
+                  paddingTop: insets.top + spacing.md,
+                  paddingBottom: insets.bottom + spacing.md,
+                },
+              ]}
+            >
+              <ScrollView
+                style={styles.sidebarScroll}
+                contentContainerStyle={styles.sidebarContent}
+                showsVerticalScrollIndicator={false}
+              >
+                {Prompt}
+                {Choices}
+              </ScrollView>
+            </View>
+          </View>
+        </View>
+      ) : (
+        // --- STACKED: fills height (chart flexes), scrolls when tall ------------
+        // Explicit height so the ScrollView has a definite viewport: its
+        // flexGrow:1 content then fills (chart absorbs slack) and scrolls when tall.
+        <ScrollView
+          style={[styles.screen, { height }]}
+          contentContainerStyle={[
+            styles.stackedContent,
+            {
+              paddingLeft: insets.left + spacing.lg,
+              paddingRight: insets.right + spacing.lg,
+              paddingTop: insets.top + spacing.md,
+              paddingBottom: insets.bottom + spacing.lg,
+            },
+          ]}
+        >
+          <View style={styles.stackedColumn}>
+            {Header}
+            {Instruments}
+            {Chart}
+            {Prompt}
+            {Choices}
+          </View>
+        </ScrollView>
+      )}
     </Modal>
   );
 };
@@ -288,18 +384,39 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.abyss,
   },
-  scrollContent: {
-    paddingHorizontal: spacing.lg,
-    alignItems: 'center',
+  // --- Two-pane -------------------------------------------------------------
+  twoPaneRow: {
+    flex: 1,
+    flexDirection: 'row',
   },
-  column: {
+  leftPane: {
+    flex: 1,
+    flexDirection: 'column',
+    paddingRight: spacing.lg,
+  },
+  rightPane: {
+    borderLeftWidth: 1,
+    borderLeftColor: colors.hull,
+    paddingLeft: spacing.lg,
+  },
+  sidebarScroll: {
+    flex: 1,
+  },
+  sidebarContent: {
+    paddingBottom: spacing.lg,
+  },
+  // --- Stacked --------------------------------------------------------------
+  stackedContent: {
+    flexGrow: 1,
+  },
+  stackedColumn: {
+    flex: 1,
     width: '100%',
-    alignSelf: 'center',
   },
+  // --- Shared ---------------------------------------------------------------
   header: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    paddingTop: spacing.md,
     gap: spacing.md,
   },
   tag: {
@@ -412,10 +529,15 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.bold,
     marginTop: spacing.xs,
   },
+  // The hero flexes to fill whatever room is left in its pane/column; a minHeight
+  // keeps the chart usable on the shortest windows (where the ScrollView scrolls).
   hero: {
-    marginVertical: spacing.md,
+    flex: 1,
+    minHeight: 220,
     alignSelf: 'stretch',
+    marginVertical: spacing.md,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   prompt: {
     color: colors.mist,
@@ -430,7 +552,6 @@ const styles = StyleSheet.create({
   },
   choices: {
     marginTop: spacing.md,
-    marginBottom: spacing.lg,
     gap: spacing.md,
   },
   choicesRow: {
@@ -447,7 +568,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     minHeight: 52,
   },
-  choiceCardWide: {
+  choiceCardFlex: {
     flex: 1,
   },
   choiceCardRisk: {
