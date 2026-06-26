@@ -23,7 +23,8 @@ import { GameState, StepResult, TacticalChoice } from '../types';
 
 const healthy = { hullIntegrity: 100, crewStamina: 100, crewMorale: 100 };
 
-const STORIED_RACE_IDS = ['race-fastnet', 'race-newport-bermuda', 'race-sydney-hobart'];
+// After PR2 every race is storied — the framework now covers the whole roster.
+const STORIED_RACE_IDS = RACES.map((r) => r.id);
 
 // Build a race-ready state mirroring the engine suite's harness.
 function baseState(overrides: Partial<GameState> = {}): GameState {
@@ -100,8 +101,9 @@ const safest = (event: { choices: TacticalChoice[] }): TacticalChoice =>
   event.choices.reduce((a, b) => (b.risk < a.risk ? b : a), event.choices[0]);
 
 describe('storyline content', () => {
-  it('covers exactly the three flagships for PR1', () => {
+  it('covers every race after PR2 (all nine storied)', () => {
     expect(STORYLINES.map((s) => s.raceId).sort()).toEqual([...STORIED_RACE_IDS].sort());
+    expect(STORYLINES).toHaveLength(RACES.length);
   });
 
   it("each storyline's pinned beat names a real waypoint on its race", () => {
@@ -111,9 +113,11 @@ describe('storyline content', () => {
       expect(beat).toBeDefined();
       expect(beat!.pinnedWaypoint).toBeDefined();
       const names = race.waypoints.map((w) => w.name);
+      // The signature beat pins to a real mark on the course...
       expect(names).toContain(beat!.pinnedWaypoint);
-      // ...and it lines up with the race's hazard mark and its event's pin.
-      expect(beat!.pinnedWaypoint).toBe(race.hazardWaypoint);
+      // ...and the matching hazard event fires at exactly that mark. (The pin is
+      // the *signature* mark, which need not be the race's hazardWaypoint — e.g.
+      // Chicago–Mac's signature is the Manitou fork, not its mid-lake hazard.)
       expect(HAZARD_EVENTS[race.hazard].pinToWaypoint).toBe(beat!.pinnedWaypoint);
     }
   });
@@ -219,18 +223,22 @@ describe('pinned signature firing (engine)', () => {
   });
 });
 
-describe('un-storied races are unaffected', () => {
-  it('have no storyline and their hazard event carries no pin', () => {
-    const unstoried = RACES.filter((r) => !storylineForRace(r.id));
-    expect(unstoried.length).toBeGreaterThan(0);
-    for (const race of unstoried) {
-      expect(HAZARD_EVENTS[race.hazard].pinToWaypoint).toBeUndefined();
+describe('the whole roster is storied (PR2)', () => {
+  it('every race has a storyline and a pinned signature event', () => {
+    // PR2 brought the full roster up to the storied bar — no un-storied races
+    // remain, and every hazard event pins its signature decision to a real mark.
+    for (const race of RACES) {
+      const story = storylineForRace(race.id);
+      expect(story).toBeDefined();
+      const pin = HAZARD_EVENTS[race.hazard].pinToWaypoint;
+      expect(pin).toBeDefined();
+      expect(race.waypoints.map((w) => w.name)).toContain(pin);
     }
   });
 
-  it('stepRace output is byte-identical with and without the storyline lookup path', () => {
-    // An un-storied race never enters the pinned branch, so a fixed-seed single
-    // step is unchanged. Snapshot the key outputs for a representative course.
+  it('a storied race steps deterministically under a fixed seed', () => {
+    // A pinned-signature race still steps identically run-to-run under the same
+    // seed — the storyline lookup path adds no nondeterminism.
     const run = () => {
       setRng(mulberry32(42));
       const race = getRaceById('race-round-island')!;

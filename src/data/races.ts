@@ -389,9 +389,15 @@ export const RACES: Race[] = [
     // the spread-out fleet.
     tide: {
       floodDeg: 135, // floods SE down the passage
-      peakRateKn: 0.5,
+      // Seymour Narrows runs to ~16 kn in reality; the game streams are gentle,
+      // but the vetting found the gate too weak to make the slack-water timing —
+      // and the inside route — actually matter. Bumped to a race-meaningful level:
+      // a stronger base stream and a much fiercer Seymour gate, so the signature
+      // gate bites. (~0.8 × (1 + 2.4) ≈ 2.7 kn at the centre.) Validated fair in
+      // the standings — both player and fleet feel the same stream.
+      peakRateKn: 0.8,
       gates: [
-        { waypoint: 'Seymour Narrows', gain: 1.2, radiusNm: 10 },
+        { waypoint: 'Seymour Narrows', gain: 2.4, radiusNm: 10 },
         { waypoint: 'Dixon Entrance', gain: 0.4, radiusNm: 14 },
       ],
     },
