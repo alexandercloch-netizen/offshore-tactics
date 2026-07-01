@@ -19,13 +19,13 @@ export interface RaceClimate {
 }
 
 export const WEATHER_CLIMATOLOGY: Record<string, RaceClimate> = {
-  'race-caribbean-600': {"fromDeg":97.8,"speedKn":12,"gustFactor":0.33,"variabilityDeg":55.4,"source":"open-meteo","sampledAt":"2026-06-22"},
-  'race-chicago-mac': {"fromDeg":259.6,"speedKn":5.2,"gustFactor":0.41,"variabilityDeg":70,"source":"open-meteo","sampledAt":"2026-06-22"},
-  'race-fastnet': {"fromDeg":261.1,"speedKn":11.7,"gustFactor":0.43,"variabilityDeg":64.9,"source":"open-meteo","sampledAt":"2026-06-22"},
-  'race-middle-sea': {"fromDeg":105.4,"speedKn":9.3,"gustFactor":0.54,"variabilityDeg":70,"source":"open-meteo","sampledAt":"2026-06-22"},
-  'race-newport-bermuda': {"fromDeg":226.6,"speedKn":13.1,"gustFactor":0.46,"variabilityDeg":70,"source":"open-meteo","sampledAt":"2026-06-22"},
-  'race-r2ak': {"fromDeg":214.4,"speedKn":3,"gustFactor":0.6,"variabilityDeg":70,"source":"open-meteo","sampledAt":"2026-06-22"},
-  'race-round-island': {"fromDeg":274.2,"speedKn":8.5,"gustFactor":0.53,"variabilityDeg":67.9,"source":"open-meteo","sampledAt":"2026-06-22"},
-  'race-sydney-hobart': {"fromDeg":294.2,"speedKn":16,"gustFactor":0.43,"variabilityDeg":67.6,"source":"open-meteo","sampledAt":"2026-06-22"},
-  'race-transpac': {"fromDeg":58.2,"speedKn":12.6,"gustFactor":0.36,"variabilityDeg":33.8,"source":"open-meteo","sampledAt":"2026-06-22"},
+  'race-caribbean-600': {"fromDeg":95.2,"speedKn":12.1,"gustFactor":0.33,"variabilityDeg":52.8,"source":"open-meteo","sampledAt":"2026-07-01"},
+  'race-chicago-mac': {"fromDeg":268,"speedKn":7.2,"gustFactor":0.42,"variabilityDeg":70,"source":"open-meteo","sampledAt":"2026-07-01"},
+  'race-fastnet': {"fromDeg":251.5,"speedKn":11.9,"gustFactor":0.47,"variabilityDeg":61,"source":"open-meteo","sampledAt":"2026-07-01"},
+  'race-middle-sea': {"fromDeg":44.3,"speedKn":9,"gustFactor":0.58,"variabilityDeg":70,"source":"open-meteo","sampledAt":"2026-07-01"},
+  'race-newport-bermuda': {"fromDeg":226.6,"speedKn":12.9,"gustFactor":0.46,"variabilityDeg":70,"source":"open-meteo","sampledAt":"2026-07-01"},
+  'race-r2ak': {"fromDeg":199.3,"speedKn":3.1,"gustFactor":0.56,"variabilityDeg":70,"source":"open-meteo","sampledAt":"2026-07-01"},
+  'race-round-island': {"fromDeg":273.4,"speedKn":8.4,"gustFactor":0.52,"variabilityDeg":67,"source":"open-meteo","sampledAt":"2026-07-01"},
+  'race-sydney-hobart': {"fromDeg":286.9,"speedKn":16.1,"gustFactor":0.44,"variabilityDeg":69.1,"source":"open-meteo","sampledAt":"2026-07-01"},
+  'race-transpac': {"fromDeg":39.5,"speedKn":13.1,"gustFactor":0.36,"variabilityDeg":36.7,"source":"open-meteo","sampledAt":"2026-07-01"},
 };
