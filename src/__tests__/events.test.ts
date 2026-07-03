@@ -1,5 +1,7 @@
 import {
   pickEventForRace,
+  conditionBand,
+  racePhase,
   HAZARD_EVENTS,
   MOB_EVENTS,
   GENERIC_EVENTS,
@@ -125,6 +127,74 @@ describe('pickEventForRace — point-of-sail gate', () => {
   it('matching-leg events are still eligible (upwind draws the wind-shift)', () => {
     const shown = drawMany('Upwind');
     upwindOnly.forEach((id) => expect(shown).toContain(id));
+  });
+});
+
+// The context tags fit an everyday decision to the moment — the breeze band, the
+// region's waters, the phase of the passage — but only ever as a *preference*:
+// the picker falls back to the flat/untagged pool so a draw is always possible,
+// and however narrow the preferred set, it still ends in a single seeded pick.
+describe('pickEventForRace — context tagging', () => {
+  const EVERYDAY_IDS = [...WEATHER_EVENTS, ...MORALE_EVENTS, ...GENERIC_EVENTS].map((e) => e.id);
+
+  it('conditionBand maps wind speed to the four bands', () => {
+    expect(conditionBand(4)).toBe('light');
+    expect(conditionBand(12)).toBe('moderate');
+    expect(conditionBand(20)).toBe('fresh');
+    expect(conditionBand(30)).toBe('heavy');
+  });
+
+  it('racePhase maps course fraction to early/mid/late', () => {
+    expect(racePhase(10, 100)).toBe('early');
+    expect(racePhase(50, 100)).toBe('mid');
+    expect(racePhase(90, 100)).toBe('late');
+    expect(racePhase(0, 0)).toBe('early'); // guard: no divide-by-zero
+  });
+
+  it('is deterministic for a fixed seed, point of sail and context', () => {
+    const ctx = { raceId: 'race-round-island', band: 'fresh' as const, phase: 'mid' as const };
+    const run = () => {
+      setRng(mulberry32(42));
+      const shown: string[] = [];
+      for (let i = 0; i < 12; i += 1) {
+        shown.push(pickEventForRace(shown, 'Upwind', ctx).id);
+      }
+      return shown;
+    };
+    expect(run()).toEqual(run());
+  });
+
+  it('prefers a breeze-fitting event over a mismatched one (light air skips the reef call)', () => {
+    // Leave only the fresh/heavy-only reef call and the flat phasing call unseen.
+    const shown = EVERYDAY_IDS.filter((id) => id !== 'evt-reef' && id !== 'evt-phasing');
+    setRng(mulberry32(1));
+    // In light air the reef call doesn't fit, so the flat call is the sole
+    // preferred candidate — drawn deterministically, whatever the seed.
+    expect(pickEventForRace(shown, 'Upwind', { band: 'light' }).id).toBe('evt-phasing');
+  });
+
+  it('prefers a region-fitting event in its waters (a Med race skips the UK headland call)', () => {
+    const shown = EVERYDAY_IDS.filter((id) => id !== 'evt-headland' && id !== 'evt-phasing');
+    setRng(mulberry32(2));
+    // evt-headland is tagged for uk/pnw/lakes; in the Med it isn't preferred.
+    expect(pickEventForRace(shown, 'Upwind', { raceId: 'race-middle-sea' }).id).toBe('evt-phasing');
+  });
+
+  it('prefers a phase-fitting event (an early leg skips the late-passage night watch)', () => {
+    const shown = EVERYDAY_IDS.filter((id) => id !== 'evt-nightwatch' && id !== 'evt-rally');
+    setRng(mulberry32(3));
+    expect(pickEventForRace(shown, undefined, { phase: 'early' }).id).toBe('evt-rally');
+  });
+
+  it('falls back to a valid draw when nothing fits the context', () => {
+    // Only the fresh/heavy reef call is unseen; in light air nothing fits, yet the
+    // fallback still returns a real everyday event rather than failing to draw.
+    const shown = EVERYDAY_IDS.filter((id) => id !== 'evt-reef');
+    const allowed = new Set(EVERYDAY_IDS);
+    setRng(mulberry32(4));
+    const drawn = pickEventForRace(shown, 'Upwind', { band: 'light' });
+    expect(allowed.has(drawn.id)).toBe(true);
+    expect(drawn.id).toBe('evt-reef'); // the sole fresh candidate — a draw is always possible
   });
 });
 

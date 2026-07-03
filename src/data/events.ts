@@ -1,4 +1,11 @@
-import { GameEvent, HazardKey, PointOfSail, SignatureOutcome } from '../types';
+import {
+  ConditionBand,
+  GameEvent,
+  HazardKey,
+  PointOfSail,
+  RacePhase,
+  SignatureOutcome,
+} from '../types';
 import { rnd, rndPick } from '../engine/rng';
 
 // ---------------------------------------------------------------------------
@@ -25,6 +32,16 @@ export const GENERIC_EVENTS: GameEvent[] = [
         field: true,
       },
       {
+        id: 'evt-windshift-half',
+        label: 'Split the difference',
+        description: 'Work halfway toward the shift and keep an exit — a bit of the gain, less of the gamble.',
+        timeDelta: -0.15,
+        staminaDelta: -3,
+        moraleDelta: 2,
+        hullDelta: 0,
+        risk: 0.16,
+      },
+      {
         id: 'evt-windshift-hold',
         label: 'Hold your lane',
         description: 'Play it safe and keep the boat in clear air.',
@@ -46,7 +63,7 @@ export const GENERIC_EVENTS: GameEvent[] = [
     choices: [
       {
         id: 'evt-spinnaker-hoist',
-        label: 'Hoist the kite',
+        label: 'Hoist the big kite',
         description: 'Surf the waves and reel in the fleet.',
         timeDelta: -1.1,
         staminaDelta: -8,
@@ -54,6 +71,16 @@ export const GENERIC_EVENTS: GameEvent[] = [
         hullDelta: -4,
         risk: 0.25,
         field: true,
+      },
+      {
+        id: 'evt-spinnaker-small',
+        label: 'Set the heavy runner',
+        description: 'A smaller, stouter kite — most of the pace, far less on the edge.',
+        timeDelta: -0.4,
+        staminaDelta: -4,
+        moraleDelta: 2,
+        hullDelta: -1,
+        risk: 0.12,
       },
       {
         id: 'evt-spinnaker-white',
@@ -186,6 +213,297 @@ export const GENERIC_EVENTS: GameEvent[] = [
       },
     ],
   },
+  {
+    id: 'evt-tss',
+    title: 'Traffic in the Lane',
+    prompt:
+      'A ship is bearing down on the traffic-separation scheme dead ahead. Hold your line and cross ahead of her, or bear off and duck under her stern?',
+    kind: 'tactical',
+    choices: [
+      {
+        id: 'evt-tss-cross',
+        label: 'Hold on and cross ahead',
+        description: 'Stand on and save the miles — if you have read her speed right.',
+        timeDelta: -0.4,
+        staminaDelta: -3,
+        moraleDelta: 2,
+        hullDelta: 0,
+        risk: 0.28,
+        field: true,
+      },
+      {
+        id: 'evt-tss-duck',
+        label: 'Duck under her stern',
+        description: 'Bear off, give way, and cross behind — a few lengths lost, no drama.',
+        timeDelta: 0.4,
+        staminaDelta: -1,
+        moraleDelta: 0,
+        hullDelta: 0,
+        risk: 0.04,
+      },
+    ],
+  },
+  {
+    id: 'evt-reef',
+    title: 'The Reef Question',
+    prompt:
+      'It is up to the top of the wind range and the boat is starting to labour. Carry full sail for the pace, or tuck a reef in before something lets go?',
+    kind: 'tactical',
+    pointOfSail: 'Upwind',
+    conditions: ['fresh', 'heavy'],
+    choices: [
+      {
+        id: 'evt-reef-full',
+        label: 'Carry full sail',
+        description: 'Keep the power on and drive — the rig and crew earn their keep.',
+        timeDelta: -0.6,
+        staminaDelta: -8,
+        moraleDelta: 3,
+        hullDelta: -6,
+        risk: 0.3,
+        field: true,
+      },
+      {
+        id: 'evt-reef-tuck',
+        label: 'Tuck a reef in',
+        description: 'Shorten down early and sail the boat on her lines — a touch slower, far kinder.',
+        timeDelta: 0.5,
+        staminaDelta: -2,
+        moraleDelta: 1,
+        hullDelta: -1,
+        risk: 0.06,
+      },
+    ],
+  },
+  {
+    id: 'evt-peel',
+    title: 'The Peel',
+    prompt:
+      'The runner is nose-diving in the building breeze. Peel to the bigger, fuller kite for pace, or hold the sail already drawing and keep it simple?',
+    kind: 'tactical',
+    pointOfSail: 'Downwind',
+    conditions: ['moderate', 'fresh'],
+    choices: [
+      {
+        id: 'evt-peel-big',
+        label: 'Peel to the big kite',
+        description: 'A bare-headed change for real downwind pace — a nervy minute on the foredeck.',
+        timeDelta: -0.8,
+        staminaDelta: -7,
+        moraleDelta: 4,
+        hullDelta: -3,
+        risk: 0.26,
+        field: true,
+      },
+      {
+        id: 'evt-peel-hold',
+        label: 'Hold the kite you have',
+        description: 'Leave the sail up and trim it hard — no risk of a wrap, a little less speed.',
+        timeDelta: 0.3,
+        staminaDelta: -1,
+        moraleDelta: 0,
+        hullDelta: 0,
+        risk: 0.05,
+      },
+    ],
+  },
+  {
+    id: 'evt-broach',
+    title: 'On the Edge',
+    prompt:
+      'She is lit up and threatening to round up on every surf. Push the edge for the big planes, ease a fraction to hold the plane, or soak low and keep her flat?',
+    kind: 'tactical',
+    pointOfSail: 'Downwind',
+    conditions: ['fresh', 'heavy'],
+    choices: [
+      {
+        id: 'evt-broach-push',
+        label: 'Push the edge',
+        description: 'Ride every wave to the hilt and dare the broach — huge if it comes off.',
+        timeDelta: -1.0,
+        staminaDelta: -9,
+        moraleDelta: 4,
+        hullDelta: -6,
+        risk: 0.36,
+        field: true,
+      },
+      {
+        id: 'evt-broach-ease',
+        label: 'Ease to hold the plane',
+        description: 'Bleed a touch of load to stay planing without burying the bow.',
+        timeDelta: -0.3,
+        staminaDelta: -5,
+        moraleDelta: 2,
+        hullDelta: -2,
+        risk: 0.2,
+      },
+      {
+        id: 'evt-broach-soak',
+        label: 'Soak low and stay flat',
+        description: 'Sail the safe angle and keep her on her feet — the boat thanks you for it.',
+        timeDelta: 0.4,
+        staminaDelta: -3,
+        moraleDelta: 0,
+        hullDelta: 0,
+        risk: 0.07,
+      },
+    ],
+  },
+  {
+    id: 'evt-seaway',
+    title: 'Driving the Seaway',
+    prompt:
+      'The sea has stood up and the boat is slamming off the crests. Drive her hard through the waves, or steer the seaway and preserve boat and crew?',
+    kind: 'tactical',
+    pointOfSail: 'Reach',
+    conditions: ['fresh', 'heavy'],
+    choices: [
+      {
+        id: 'evt-seaway-drive',
+        label: 'Drive her through it',
+        description: 'Foot fast and take the pounding for the miles — jarring, hard work, quick.',
+        timeDelta: -0.7,
+        staminaDelta: -8,
+        moraleDelta: 3,
+        hullDelta: -5,
+        risk: 0.3,
+        field: true,
+      },
+      {
+        id: 'evt-seaway-steer',
+        label: 'Steer the waves',
+        description: 'Work the helm around the worst of it — smoother, gentler, a shade slower.',
+        timeDelta: 0.5,
+        staminaDelta: -3,
+        moraleDelta: 1,
+        hullDelta: -1,
+        risk: 0.07,
+      },
+    ],
+  },
+  {
+    id: 'evt-headland',
+    title: 'Cutting the Headland',
+    prompt:
+      'A headland juts across the course, a back-eddy of fair tide running tight along its rocks. Shave it close for the free ride, or stand off in clean water?',
+    kind: 'tactical',
+    pointOfSail: 'Upwind',
+    regions: ['uk', 'pnw', 'lakes'],
+    choices: [
+      {
+        id: 'evt-headland-shave',
+        label: 'Shave the headland',
+        description: 'Tuck in tight and steal the back-eddy — with the rocks a stone\'s throw to leeward.',
+        timeDelta: -0.7,
+        staminaDelta: -5,
+        moraleDelta: 4,
+        hullDelta: 0,
+        risk: 0.3,
+        field: true,
+      },
+      {
+        id: 'evt-headland-off',
+        label: 'Stand off in clean tide',
+        description: 'Give the point a berth and sail the safe water — no free ride, no white knuckles.',
+        timeDelta: 0.4,
+        staminaDelta: -2,
+        moraleDelta: 0,
+        hullDelta: 0,
+        risk: 0.06,
+      },
+    ],
+  },
+  {
+    id: 'evt-kelpline',
+    title: 'The Kelp Paddock',
+    prompt:
+      'A ribbon of kelp lies across the shortest line inshore. Plough straight through and pick it off later, or skirt to seaward of it in clear water?',
+    kind: 'tactical',
+    regions: ['uk', 'pnw', 'lakes', 'caribbean'],
+    choices: [
+      {
+        id: 'evt-kelpline-through',
+        label: 'Plough straight through',
+        description: 'Hold the short line and live with the fouled foils until they clear — sticky and glum.',
+        timeDelta: -0.5,
+        staminaDelta: -4,
+        moraleDelta: -2,
+        hullDelta: 0,
+        risk: 0.22,
+        field: true,
+      },
+      {
+        id: 'evt-kelpline-skirt',
+        label: 'Skirt to seaward',
+        description: 'Add a few lengths to stay in clean water — clean foils, happy crew.',
+        timeDelta: 0.5,
+        staminaDelta: -1,
+        moraleDelta: 1,
+        hullDelta: 0,
+        risk: 0.03,
+      },
+    ],
+  },
+  {
+    id: 'evt-phasing',
+    title: 'Phasing the Shifts',
+    prompt:
+      'The breeze is oscillating in a rhythm the navigator can just about read. Work every header for the gains, or sail the long tack and keep it clean?',
+    kind: 'tactical',
+    pointOfSail: 'Upwind',
+    choices: [
+      {
+        id: 'evt-phasing-work',
+        label: 'Work every shift',
+        description: 'Tack on each header and grind the gains — busy, tiring, and quick if you call them right.',
+        timeDelta: -0.7,
+        staminaDelta: -8,
+        moraleDelta: 3,
+        hullDelta: 0,
+        risk: 0.24,
+        field: true,
+      },
+      {
+        id: 'evt-phasing-long',
+        label: 'Sail the long tack',
+        description: 'Keep it simple, stay in phase on the long board — fewer manoeuvres, fewer mistakes.',
+        timeDelta: 0.3,
+        staminaDelta: -2,
+        moraleDelta: 0,
+        hullDelta: 0,
+        risk: 0.06,
+      },
+    ],
+  },
+  {
+    id: 'evt-injury',
+    title: 'A Hand Hurt',
+    prompt:
+      'A crew member has taken a bad knock in the pit and is favouring an arm. Strap it and keep them on deck, or stand them down and redistribute the watch?',
+    kind: 'tactical',
+    choices: [
+      {
+        id: 'evt-injury-strap',
+        label: 'Strap it and press on',
+        description: 'Patch them up and keep every hand racing — the boat holds pace, the crew grits its teeth.',
+        timeDelta: -0.2,
+        staminaDelta: -6,
+        moraleDelta: -4,
+        hullDelta: 0,
+        risk: 0.2,
+      },
+      {
+        id: 'evt-injury-rest',
+        label: 'Stand them down',
+        description: 'Send them below to rest and cover the watch — a hand short, but the right call by them.',
+        timeDelta: 0.6,
+        staminaDelta: -2,
+        moraleDelta: 3,
+        hullDelta: 0,
+        risk: 0.04,
+      },
+    ],
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -279,6 +597,67 @@ export const MORALE_EVENTS: GameEvent[] = [
       },
     ],
   },
+  {
+    id: 'evt-nightwatch',
+    title: 'The Long Night Watch',
+    prompt:
+      'It is the small hours and the off-watch is dead on its feet. Keep a full watch driving through the dark, or sail short-handed and let half of them sleep?',
+    kind: 'tactical',
+    phase: 'late',
+    choices: [
+      {
+        id: 'evt-nightwatch-full',
+        label: 'Full watch, keep driving',
+        description: 'Every hand on deck and the hammer down through the night — pace held, legs paid for.',
+        timeDelta: -0.4,
+        staminaDelta: -9,
+        moraleDelta: -2,
+        hullDelta: 0,
+        risk: 0.16,
+        field: true,
+      },
+      {
+        id: 'evt-nightwatch-sleep',
+        label: 'Sail short-handed, let them sleep',
+        description: 'Ease the boat along under a thin watch and bank the rest — slower now, sharper by dawn.',
+        timeDelta: 0.5,
+        staminaDelta: 8,
+        moraleDelta: 5,
+        hullDelta: 0,
+        risk: 0.03,
+      },
+    ],
+  },
+  {
+    id: 'evt-seasick',
+    title: 'Seasickness Below',
+    prompt:
+      'The motion has laid a couple of the crew low and green. Dose them and keep everyone racing, or send the worst below to recover?',
+    kind: 'tactical',
+    conditions: ['fresh', 'heavy'],
+    choices: [
+      {
+        id: 'evt-seasick-dose',
+        label: 'Dose them and race on',
+        description: 'Pills, a biscuit, and back to the rail — the boat keeps its numbers, the crew suffers on.',
+        timeDelta: -0.2,
+        staminaDelta: -5,
+        moraleDelta: -3,
+        hullDelta: 0,
+        risk: 0.14,
+      },
+      {
+        id: 'evt-seasick-below',
+        label: 'Send the worst below',
+        description: 'Get them horizontal to recover — short-handed for a watch, whole again after.',
+        timeDelta: 0.5,
+        staminaDelta: 3,
+        moraleDelta: 4,
+        hullDelta: 0,
+        risk: 0.03,
+      },
+    ],
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -302,6 +681,16 @@ export const WEATHER_EVENTS: GameEvent[] = [
         hullDelta: -12,
         risk: 0.35,
         field: true,
+      },
+      {
+        id: 'evt-squall-shorten',
+        label: 'Shorten down and press',
+        description: 'A reef in and still driving hard through the front of it — most of the pace, less of the peril.',
+        timeDelta: -0.2,
+        staminaDelta: -6,
+        moraleDelta: 2,
+        hullDelta: -5,
+        risk: 0.2,
       },
       {
         id: 'evt-squall-reef',
@@ -371,6 +760,102 @@ export const WEATHER_EVENTS: GameEvent[] = [
         moraleDelta: 1,
         hullDelta: 0,
         risk: 0.05,
+      },
+    ],
+  },
+  {
+    id: 'evt-seabreeze',
+    title: 'Sea Breeze Filling',
+    prompt:
+      'A sea breeze is starting to fill along the shore as the land heats up. Commit inshore to hook into the new pressure, or hold the offshore gradient you can trust?',
+    kind: 'weather',
+    conditions: ['light', 'moderate'],
+    phase: 'early',
+    regions: ['med', 'uk', 'lakes', 'caribbean'],
+    choices: [
+      {
+        id: 'evt-seabreeze-inshore',
+        label: 'Commit inshore for the new breeze',
+        description: 'Bank on the sea breeze building and set up to ride it in — a lovely gain if it fills.',
+        timeDelta: -0.9,
+        staminaDelta: -6,
+        moraleDelta: 4,
+        hullDelta: 0,
+        risk: 0.28,
+        field: true,
+      },
+      {
+        id: 'evt-seabreeze-hold',
+        label: 'Hold the offshore gradient',
+        description: 'Stay in the breeze you have rather than gamble on the one you hope for.',
+        timeDelta: 0.5,
+        staminaDelta: -2,
+        moraleDelta: 0,
+        hullDelta: 0,
+        risk: 0.06,
+      },
+    ],
+  },
+  {
+    id: 'evt-hole',
+    title: 'A Hole Opening Up',
+    prompt:
+      'A soft patch is spreading across the rhumb line ahead. Bulldoze straight through it, or sail the extra distance around the light air?',
+    kind: 'weather',
+    conditions: ['light'],
+    regions: ['lakes', 'med'],
+    choices: [
+      {
+        id: 'evt-hole-through',
+        label: 'Bulldoze through it',
+        description: 'Hold the short line and hope the boat carries her way across the soft spot — nervy, glum if you park.',
+        timeDelta: -0.5,
+        staminaDelta: -3,
+        moraleDelta: -3,
+        hullDelta: 0,
+        risk: 0.2,
+        field: true,
+      },
+      {
+        id: 'evt-hole-around',
+        label: 'Sail around the light air',
+        description: 'Add miles to stay in pressure — longer on the water, always moving.',
+        timeDelta: 0.6,
+        staminaDelta: -1,
+        moraleDelta: 1,
+        hullDelta: 0,
+        risk: 0.03,
+      },
+    ],
+  },
+  {
+    id: 'evt-windline',
+    title: 'Chasing the Pressure Line',
+    prompt:
+      'There is a darker band of breeze on the water off to one side. Dig out toward the new pressure line, or stay in the steady breeze you are already carrying?',
+    kind: 'weather',
+    conditions: ['moderate', 'fresh'],
+    choices: [
+      {
+        id: 'evt-windline-dig',
+        label: 'Dig out to the pressure',
+        description: 'Sail toward the darker water for more wind — extra distance now, more speed if it holds.',
+        timeDelta: -0.8,
+        staminaDelta: -6,
+        moraleDelta: 4,
+        hullDelta: 0,
+        risk: 0.26,
+        field: true,
+      },
+      {
+        id: 'evt-windline-stay',
+        label: 'Stay in the steady breeze',
+        description: 'Keep sailing the wind you trust rather than chase a band that may fade.',
+        timeDelta: 0.4,
+        staminaDelta: -2,
+        moraleDelta: 0,
+        hullDelta: 0,
+        risk: 0.06,
       },
     ],
   },
@@ -818,11 +1303,74 @@ export function pickEvent(): GameEvent {
   return rndPick(EVENTS);
 }
 
-// Pick from a pool, preferring entries not yet seen this race; only once every
-// option has been shown does it allow a repeat.
-function pickFresh(pool: GameEvent[], seen: Set<string>): GameEvent {
-  const fresh = pool.filter((e) => !seen.has(e.id));
-  return rndPick(fresh.length > 0 ? fresh : pool);
+// ---------------------------------------------------------------------------
+// Context-aware "local knowledge" tagging.
+//
+// Coarse region keys for the everyday decisions: a handful of watery
+// neighbourhoods whose local calls (a headland back-eddy, a kelp paddock, a sea
+// breeze filling) belong there more than anywhere else. Kept independent of the
+// onboarding `SailingRegion` so content and profiling stay decoupled — the
+// picker maps the race to its region and prefers events tagged for it, but the
+// flat fallback keeps every event eligible everywhere, so nothing is ever gated
+// out of a draw.
+// ---------------------------------------------------------------------------
+export const RACE_REGION: Record<string, string> = {
+  'race-round-island': 'uk',
+  'race-fastnet': 'uk',
+  'race-middle-sea': 'med',
+  'race-chicago-mac': 'lakes',
+  'race-newport-bermuda': 'atlantic',
+  'race-caribbean-600': 'caribbean',
+  'race-sydney-hobart': 'tasman',
+  'race-transpac': 'pacific',
+  'race-r2ak': 'pnw',
+};
+
+// The moment the picker fits an everyday decision to: which race/region, the
+// live breeze band, and how far through the passage we are. All optional — with
+// an empty context every event fits, so the picker behaves exactly as the plain
+// point-of-sail draw did (determinism unchanged for the no-context path).
+export interface EventContext {
+  raceId?: string;
+  band?: ConditionBand;
+  phase?: RacePhase;
+}
+
+// Map the live wind speed to a coarse breeze band (matches the WindStrength
+// bands the UI already uses, folded to the four everyday-decision bands).
+export function conditionBand(windSpeedKn: number): ConditionBand {
+  if (windSpeedKn < 9) return 'light';
+  if (windSpeedKn < 17) return 'moderate';
+  if (windSpeedKn < 25) return 'fresh';
+  return 'heavy';
+}
+
+// Where in the passage we are, by fraction of the course sailed.
+export function racePhase(coveredNm: number, totalNm: number): RacePhase {
+  const f = totalNm > 0 ? coveredNm / totalNm : 0;
+  if (f < 0.34) return 'early';
+  if (f < 0.67) return 'mid';
+  return 'late';
+}
+
+// Does this event's context tags fit the moment? Each *specified* tag must be
+// compatible; an unspecified tag, or an absent piece of context, never
+// disqualifies — tags only ever add fit. An untagged event fits everywhere.
+function eventFits(e: GameEvent, ctx: EventContext): boolean {
+  if (e.conditions && ctx.band && !e.conditions.includes(ctx.band)) return false;
+  if (e.phase && ctx.phase && e.phase !== ctx.phase) return false;
+  if (e.regions && ctx.raceId) {
+    const region = RACE_REGION[ctx.raceId];
+    const match = e.regions.some((r) => r === ctx.raceId || r === region);
+    if (!match) return false;
+  }
+  return true;
+}
+
+// An event with none of the context tags is situation-agnostic — the flat pool
+// the picker falls back to when nothing else fits, so a draw is always possible.
+function isFlat(e: GameEvent): boolean {
+  return !e.conditions && !e.regions && !e.phase;
 }
 
 // Chooses an everyday decision to present during a race. The signature hazard
@@ -835,11 +1383,18 @@ function pickFresh(pool: GameEvent[], seen: Set<string>): GameEvent {
 // specific point of sail (e.g. the Upwind-only wind-shift, the Downwind-only
 // spinnaker call) can only be drawn on a matching leg, so a downwind stretch
 // never surfaces an upwind gauge. Events without a `pointOfSail` are situation-
-// agnostic and always eligible. The filter narrows the pool but the draw is
-// still a single seeded `rndPick` (via pickFresh), so determinism holds.
+// agnostic and always eligible.
+//
+// `context` fits the draw to the moment beyond the leg — the local breeze band,
+// the region's waters, the phase of the passage — *preferring* events whose tags
+// suit, but always falling back to the flat/untagged pool (and, if need be, the
+// whole pool) so a draw is guaranteed. Critically, however narrow the preferred
+// set becomes, the draw still ends in exactly ONE seeded `rndPick`, so the same
+// seed and context always yield the same sequence.
 export function pickEventForRace(
   shown: string[] = [],
-  pointOfSail?: PointOfSail
+  pointOfSail?: PointOfSail,
+  context: EventContext = {}
 ): GameEvent {
   const seen = new Set(shown);
   const roll = rnd();
@@ -848,13 +1403,29 @@ export function pickEventForRace(
   if (!seen.has(MOB_EVENTS[0].id) && roll < 0.08) {
     return MOB_EVENTS[0];
   }
-  // Everyday tactical/weather/crew calls drawn from the combined pool, never
-  // repeating until all of them have been seen — filtered to the current leg's
-  // point of sail so the decision can't contradict what the boat is doing.
+  // Everyday tactical/weather/crew calls, filtered to the current leg's point of
+  // sail so the decision can't contradict what the boat is doing.
   const everyday = [...WEATHER_EVENTS, ...MORALE_EVENTS, ...GENERIC_EVENTS].filter(
     (e) => !pointOfSail || !e.pointOfSail || e.pointOfSail === pointOfSail
   );
-  return pickFresh(everyday, seen);
+
+  // Preference tiers, each narrower than the last, falling through to a set that
+  // is guaranteed non-empty. Fresh (unseen) events are always preferred, so the
+  // "no repeat until the pool is exhausted" behaviour holds; within the fresh
+  // set, events whose tags fit the moment come first. The final `rndPick` is the
+  // only source of randomness, so determinism is preserved.
+  const fresh = everyday.filter((e) => !seen.has(e.id));
+  const fittingFresh = fresh.filter((e) => eventFits(e, context));
+  const flatFresh = fresh.filter(isFlat);
+  const candidates =
+    fittingFresh.length > 0
+      ? fittingFresh
+      : flatFresh.length > 0
+        ? flatFresh
+        : fresh.length > 0
+          ? fresh
+          : everyday;
+  return rndPick(candidates);
 }
 
 // Classify which signature choice the player made for the storyline debrief.
