@@ -31,6 +31,10 @@ export function enabledOAuthProviders(
   return providers;
 }
 
-// Where the privacy policy lives (required for app-store / GDPR compliance).
+// Where the legal pages live (required for app-store / GDPR compliance). Served
+// as static pages from the web build (see public/privacy.html, public/terms.html
+// and the netlify.toml redirects), overridable per-deploy via env.
 export const PRIVACY_URL =
   process.env.EXPO_PUBLIC_PRIVACY_URL || 'https://offshoretactics.netlify.app/privacy';
+export const TERMS_URL =
+  process.env.EXPO_PUBLIC_TERMS_URL || 'https://offshoretactics.netlify.app/terms';

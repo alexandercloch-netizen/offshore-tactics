@@ -38,19 +38,24 @@ interface Draft {
 
 export const OnboardingScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
-  const { setPlayerProfile } = useGame();
+  const { state, setPlayerProfile } = useGame();
+  const existing = state.profile.player;
   const [stepIndex, setStepIndex] = useState(0);
   const [draft, setDraft] = useState<Draft>({});
 
   const step = STEPS[stepIndex];
 
   const complete = (final: Draft) => {
+    // Re-entry from "Edit Preferences" must not rebuild the profile from scratch:
+    // merge over any existing one so the player's chosen currency, their original
+    // onboardedAt date and any other fields (role, boatType) survive the edit.
     const profile: PlayerProfile = {
-      region: final.region ?? 'other',
-      goal: final.goal ?? 'destress',
-      experience: final.experience ?? 'club',
-      currency: detectCurrency(),
-      onboardedAt: Date.now(),
+      ...existing,
+      region: final.region ?? existing?.region ?? 'other',
+      goal: final.goal ?? existing?.goal ?? 'destress',
+      experience: final.experience ?? existing?.experience ?? 'club',
+      currency: existing?.currency ?? detectCurrency(),
+      onboardedAt: existing?.onboardedAt ?? Date.now(),
     };
     setPlayerProfile(profile);
     // Pop back to the tabs (first run pushes Onboarding over them); fall back to

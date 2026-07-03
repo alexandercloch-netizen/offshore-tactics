@@ -13,11 +13,15 @@ import Svg, {
 } from 'react-native-svg';
 import { colors, radius, spacing } from '../theme';
 import { GeoPoint, Waypoint } from '../types';
-import { CourseBounds, isLoopCourse } from '../engine/geo';
+import { isLoopCourse } from '../engine/geo';
 import { tideHeatColor, windHeatColor } from './windScale';
 import WindParticles from './WindParticles';
 import { FlowCell, FlowLayer } from './flowField';
+import { buildProjector } from './projection';
 import { LandPolygon } from '../data/landmasses';
+
+// Re-exported so screens can keep importing it from RouteMap (its historical home).
+export { chartViewportBounds } from './projection';
 
 // The dense colour-field grid for the active layer (wind speed or tide rate),
 // row-major and full (no cells dropped) so the heatmap and the flow animation can
@@ -49,60 +53,6 @@ interface RouteMapProps {
 interface XY {
   x: number;
   y: number;
-}
-
-const CHART_PAD = 26;
-
-// Shared parameters of the equirectangular projection (longitude scaled by
-// cos(mean latitude)), fit to the viewport with padding and letterboxed on the
-// looser axis. Derived once so the projector and its inverse can't drift apart.
-function projectionParams(waypoints: { lat: number; lon: number }[], width: number, height: number) {
-  const lats = waypoints.map((w) => w.lat);
-  const lons = waypoints.map((w) => w.lon);
-  const meanLat = (Math.min(...lats) + Math.max(...lats)) / 2;
-  const k = Math.cos((meanLat * Math.PI) / 180) || 1;
-
-  const xs = lons.map((lon) => lon * k);
-  const ys = lats.map((lat) => -lat);
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
-  const minY = Math.min(...ys);
-  const maxY = Math.max(...ys);
-
-  const spanX = maxX - minX || 1;
-  const spanY = maxY - minY || 1;
-  const scale = Math.min((width - CHART_PAD * 2) / spanX, (height - CHART_PAD * 2) / spanY);
-  const offsetX = (width - spanX * scale) / 2;
-  const offsetY = (height - spanY * scale) / 2;
-  return { k, minX, minY, scale, offsetX, offsetY };
-}
-
-function buildProjector(waypoints: Waypoint[], width: number, height: number) {
-  const { k, minX, minY, scale, offsetX, offsetY } = projectionParams(waypoints, width, height);
-  return (lat: number, lon: number): XY => ({
-    x: offsetX + (lon * k - minX) * scale,
-    y: offsetY + (-lat - minY) * scale,
-  });
-}
-
-// Geographic bounds of the *whole* chart viewport (0..width, 0..height), found
-// by inverting the projection at the corners. Sampling the weather/tide grids to
-// these bounds fills the entire map — the course bounding box leaves the padding
-// and letterbox margins bare.
-export function chartViewportBounds(
-  waypoints: Waypoint[],
-  width: number,
-  height: number
-): CourseBounds {
-  const { k, minX, minY, scale, offsetX, offsetY } = projectionParams(waypoints, width, height);
-  const lonAt = (x: number) => (minX + (x - offsetX) / scale) / k;
-  const latAt = (y: number) => -(minY + (y - offsetY) / scale);
-  return {
-    minLon: lonAt(0),
-    maxLon: lonAt(width),
-    minLat: latAt(height), // y grows downward, so the bottom edge is the south
-    maxLat: latAt(0),
-  };
 }
 
 function pathFrom(points: XY[]): string {

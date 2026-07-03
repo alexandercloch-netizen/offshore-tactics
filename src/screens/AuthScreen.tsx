@@ -1,8 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
-  Linking,
   Platform,
   ScrollView,
   StyleSheet,
@@ -14,9 +12,12 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
 import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
 import { useAuth } from '../store/AuthContext';
+import { validateCredentials } from '../store/AuthContext';
 import { updateDisplayName } from '../services/profile';
 import { PRIVACY_URL } from '../lib/authProviders';
+import { confirmAction } from '../lib/confirm';
 import NauticalButton from '../components/NauticalButton';
+import ConsentFooter, { openExternal } from '../components/ConsentFooter';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Auth'>;
 
@@ -37,6 +38,11 @@ export const AuthScreen: React.FC<Props> = ({ navigation }) => {
     setNotice(null);
     if (!email || !password || (mode === 'signup' && !name)) {
       setError('Please fill in every field.');
+      return;
+    }
+    const invalid = validateCredentials(email, password);
+    if (invalid) {
+      setError(invalid);
       return;
     }
     setBusy(true);
@@ -83,24 +89,19 @@ export const AuthScreen: React.FC<Props> = ({ navigation }) => {
 
   const confirmDelete = () => {
     if (!user) return;
-    Alert.alert(
-      'Delete Account',
-      'This permanently deletes your account and all your cloud data — fleet, history and saved campaign. This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            setBusy(true);
-            const result = await deleteAccount();
-            setBusy(false);
-            if (result.error) setError(result.error);
-            // On success the session ends and the navigator swaps to the wall.
-          },
-        },
-      ]
-    );
+    confirmAction({
+      title: 'Delete Account',
+      message:
+        'This permanently deletes your account and all your cloud data — fleet, history and saved campaign. This cannot be undone.',
+      confirmLabel: 'Delete',
+      onConfirm: async () => {
+        setBusy(true);
+        const result = await deleteAccount();
+        setBusy(false);
+        if (result.error) setError(result.error);
+        // On success the session ends and the navigator swaps to the wall.
+      },
+    });
   };
 
   if (!configured) {
@@ -146,19 +147,35 @@ export const AuthScreen: React.FC<Props> = ({ navigation }) => {
             <NauticalButton
               label="Sign Out"
               variant="secondary"
-              onPress={async () => {
-                await signOut();
-                navigation.goBack();
-              }}
+              onPress={() =>
+                confirmAction({
+                  title: 'Sign Out',
+                  message: 'Sign out of your account on this device?',
+                  confirmLabel: 'Sign Out',
+                  destructive: false,
+                  onConfirm: async () => {
+                    await signOut();
+                    navigation.goBack();
+                  },
+                })
+              }
             />
             <NauticalButton label="Back" variant="ghost" onPress={() => navigation.goBack()} />
           </View>
 
           <View style={styles.dangerZone}>
-            <Text style={styles.privacyLink} onPress={() => Linking.openURL(PRIVACY_URL)}>
+            <Text
+              style={styles.privacyLink}
+              accessibilityRole="button"
+              onPress={() => openExternal(PRIVACY_URL)}
+            >
               Privacy Policy
             </Text>
-            <Text style={styles.deleteLink} onPress={confirmDelete}>
+            <Text
+              style={styles.deleteLink}
+              accessibilityRole="button"
+              onPress={confirmDelete}
+            >
               Delete account
             </Text>
           </View>
@@ -230,6 +247,8 @@ export const AuthScreen: React.FC<Props> = ({ navigation }) => {
             }}
           />
         </View>
+
+        <ConsentFooter />
       </ScrollView>
     </KeyboardAvoidingView>
   );

@@ -1210,7 +1210,7 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
       progress.decisionsTaken = prev.decisionsTaken + 1;
       progress.nextDecisionAtNm =
         distanceCoveredNm + rndRange(DECISION_MIN, DECISION_MAX) * total;
-      event = pickEventForRace(progress.shownEventIds);
+      event = pickEventForRace(progress.shownEventIds, progress.pointOfSail);
       progress.shownEventIds = [...progress.shownEventIds, event.id];
     }
   } else if (canDecide && nearHazard && !progress.shownEventIds.includes(hazardId)) {
@@ -1223,7 +1223,7 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
     progress.decisionsTaken = prev.decisionsTaken + 1;
     progress.nextDecisionAtNm =
       distanceCoveredNm + rndRange(DECISION_MIN, DECISION_MAX) * total;
-    event = pickEventForRace(progress.shownEventIds);
+    event = pickEventForRace(progress.shownEventIds, progress.pointOfSail);
     progress.shownEventIds = [...progress.shownEventIds, event.id];
   }
 

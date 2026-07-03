@@ -19,9 +19,11 @@ export async function loadCloudSave(userId: string): Promise<GameState | null> {
 // Persists the save through the conditional-upsert RPC: the server writes only
 // when this save is newer than the stored one, so a stale device can't clobber
 // newer cloud data. Best-effort — failures are swallowed (local AsyncStorage is
-// the fallback). The RPC reads auth.uid(), so no user id is passed.
-export async function saveCloud(state: GameState): Promise<void> {
-  if (!supabase) return;
+// the fallback). The RPC reads auth.uid(), so no user id is passed. Returns true
+// when the write reached the server, so the caller can mark a failed save dirty
+// and re-flush it on foreground/reconnect.
+export async function saveCloud(state: GameState): Promise<boolean> {
+  if (!supabase) return false;
   const snapshot = cloudSnapshot(state);
   const clientUpdatedAt = new Date(snapshot.savedAt ?? Date.now()).toISOString();
   const payload = JSON.stringify(snapshot);
@@ -30,11 +32,18 @@ export async function saveCloud(state: GameState): Promise<void> {
   if (payload.length > 512_000) {
     console.warn(`Cloud save payload is large (${Math.round(payload.length / 1024)} KB)`);
   }
-  const { error } = await supabase.rpc('save_game', {
-    p_state: snapshot,
-    p_client_updated_at: clientUpdatedAt,
-  });
-  if (error) {
-    console.warn('Cloud save failed', error.message);
+  try {
+    const { error } = await supabase.rpc('save_game', {
+      p_state: snapshot,
+      p_client_updated_at: clientUpdatedAt,
+    });
+    if (error) {
+      console.warn('Cloud save failed', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn('Cloud save threw', err);
+    return false;
   }
 }

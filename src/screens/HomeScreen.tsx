@@ -11,6 +11,7 @@ import { useAuth } from '../store/AuthContext';
 import { defaultDivision, goalHeadline, recommendedRace } from '../engine/recommend';
 import { getClassOption } from '../data/polarLibrary';
 import NauticalButton from '../components/NauticalButton';
+import { confirmAction } from '../lib/confirm';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'Race'>,
@@ -39,6 +40,21 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
       : undefined;
 
   const startNewCampaign = () => {
+    // Starting a new campaign wipes an in-progress race. Guard it so a stray tap
+    // on "New Race" can't silently scuttle a race the player is mid-way through.
+    if (raceInProgress) {
+      confirmAction({
+        title: 'Discard race in progress?',
+        message: 'You have a race underway. Starting a new one abandons it.',
+        confirmLabel: 'Discard & Continue',
+        cancelLabel: 'Keep Racing',
+        onConfirm: () => {
+          prepareNextRace();
+          navigation.navigate('RaceSelect');
+        },
+      });
+      return;
+    }
     prepareNextRace();
     navigation.navigate('RaceSelect');
   };

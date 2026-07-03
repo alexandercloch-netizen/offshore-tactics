@@ -1,0 +1,81 @@
+import { CourseBounds } from '../engine/geo';
+
+// Pure maths for the chart's equirectangular projection, kept apart from the SVG
+// component so it's unit-testable without a JSX transform. Longitude is scaled by
+// cos(mean latitude); the course box is fit to the viewport with padding and
+// letterboxed on the looser axis. Derived once so the projector and its inverse
+// (chartViewportBounds) can't drift apart.
+
+export const CHART_PAD = 26;
+
+export interface ProjectionParams {
+  k: number; // longitude compression at the course's mean latitude
+  minX: number;
+  minY: number;
+  scale: number; // pixels per projected unit
+  offsetX: number;
+  offsetY: number;
+}
+
+export interface XY {
+  x: number;
+  y: number;
+}
+
+export function projectionParams(
+  waypoints: { lat: number; lon: number }[],
+  width: number,
+  height: number
+): ProjectionParams {
+  const lats = waypoints.map((w) => w.lat);
+  const lons = waypoints.map((w) => w.lon);
+  const meanLat = (Math.min(...lats) + Math.max(...lats)) / 2;
+  const k = Math.cos((meanLat * Math.PI) / 180) || 1;
+
+  const xs = lons.map((lon) => lon * k);
+  const ys = lats.map((lat) => -lat);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+
+  const spanX = maxX - minX || 1;
+  const spanY = maxY - minY || 1;
+  const scale = Math.min((width - CHART_PAD * 2) / spanX, (height - CHART_PAD * 2) / spanY);
+  const offsetX = (width - spanX * scale) / 2;
+  const offsetY = (height - spanY * scale) / 2;
+  return { k, minX, minY, scale, offsetX, offsetY };
+}
+
+// A projector closure: geographic (lat, lon) → screen (x, y).
+export function buildProjector(
+  waypoints: { lat: number; lon: number }[],
+  width: number,
+  height: number
+): (lat: number, lon: number) => XY {
+  const { k, minX, minY, scale, offsetX, offsetY } = projectionParams(waypoints, width, height);
+  return (lat: number, lon: number): XY => ({
+    x: offsetX + (lon * k - minX) * scale,
+    y: offsetY + (-lat - minY) * scale,
+  });
+}
+
+// Geographic bounds of the *whole* chart viewport (0..width, 0..height), found
+// by inverting the projection at the corners. Sampling the weather/tide grids to
+// these bounds fills the entire map — the course bounding box leaves the padding
+// and letterbox margins bare.
+export function chartViewportBounds(
+  waypoints: { lat: number; lon: number }[],
+  width: number,
+  height: number
+): CourseBounds {
+  const { k, minX, minY, scale, offsetX, offsetY } = projectionParams(waypoints, width, height);
+  const lonAt = (x: number) => (minX + (x - offsetX) / scale) / k;
+  const latAt = (y: number) => -(minY + (y - offsetY) / scale);
+  return {
+    minLon: lonAt(0),
+    maxLon: lonAt(width),
+    minLat: latAt(height), // y grows downward, so the bottom edge is the south
+    maxLat: latAt(0),
+  };
+}

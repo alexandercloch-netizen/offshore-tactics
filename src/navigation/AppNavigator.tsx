@@ -8,6 +8,7 @@ import { colors, fontWeight } from '../theme';
 import { isSupabaseConfigured } from '../lib/supabase';
 import { useAuth } from '../store/AuthContext';
 import TabBarIcon from './TabBarIcon';
+import ErrorBoundary from '../components/ErrorBoundary';
 import HomeScreen from '../screens/HomeScreen';
 import OnboardingScreen from '../screens/OnboardingScreen';
 import ProfileScreen from '../screens/ProfileScreen';
@@ -80,6 +81,12 @@ const MainTabs: React.FC = () => (
 
 export const AppNavigator: React.FC = () => {
   const { configured, user, loading } = useAuth();
+  // A monotonically-increasing key bumped on every navigation, fed to the
+  // ErrorBoundary wrapping the screens: if a screen throws, navigating anywhere
+  // clears the caught error and re-attempts the render instead of latching the
+  // fallback for the rest of the session.
+  const [navKey, setNavKey] = React.useState(0);
+  const onNav = React.useCallback(() => setNavKey((k) => k + 1), []);
 
   // Hold on a splash until auth resolves, so the login wall doesn't flash for a
   // signed-in returning player.
@@ -96,15 +103,18 @@ export const AppNavigator: React.FC = () => {
   if (configured && !user) {
     return (
       <NavigationContainer theme={navTheme}>
-        <Stack.Navigator screenOptions={headerOptions}>
-          <Stack.Screen name="AuthGate" component={AuthGateScreen} options={{ headerShown: false }} />
-        </Stack.Navigator>
+        <ErrorBoundary label="Something went wrong. Please reload.">
+          <Stack.Navigator screenOptions={headerOptions}>
+            <Stack.Screen name="AuthGate" component={AuthGateScreen} options={{ headerShown: false }} />
+          </Stack.Navigator>
+        </ErrorBoundary>
       </NavigationContainer>
     );
   }
 
   return (
-    <NavigationContainer theme={navTheme}>
+    <NavigationContainer theme={navTheme} onStateChange={onNav}>
+      <ErrorBoundary label="Something went wrong. Try going back." resetKey={navKey}>
       <Stack.Navigator initialRouteName="Main" screenOptions={headerOptions}>
         <Stack.Screen name="Main" component={MainTabs} options={{ headerShown: false }} />
         <Stack.Screen
@@ -168,6 +178,7 @@ export const AppNavigator: React.FC = () => {
           options={{ title: 'Sail Locker' }}
         />
       </Stack.Navigator>
+      </ErrorBoundary>
     </NavigationContainer>
   );
 };

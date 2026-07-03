@@ -1,4 +1,4 @@
-import { GameEvent, HazardKey, SignatureOutcome } from '../types';
+import { GameEvent, HazardKey, PointOfSail, SignatureOutcome } from '../types';
 import { rnd, rndPick } from '../engine/rng';
 
 // ---------------------------------------------------------------------------
@@ -167,22 +167,22 @@ export const GENERIC_EVENTS: GameEvent[] = [
       {
         id: 'evt-kelp-clear',
         label: 'Back down to clear it',
-        description: 'Stop briefly to shed the weed and get the foils clean again.',
-        timeDelta: 0.5,
-        staminaDelta: -3,
-        moraleDelta: 1,
+        description: 'Stop to shed the weed and get the foils clean again — costs time, but the crew is glad of it.',
+        timeDelta: 0.7,
+        staminaDelta: -2,
+        moraleDelta: 2,
         hullDelta: 0,
-        risk: 0.04,
+        risk: 0.03,
       },
       {
         id: 'evt-kelp-ignore',
         label: 'Grind on with the drag',
-        description: 'Keep racing and hope it sheds itself — slower until it does.',
-        timeDelta: 0.6,
-        staminaDelta: -1,
-        moraleDelta: -2,
+        description: 'Keep racing to save the manoeuvre — the drag wears on the watch until it sheds.',
+        timeDelta: 0.4,
+        staminaDelta: -4,
+        moraleDelta: -3,
         hullDelta: 0,
-        risk: 0.05,
+        risk: 0.06,
       },
     ],
   },
@@ -830,7 +830,17 @@ function pickFresh(pool: GameEvent[], seen: Set<string>): GameEvent {
 // covers the rare man-overboard drama plus the everyday tactical/weather/crew
 // calls — drawn without repeating until the pool is exhausted, so consecutive
 // decisions feel varied. `shown` is the ids already presented this race.
-export function pickEventForRace(shown: string[] = []): GameEvent {
+//
+// `pointOfSail` gates the draw to the current leg: an event authored for a
+// specific point of sail (e.g. the Upwind-only wind-shift, the Downwind-only
+// spinnaker call) can only be drawn on a matching leg, so a downwind stretch
+// never surfaces an upwind gauge. Events without a `pointOfSail` are situation-
+// agnostic and always eligible. The filter narrows the pool but the draw is
+// still a single seeded `rndPick` (via pickFresh), so determinism holds.
+export function pickEventForRace(
+  shown: string[] = [],
+  pointOfSail?: PointOfSail
+): GameEvent {
   const seen = new Set(shown);
   const roll = rnd();
 
@@ -839,8 +849,11 @@ export function pickEventForRace(shown: string[] = []): GameEvent {
     return MOB_EVENTS[0];
   }
   // Everyday tactical/weather/crew calls drawn from the combined pool, never
-  // repeating until all of them have been seen.
-  const everyday = [...WEATHER_EVENTS, ...MORALE_EVENTS, ...GENERIC_EVENTS];
+  // repeating until all of them have been seen — filtered to the current leg's
+  // point of sail so the decision can't contradict what the boat is doing.
+  const everyday = [...WEATHER_EVENTS, ...MORALE_EVENTS, ...GENERIC_EVENTS].filter(
+    (e) => !pointOfSail || !e.pointOfSail || e.pointOfSail === pointOfSail
+  );
   return pickFresh(everyday, seen);
 }
 

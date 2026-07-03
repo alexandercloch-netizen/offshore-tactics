@@ -15,6 +15,7 @@ import { GameEvent, TacticalChoice, VmgPreview } from '../types';
 import { InstrumentReport } from '../engine/instruments';
 import type { TacticalRead } from '../engine/gameEngine';
 import Sparkline from './Sparkline';
+import { CompassIcon, WarningIcon } from './icons';
 
 // The race decision presented as a full-screen "nav station" that fills the
 // viewport. On a wide screen (desktop / landscape tablet) it splits into two
@@ -216,10 +217,13 @@ export const DecisionCockpit: React.FC<DecisionCockpitProps> = ({
         ) : null}
       </View>
       {instruments?.outlook.warn ? (
-        <Text style={styles.outlookLine} numberOfLines={1}>
-          ⚠ {instruments.outlook.headline} · {round(instruments.outlook.peakKn)} kn
-          {instruments.outlook.trend === 'building' ? ' ahead' : ''}
-        </Text>
+        <View style={styles.outlookRow}>
+          <WarningIcon size={13} color={colors.warning} />
+          <Text style={styles.outlookLine} numberOfLines={1}>
+            {instruments.outlook.headline} · {round(instruments.outlook.peakKn)} kn
+            {instruments.outlook.trend === 'building' ? ' ahead' : ''}
+          </Text>
+        </View>
       ) : null}
     </View>
   ) : null;
@@ -240,9 +244,12 @@ export const DecisionCockpit: React.FC<DecisionCockpitProps> = ({
         {event?.prompt}
       </Text>
       {read && event?.choices.some((c) => c.field) ? (
-        <Text style={styles.read} numberOfLines={2}>
-          🧭 Navigator: {read.hint}
-        </Text>
+        <View style={styles.readRow}>
+          <CompassIcon size={14} color={colors.brassLight} />
+          <Text style={styles.read} numberOfLines={2}>
+            Navigator: {read.hint}
+          </Text>
+        </View>
       ) : null}
     </>
   );
@@ -523,11 +530,17 @@ const styles = StyleSheet.create({
     fontSize: fontSize.xs,
     textTransform: 'uppercase',
   },
+  outlookRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+  },
   outlookLine: {
+    flex: 1,
     color: colors.warning,
     fontSize: fontSize.xs,
     fontWeight: fontWeight.bold,
-    marginTop: spacing.xs,
   },
   // The hero flexes to fill whatever room is left in its pane/column; a minHeight
   // keeps the chart usable on the shortest windows (where the ScrollView scrolls).
@@ -544,11 +557,17 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     lineHeight: 20,
   },
+  readRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+  },
   read: {
+    flex: 1,
     color: colors.brassLight,
     fontSize: fontSize.sm,
     fontStyle: 'italic',
-    marginTop: spacing.xs,
   },
   choices: {
     marginTop: spacing.md,
