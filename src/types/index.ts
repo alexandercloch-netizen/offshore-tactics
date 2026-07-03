@@ -388,6 +388,13 @@ export interface TacticalChoice {
 
 export type EventKind = 'tactical' | 'weather' | 'mob' | 'hazard';
 
+// A coarse breeze band derived from the live wind, used to fit an everyday
+// decision to the moment — a broach call belongs in a breeze, not a drifter.
+export type ConditionBand = 'light' | 'moderate' | 'fresh' | 'heavy';
+
+// Where in the passage a decision belongs (fraction of the course sailed).
+export type RacePhase = 'early' | 'mid' | 'late';
+
 export interface GameEvent {
   id: string;
   title: string;
@@ -395,6 +402,15 @@ export interface GameEvent {
   kind: EventKind;
   pointOfSail?: PointOfSail;
   hazard?: HazardKey; // present on hazard-specific events
+  // ---- Context tags (all optional, back-compatible) ----
+  // The everyday picker *prefers* events whose tags fit the moment — the local
+  // breeze band, the region's waters, the phase of the passage — then falls back
+  // to the flat pool so a draw is always possible. An untagged event is
+  // situation-agnostic and always eligible; tags only ever add fit, never gate a
+  // draw out of existence.
+  conditions?: ConditionBand[]; // breeze bands this decision suits
+  regions?: string[]; // race ids or coarse region keys it fits (local knowledge)
+  phase?: RacePhase; // early / mid / late in the passage
   // Storyline wiring (optional, back-compatible). A storied race's signature
   // event is pinned to a course mark: it fires deterministically as the boat
   // reaches `pinToWaypoint`, exactly once, and links the narrative `storyBeat`

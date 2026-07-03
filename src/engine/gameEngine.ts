@@ -38,6 +38,8 @@ import {
   getProvisionById,
   getRaceById,
   pickEventForRace,
+  conditionBand,
+  racePhase,
 } from '../data';
 import { HAZARD_EVENTS, signatureOutcomeFor } from '../data/events';
 import { debriefBeat, storylineForRace } from '../data/storylines';
@@ -1171,6 +1173,15 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
   // are drawn on the usual geometric cadence, never repeating until exhausted.
   let event: GameEvent | null = null;
   const canDecide = !finished && !retired && prev.decisionsTaken < MAX_DECISIONS;
+  // Fit the everyday draw to the moment: the race's waters, the live breeze band
+  // and how far through the passage we are. The picker only *prefers* matching
+  // events (it always falls back to the flat pool), so this shapes flavour, not
+  // the deterministic single-pick contract.
+  const decisionContext = {
+    raceId: race.id,
+    band: conditionBand(wind.speedKn),
+    phase: racePhase(distanceCoveredNm, total),
+  };
   const hazardEvent = HAZARD_EVENTS[race.hazard];
   const hazardId = hazardEvent.id;
   // A storied race pins its signature decision to a named mark and guarantees it
@@ -1210,7 +1221,7 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
       progress.decisionsTaken = prev.decisionsTaken + 1;
       progress.nextDecisionAtNm =
         distanceCoveredNm + rndRange(DECISION_MIN, DECISION_MAX) * total;
-      event = pickEventForRace(progress.shownEventIds, progress.pointOfSail);
+      event = pickEventForRace(progress.shownEventIds, progress.pointOfSail, decisionContext);
       progress.shownEventIds = [...progress.shownEventIds, event.id];
     }
   } else if (canDecide && nearHazard && !progress.shownEventIds.includes(hazardId)) {

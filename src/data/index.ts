@@ -18,6 +18,8 @@ export {
   HAZARD_EVENTS,
   pickEvent,
   pickEventForRace,
+  conditionBand,
+  racePhase,
   signatureOutcomeFor,
 } from './events';
 export {
