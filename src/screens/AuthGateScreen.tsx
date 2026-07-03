@@ -1,9 +1,7 @@
 import React, { useState } from 'react';
 import {
   KeyboardAvoidingView,
-  Linking,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,9 +10,10 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
-import { useAuth } from '../store/AuthContext';
-import { enabledOAuthProviders, PRIVACY_URL } from '../lib/authProviders';
+import { useAuth, validateCredentials } from '../store/AuthContext';
+import { enabledOAuthProviders } from '../lib/authProviders';
 import NauticalButton from '../components/NauticalButton';
+import ConsentFooter from '../components/ConsentFooter';
 
 type Mode = 'signin' | 'signup';
 
@@ -65,6 +64,11 @@ export const AuthGateScreen: React.FC = () => {
     reset();
     if (!email || !password || (mode === 'signup' && !name)) {
       setError('Please fill in every field.');
+      return;
+    }
+    const invalid = validateCredentials(email, password);
+    if (invalid) {
+      setError(invalid);
       return;
     }
     setBusy(true);
@@ -180,9 +184,7 @@ export const AuthGateScreen: React.FC = () => {
           />
         </View>
 
-        <Text style={styles.privacy} onPress={() => Linking.openURL(PRIVACY_URL)}>
-          Privacy Policy
-        </Text>
+        <ConsentFooter />
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -215,7 +217,7 @@ const styles = StyleSheet.create({
   providerGroup: { gap: spacing.md },
   divider: { flexDirection: 'row', alignItems: 'center', marginVertical: spacing.lg, gap: spacing.md },
   line: { flex: 1, height: 1, backgroundColor: colors.hull },
-  dividerText: { color: colors.slate, fontSize: fontSize.xs, textTransform: 'uppercase', letterSpacing: 1 },
+  dividerText: { color: colors.mist, fontSize: fontSize.xs, textTransform: 'uppercase', letterSpacing: 1 },
   field: { marginBottom: spacing.md },
   label: {
     color: colors.mist,
@@ -238,13 +240,6 @@ const styles = StyleSheet.create({
   error: { color: colors.signalRed, fontSize: fontSize.sm, marginTop: spacing.sm },
   notice: { color: colors.signalGreen, fontSize: fontSize.sm, marginTop: spacing.sm },
   actions: { gap: spacing.md, marginTop: spacing.md },
-  privacy: {
-    color: colors.slate,
-    fontSize: fontSize.sm,
-    textAlign: 'center',
-    marginTop: spacing.xl,
-    textDecorationLine: 'underline',
-  },
 });
 
 export default AuthGateScreen;

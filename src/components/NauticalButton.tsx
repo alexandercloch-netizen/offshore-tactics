@@ -20,6 +20,9 @@ interface NauticalButtonProps {
   subtitle?: string;
   style?: ViewStyle;
   testID?: string;
+  // ALL-CAPS by default (the nautical look). Opt out for labels where shouting
+  // reads wrong — e.g. sentence-case links or proper nouns.
+  uppercase?: boolean;
 }
 
 const VARIANT_STYLES: Record<
@@ -41,6 +44,7 @@ export const NauticalButton: React.FC<NauticalButtonProps> = ({
   subtitle,
   style,
   testID,
+  uppercase = true,
 }) => {
   const palette = VARIANT_STYLES[variant];
   const isDisabled = disabled || loading;
@@ -67,7 +71,15 @@ export const NauticalButton: React.FC<NauticalButtonProps> = ({
         <ActivityIndicator color={palette.text} />
       ) : (
         <View>
-          <Text style={[styles.label, { color: palette.text }]}>{label}</Text>
+          <Text
+            style={[
+              styles.label,
+              { color: palette.text },
+              uppercase ? null : styles.labelNormalCase,
+            ]}
+          >
+            {label}
+          </Text>
           {subtitle ? (
             <Text style={[styles.subtitle, { color: palette.text }]}>
               {subtitle}
@@ -95,6 +107,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     textAlign: 'center',
     textTransform: 'uppercase',
+  },
+  labelNormalCase: {
+    textTransform: 'none',
+    letterSpacing: 0.2,
   },
   subtitle: {
     fontSize: fontSize.xs,

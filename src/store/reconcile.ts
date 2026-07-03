@@ -38,9 +38,17 @@ function union(a: string[] = [], b: string[] = []): string[] {
 // null only if both inputs are null. The result's live/race fields (progress,
 // wind field, fleet, weather, strategy, selections) come wholesale from the
 // newer base so an in-progress race is never half-merged.
+//
+// `unionFunds` keeps the *higher* of the two balances. That's right when folding
+// a guest device save into the account it first signs into (guest→user): the
+// player keeps money earned offline. It is deliberately NOT applied when
+// reconciling one account's own local↔cloud across devices — there, a stale
+// device's higher balance would refund money already spent while the bought boat
+// stays owned (the cross-device "free boat" exploit), so newest-wins on funds.
 export function reconcileSaves(
   local: GameState | null,
-  cloud: GameState | null
+  cloud: GameState | null,
+  unionFunds = true
 ): GameState | null {
   if (!local) return cloud;
   if (!cloud) return local;
@@ -51,8 +59,9 @@ export function reconcileSaves(
 
   return {
     ...base,
-    // Never lose money or campaign assets that exist only on the older side.
-    funds: Math.max(base.funds, other.funds),
+    // Never lose campaign assets that exist only on the older side; funds only
+    // union guest→user (otherwise take the newer base's balance).
+    funds: unionFunds ? Math.max(base.funds, other.funds) : base.funds,
     history: mergeHistory(base.history ?? [], other.history ?? []),
     ownedBoatIds: union(base.ownedBoatIds, other.ownedBoatIds),
     profile: {

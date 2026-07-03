@@ -1,6 +1,13 @@
 import type { WindArrow } from '../engine/wind';
 import type { CurrentArrow } from '../types';
 
+// Web detection without importing react-native — this module is pure TypeScript
+// (unit-tested under ts-jest in a node env, which can't load the RN entry), so we
+// stand in for `Platform.OS === 'web'` with a DOM check. It's true only in the
+// browser (react-native-web) build and false on native and in tests, which is
+// exactly the surface the web-only node budget targets.
+const IS_WEB = typeof document !== 'undefined';
+
 // Pure maths for the flow animation, kept apart from the SVG component so it's
 // unit-testable without a JSX transform. Builds a pixel-space velocity grid from
 // a sampled field and bilinear-samples it; no React, no engine rng.
@@ -132,6 +139,14 @@ export function sampleFlow(
 // the field changes enough cell-to-cell that big cells show as hard tiles. Sizing
 // to a small pixel pitch keeps the colour step between neighbours below perception
 // on any course, and the caps keep the (memoised, static) SVG node count sane.
+// The DOM renders every gradient stop as a real SVG node, so on web the field's
+// node count (cols × rows) is the hard perf ceiling — unlike native, where
+// react-native-svg draws to a canvas. This budget is measured to stay smooth in a
+// browser at the shipped density; it's applied ONLY on web and only ever trims
+// rows if the base caps would exceed it, so the native/shipped gradient is never
+// lowered.
+const WEB_MAX_FIELD_NODES = 5600;
+
 export function fieldResolution(width: number, height: number): { cols: number; rows: number } {
   // The field is painted as one smooth horizontal gradient per row (see RouteMap),
   // so columns set the (already-interpolated) horizontal shape — a moderate count
@@ -139,7 +154,12 @@ export function fieldResolution(width: number, height: number): { cols: number; 
   // horizontal bands show between strips. Hence rows are sampled denser than cols.
   // Caps bound the (static, memoised) gradient/stop node count.
   const cols = Math.max(40, Math.min(56, Math.round((width || 1) / 12)));
-  const rows = Math.max(60, Math.min(100, Math.round((height || 1) / 7)));
+  let rows = Math.max(60, Math.min(100, Math.round((height || 1) / 7)));
+  if (IS_WEB && cols * rows > WEB_MAX_FIELD_NODES) {
+    // Trim rows (keeping the min for a legible vertical step) so the browser SVG
+    // node count stays within budget on very tall charts.
+    rows = Math.max(60, Math.floor(WEB_MAX_FIELD_NODES / cols));
+  }
   return { cols, rows };
 }
 

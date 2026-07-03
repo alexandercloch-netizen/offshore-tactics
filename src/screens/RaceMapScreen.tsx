@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert,
+  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -51,6 +51,8 @@ import StatBar from '../components/StatBar';
 import NauticalButton from '../components/NauticalButton';
 import DecisionCockpit from '../components/DecisionCockpit';
 import LiveStandings from '../components/LiveStandings';
+import { WarningIcon } from '../components/icons';
+import { confirmAction } from '../lib/confirm';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RaceMap'>;
 
@@ -141,6 +143,9 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
   helpRef.current = showHelp;
   // Counts ticks so the standings strip can refresh on a calm cadence (~2s).
   const standingsTickRef = useRef(0);
+  // Caches the cockpit chart's flow field by its inputs so the decision cockpit
+  // doesn't reseed the particle swarm on every layout/render pass.
+  const cockpitFieldCache = useRef<{ key: string; field: FlowField } | null>(null);
 
   const goToResults = useCallback(() => {
     navigation.reset({ index: 0, routes: [{ name: 'Results' }] });
@@ -239,12 +244,23 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
         w > 1 ? w : 1,
         Number.isFinite(h) && h > 1 ? h : w > 1 ? w : 1
       );
-      const bounds = chartViewportBounds(race.waypoints, w, h);
+      // Memoise the field by its inputs (size/layer/hour): the cockpit re-renders
+      // as the modal animates in and on every measured layout pass, and rebuilding
+      // the cells array each time hands WindParticles a new reference that reseeds
+      // the whole swarm — a visible flicker. A stable object keeps the particles
+      // flowing continuously while the decision is up.
+      const cacheKey = `${w}x${h}|${cols}x${rows}|${activeLayer}|${elapsedHourBucket}`;
       let field: FlowField | undefined;
-      if (activeLayer === 'tide' && tidalField) {
-        field = { cells: tideCells(sampleTideField(tidalField, bounds, cols, rows, elapsedHourBucket)), cols, rows };
-      } else if (windField) {
-        field = { cells: windCells(sampleWindGrid(windField, bounds, cols, rows, elapsedHourBucket)), cols, rows };
+      if (cockpitFieldCache.current?.key === cacheKey) {
+        field = cockpitFieldCache.current.field;
+      } else {
+        const bounds = chartViewportBounds(race.waypoints, w, h);
+        if (activeLayer === 'tide' && tidalField) {
+          field = { cells: tideCells(sampleTideField(tidalField, bounds, cols, rows, elapsedHourBucket)), cols, rows };
+        } else if (windField) {
+          field = { cells: windCells(sampleWindGrid(windField, bounds, cols, rows, elapsedHourBucket)), cols, rows };
+        }
+        if (field) cockpitFieldCache.current = { key: cacheKey, field };
       }
       return (
         <RouteMap
@@ -270,22 +286,22 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
   );
 
   const confirmRetire = useCallback(() => {
-    Alert.alert('Retire from Race', 'Abandon the race and head for port?', [
-      { text: 'Keep Racing', style: 'cancel' },
-      {
-        text: 'Retire',
-        style: 'destructive',
-        onPress: () => {
-          retireRace();
-          goToResults();
-        },
+    confirmAction({
+      title: 'Retire from Race',
+      message: 'Abandon the race and head for port?',
+      confirmLabel: 'Retire',
+      cancelLabel: 'Keep Racing',
+      onConfirm: () => {
+        retireRace();
+        goToResults();
       },
-    ]);
+    });
   }, [retireRace, goToResults]);
 
   if (!race || !boat || !state.progress || !state.weather) {
     return (
       <View style={styles.loading}>
+        <ActivityIndicator color={colors.brassLight} style={{ marginBottom: spacing.md }} />
         <Text style={styles.loadingText}>Preparing the race…</Text>
       </View>
     );
@@ -345,8 +361,12 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
               outlook.peakKn >= 34 && styles.weatherWarningSevere,
             ]}
           >
+            <WarningIcon
+              size={15}
+              color={outlook.peakKn >= 34 ? colors.signalRed : colors.warning}
+            />
             <Text style={styles.weatherWarningText}>
-              ⚠ {outlook.headline} · {Math.round(outlook.peakKn)} kn
+              {outlook.headline} · {Math.round(outlook.peakKn)} kn
               {outlook.trend === 'building' ? ` within ${outlook.lookaheadH}h` : ''}
             </Text>
           </View>
@@ -362,6 +382,10 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
             laylines={layPaths}
             field={flowField}
             layer={activeLayer}
+            // Pause the background particle loop while the decision cockpit is
+            // up — it renders its own live chart, so two RAF loops would run at
+            // once behind the modal.
+            animate={!activeEvent}
             windFeature={
               state.windField ? featureState(state.windField, progress.elapsedHours) : undefined
             }
@@ -627,6 +651,10 @@ const styles = StyleSheet.create({
     right: spacing.md,
   },
   weatherWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
     backgroundColor: 'rgba(201, 162, 39, 0.18)',
     borderColor: colors.warning,
     borderWidth: 1,

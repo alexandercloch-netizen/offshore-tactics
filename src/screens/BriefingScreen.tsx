@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -109,6 +110,7 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
   if (!race || !boat || !state.progress || !state.weather || !state.windField) {
     return (
       <View style={styles.loading}>
+        <ActivityIndicator color={colors.brassLight} style={{ marginBottom: spacing.md }} />
         <Text style={styles.loadingText}>Reading the conditions…</Text>
       </View>
     );

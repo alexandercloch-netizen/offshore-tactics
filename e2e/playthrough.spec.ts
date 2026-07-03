@@ -10,6 +10,12 @@ test('a full race can be played from start to finish', async ({ page }) => {
     throw e;
   });
 
+  // Destructive actions now prompt via window.confirm on web (retire, discard a
+  // race in progress, sign out, delete account). The happy-path playthrough
+  // shouldn't hit one, but accept any dialog so a stray confirm can never hang
+  // the run.
+  page.on('dialog', (d) => d.accept().catch(() => undefined));
+
   await page.goto('/');
 
   // First run: answer the quick onboarding quiz (home waters → mission →

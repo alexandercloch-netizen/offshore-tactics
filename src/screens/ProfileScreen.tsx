@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { CompositeScreenProps } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -10,6 +10,7 @@ import { useGame } from '../store/GameContext';
 import { useAuth } from '../store/AuthContext';
 import { formatDuration } from '../engine/gameEngine';
 import NauticalButton from '../components/NauticalButton';
+import { confirmAction } from '../lib/confirm';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'Profile'>,
@@ -24,14 +25,12 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
   const wins = state.history.filter((r) => r.finished && r.position === 1).length;
 
   const confirmReset = () => {
-    Alert.alert(
-      'Reset Campaign',
-      'This wipes your funds, fleet history and progress. Are you sure?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Reset', style: 'destructive', onPress: () => resetCampaign() },
-      ]
-    );
+    confirmAction({
+      title: 'Reset Campaign',
+      message: 'This wipes your funds, fleet history and progress. Are you sure?',
+      confirmLabel: 'Reset',
+      onConfirm: () => resetCampaign(),
+    });
   };
 
   return (
@@ -44,7 +43,11 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={styles.accountText}>
             {user ? `Signed in as ${displayName}` : 'Playing as guest'}
           </Text>
-          <Text style={styles.accountAction} onPress={() => navigation.navigate('Auth')}>
+          <Text
+            style={styles.accountAction}
+            accessibilityRole="button"
+            onPress={() => navigation.navigate('Auth')}
+          >
             {user ? 'Account' : 'Sign in'}
           </Text>
         </View>
@@ -148,7 +151,12 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   accountText: { color: colors.mist, fontSize: fontSize.sm },
-  accountAction: { color: colors.brassLight, fontSize: fontSize.sm, fontWeight: fontWeight.bold },
+  accountAction: {
+    color: colors.brassLight,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.bold,
+    textDecorationLine: 'underline',
+  },
   statsRow: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.lg },
   statCard: {
     flex: 1,
@@ -218,7 +226,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   emptyText: { color: colors.foam, fontSize: fontSize.md, fontWeight: fontWeight.bold },
-  emptySub: { color: colors.slate, fontSize: fontSize.sm, marginTop: spacing.xs, textAlign: 'center' },
+  emptySub: { color: colors.mist, fontSize: fontSize.sm, marginTop: spacing.xs, textAlign: 'center' },
   actions: { gap: spacing.md },
   currencyRow: {
     flexDirection: 'row',

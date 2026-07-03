@@ -52,7 +52,8 @@ import {
 import { createWindField, sampleWind, weatherFromWind } from '../engine/wind';
 import { createTidalField } from '../engine/current';
 import { createFleet } from '../engine/fleet';
-import { clearState, loadState, saveState } from './storage';
+import { AppState } from 'react-native';
+import { clearState, loadState, saveState, GUEST_SCOPE } from './storage';
 import { reconcileSaves, isNewerSave } from './reconcile';
 import { detectCurrency, formatMoney } from '../lib/currency';
 import { useAuth } from './AuthContext';
@@ -410,8 +411,10 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
   displayNameRef.current = displayName;
 
   // Tracks which save "scope" (a user id, or 'local') is currently loaded so
-  // we reload when the signed-in user changes.
+  // we reload when the signed-in user changes. `scopeRef` is the live scope used
+  // by the imperative save path.
   const loadedScopeRef = useRef<string | null>(null);
+  const scopeRef = useRef<string>(GUEST_SCOPE);
   const cloudSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The savedAt of the most recent save we pushed to or adopted from the cloud,
   // used to ignore our own Realtime echo and stale pushes.
@@ -419,24 +422,54 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
   // Set when we adopt a Realtime push so the resulting state change isn't
   // re-uploaded (the cloud already holds it) — prevents a cross-device echo loop.
   const skipCloudPushRef = useRef(false);
+  // Crash-recovery: throttle the mid-race local write to ~1s, but always flush on
+  // a decision boundary and at the finish. `lastLocalSaveRef` stamps the last
+  // write; `localFlushTimer` holds a pending trailing save; `lastDecisionsRef`
+  // detects a decision so we can force an immediate write.
+  const lastLocalSaveRef = useRef<number>(0);
+  const localFlushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastDecisionsRef = useRef<number>(0);
+  // Cloud-save retry: the last durable snapshot that failed to reach the cloud,
+  // re-flushed on app foreground / reconnect so a dropped save isn't lost.
+  const pendingCloudRef = useRef<GameState | null>(null);
+  const LOCAL_SAVE_THROTTLE_MS = 1000;
 
   // Load the right save once auth has resolved, and again whenever the user
   // signs in or out: reconcile local and cloud (newest-wins, assets merged).
   useEffect(() => {
     if (authLoading) return;
-    const scope = user && configured ? user.id : 'local';
+    const scope = user && configured ? user.id : GUEST_SCOPE;
     if (loadedScopeRef.current === scope) return;
+    const prevScope = loadedScopeRef.current;
     loadedScopeRef.current = scope;
+    scopeRef.current = scope;
 
     let mounted = true;
     setReady(false);
     (async () => {
-      // Reconcile the local and cloud saves newest-wins, folding the older
-      // side's campaign assets into the newer base so signing in never loses
-      // progress made offline (or on another device).
-      const localSave = await loadState();
+      // Load this scope's own local cache (namespaced per user, so accounts never
+      // share a device cache) and, when signed in, the cloud save.
+      const localSave = await loadState(scope);
       const cloudSave = user && configured ? await loadCloudSave(user.id) : null;
-      const loaded = reconcileSaves(localSave, cloudSave);
+
+      // A first, in-session guest→user sign-in folds the guest device save in —
+      // and unions funds so money earned offline as a guest carries over. Any
+      // other transition (a fresh start already signed in, or switching between
+      // two accounts) does NOT merge the guest/other save: it would leak one
+      // account's progress and funds into another. The guest cache is cleared
+      // once absorbed so a later second account can't inherit it too.
+      const guestToUser = scope !== GUEST_SCOPE && prevScope === GUEST_SCOPE;
+      let loaded: GameState | null;
+      if (guestToUser) {
+        const guestSave = await loadState(GUEST_SCOPE);
+        const withGuest = reconcileSaves(guestSave, cloudSave, true);
+        loaded = reconcileSaves(localSave, withGuest, true);
+        if (guestSave) await clearState(GUEST_SCOPE);
+      } else {
+        // Same account across devices: newest-wins on funds (no union) to close
+        // the stale-device refund exploit; assets still merge.
+        loaded = reconcileSaves(localSave, cloudSave, false);
+      }
       if (!mounted) return;
       let merged = loaded ? { ...INITIAL_STATE, ...loaded } : INITIAL_STATE;
       // Top up a chest that has run dry between sessions.
@@ -463,18 +496,43 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
     };
   }, [user, configured, authLoading]);
 
-  // Persist after every change: always to local cache, and (debounced) to the
-  // cloud when signed in.
+  // Persist after every change: to the (scoped) local cache, and — debounced —
+  // to the cloud when signed in.
   useEffect(() => {
     if (!ready) return;
     const savedAt = Date.now();
     const snapshot: GameState = { ...state, savedAt };
-    saveState(snapshot);
+    const scope = scopeRef.current;
+
+    // Local crash-recovery cache. Mid-race the state changes every ~150ms tick,
+    // so writing it every tick is wasteful; throttle to ~1s. But ALWAYS flush
+    // immediately on a decision boundary and at the finish, so a crash right after
+    // a call (or on the results screen) never loses it.
+    const isRacing = !!state.progress;
+    const decisions = state.progress?.decisionsTaken ?? 0;
+    const decisionFired = decisions !== lastDecisionsRef.current;
+    lastDecisionsRef.current = decisions;
+    const now = Date.now();
+    const flushLocalNow = () => {
+      if (localFlushTimer.current) {
+        clearTimeout(localFlushTimer.current);
+        localFlushTimer.current = null;
+      }
+      lastLocalSaveRef.current = Date.now();
+      saveState({ ...stateRef.current, savedAt: Date.now() }, scope);
+    };
+    if (!isRacing || decisionFired || now - lastLocalSaveRef.current >= LOCAL_SAVE_THROTTLE_MS) {
+      flushLocalNow();
+    } else if (!localFlushTimer.current) {
+      const wait = LOCAL_SAVE_THROTTLE_MS - (now - lastLocalSaveRef.current);
+      localFlushTimer.current = setTimeout(flushLocalNow, Math.max(0, wait));
+    }
+
     // Don't sync to the cloud mid-race: it would upload the full live-race state
     // (fleet, wind field, route, trail) on a tight debounce every tick, and no
     // other device can adopt a race in progress anyway (see the Realtime guard
-    // below). The local cache still saves every tick for crash recovery; the
-    // cloud syncs the durable campaign state at the next race boundary.
+    // below). The local cache still saves for crash recovery; the cloud syncs the
+    // durable campaign state at the next race boundary.
     if (user && configured && !state.progress) {
       // A change we just adopted from another device is already in the cloud —
       // cache it locally but don't re-upload it.
@@ -485,11 +543,27 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
       // Mark this stamp as ours so the Realtime echo of this write is ignored.
       lastSyncedAtRef.current = savedAt;
       if (cloudSaveTimer.current) clearTimeout(cloudSaveTimer.current);
-      cloudSaveTimer.current = setTimeout(() => {
-        saveCloud(snapshot);
+      cloudSaveTimer.current = setTimeout(async () => {
+        const ok = await saveCloud(snapshot);
+        // A failed save is remembered and re-flushed on foreground/reconnect.
+        pendingCloudRef.current = ok ? null : snapshot;
       }, 1200);
     }
   }, [state, ready, user, configured]);
+
+  // Cloud-save retry: when the app returns to the foreground (or the tab regains
+  // focus on web), re-flush any save that failed to reach the cloud.
+  useEffect(() => {
+    if (!configured) return undefined;
+    const sub = AppState.addEventListener('change', async (next) => {
+      if (next !== 'active') return;
+      const pending = pendingCloudRef.current;
+      if (!pending || !userRef.current) return;
+      const ok = await saveCloud(pending);
+      if (ok) pendingCloudRef.current = null;
+    });
+    return () => sub.remove();
+  }, [configured]);
 
   // Live multi-device sync: adopt a newer save pushed from another device,
   // unless a race is in progress here (never interrupt a live race).
@@ -509,9 +583,21 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
           // so our own echo and stale rows are ignored.
           const baseline = Math.max(current.savedAt ?? 0, lastSyncedAtRef.current);
           if (!isNewerSave(incoming, { savedAt: baseline } as GameState)) return;
+          // Cancel a debounced upload racing this push so we don't clobber the
+          // newer remote state we're about to adopt.
+          if (cloudSaveTimer.current) {
+            clearTimeout(cloudSaveTimer.current);
+            cloudSaveTimer.current = null;
+          }
           lastSyncedAtRef.current = incoming.savedAt ?? Date.now();
           skipCloudPushRef.current = true; // don't re-upload what we just adopted
-          dispatch({ type: 'LOAD_STATE', payload: { ...INITIAL_STATE, ...incoming } });
+          // Reconcile rather than blindly overwrite: the incoming save is newer
+          // (guarded above), but fold in any campaign assets that exist only in
+          // our current state so a race just finished locally isn't dropped. Same
+          // account, so no funds union (newest-wins).
+          const merged =
+            reconcileSaves(current, { ...INITIAL_STATE, ...incoming }, false) ?? current;
+          dispatch({ type: 'LOAD_STATE', payload: merged });
         }
       )
       .subscribe();
@@ -723,7 +809,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   const resetCampaign = useCallback(() => {
-    clearState();
+    clearState(scopeRef.current);
     dispatch({ type: 'RESET_CAMPAIGN' });
   }, []);
 

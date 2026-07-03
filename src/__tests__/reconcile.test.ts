@@ -114,6 +114,52 @@ describe('reconcileSaves', () => {
   });
 });
 
+// Funds-union is scoped to the guest→user first sign-in. Across a user's own
+// devices (or two different accounts) it must NOT union, or a stale device would
+// refund money already spent elsewhere while the bought boat stays owned — the
+// cross-device "free boat" exploit.
+describe('reconcileSaves — funds scope', () => {
+  it('unions funds when folding a guest save into an account (guest→user)', () => {
+    const guest = state({ savedAt: 100, funds: 9000 });
+    const cloud = state({ savedAt: 200, funds: 50 });
+    expect(reconcileSaves(guest, cloud, true)!.funds).toBe(9000);
+  });
+
+  it('takes the newer balance (no union) for one account across devices', () => {
+    // Newer cloud spent down to 50; a stale local still shows 9000. Without the
+    // scope gate the union would refund the difference while keeping the boat.
+    const staleLocal = state({ savedAt: 100, funds: 9000, ownedBoatIds: ['fast'] });
+    const cloud = state({ savedAt: 200, funds: 50, ownedBoatIds: ['fast'] });
+    const merged = reconcileSaves(staleLocal, cloud, false)!;
+    expect(merged.funds).toBe(50); // newest-wins on funds
+    expect(merged.ownedBoatIds).toContain('fast'); // assets still merge
+  });
+
+  it('never leaks a different account into another (assets from the newer base only for funds)', () => {
+    // Account A (rich) local, account B (poor) cloud is the newer base: funds must
+    // come from B, not be unioned up from A.
+    const accountA = state({ savedAt: 100, funds: 100000 });
+    const accountB = state({ savedAt: 200, funds: 200 });
+    expect(reconcileSaves(accountA, accountB, false)!.funds).toBe(200);
+  });
+});
+
+// The realtime handler reconciles an incoming push against current state rather
+// than blindly overwriting: the newer push wins as the base, but a race just
+// finished locally (present only in current) is still folded in, not dropped.
+describe('reconcileSaves — realtime push is a merge, not an overwrite', () => {
+  it('keeps a locally-finished race that the newer push does not have', () => {
+    const localOnly = result('just-finished', 999);
+    const current = state({ savedAt: 500, history: [localOnly], funds: 300 });
+    const incoming = state({ savedAt: 900, history: [], funds: 700 });
+    const merged = reconcileSaves(current, incoming, false)!;
+    // Newer push is the base…
+    expect(merged.funds).toBe(700);
+    // …but the local-only result survives the merge (not overwritten away).
+    expect(merged.history.map((r) => r.raceId)).toContain('just-finished');
+  });
+});
+
 describe('isNewerSave', () => {
   it('is true only beyond the echo guard', () => {
     const current = state({ savedAt: 1000 });

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { CompositeScreenProps } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
@@ -9,6 +9,7 @@ import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
 import { useGame } from '../store/GameContext';
 import NauticalButton from '../components/NauticalButton';
 import PolarViewer from '../components/PolarViewer';
+import { confirmAction } from '../lib/confirm';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'Fleet'>,
@@ -30,10 +31,12 @@ export const FleetScreen: React.FC<Props> = ({ navigation }) => {
   const fleet = state.profile.fleet;
 
   const confirmRemove = (boat: FleetBoat) => {
-    Alert.alert('Scrap boat', `Remove ${boat.name} from your fleet?`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Remove', style: 'destructive', onPress: () => removeFleetBoat(boat.id) },
-    ]);
+    confirmAction({
+      title: 'Scrap boat',
+      message: `Remove ${boat.name} from your fleet?`,
+      confirmLabel: 'Remove',
+      onConfirm: () => removeFleetBoat(boat.id),
+    });
   };
 
   return (
@@ -59,7 +62,12 @@ export const FleetScreen: React.FC<Props> = ({ navigation }) => {
                     {boat.className} · {boat.polar.source === 'imported' ? 'imported polar' : 'class polar'}
                   </Text>
                 </View>
-                <Pressable onPress={() => confirmRemove(boat)} hitSlop={8}>
+                <Pressable
+                  onPress={() => confirmRemove(boat)}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Scrap ${boat.name}`}
+                >
                   <Text style={styles.remove}>Scrap</Text>
                 </Pressable>
               </View>
@@ -100,7 +108,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   emptyText: { color: colors.foam, fontSize: fontSize.md, fontWeight: fontWeight.bold },
-  emptySub: { color: colors.slate, fontSize: fontSize.sm, marginTop: spacing.xs },
+  emptySub: { color: colors.mist, fontSize: fontSize.sm, marginTop: spacing.xs },
   card: {
     backgroundColor: colors.card,
     borderRadius: radius.lg,

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Path, Rect, Text as SvgText } from 'react-native-svg';
@@ -60,6 +60,7 @@ export const StartSequenceScreen: React.FC<Props> = ({ navigation }) => {
   if (!race || !boat || !state.windField || !read) {
     return (
       <View style={styles.loading}>
+        <ActivityIndicator color={colors.brassLight} style={{ marginBottom: spacing.md }} />
         <Text style={styles.loadingText}>Heading out to the line…</Text>
       </View>
     );

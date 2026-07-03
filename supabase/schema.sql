@@ -231,3 +231,41 @@ drop policy if exists "leaderboard is insertable by owner" on public.leaderboard
 create policy "leaderboard is insertable by owner"
   on public.leaderboard for insert
   with check (auth.uid() = user_id);
+
+-- Owners may improve or remove their own entries, so the client can keep only a
+-- player's best time per race (update-in-place / cleanup) rather than piling up
+-- duplicate rows. Still scoped to auth.uid(), so no one can touch another's rows.
+drop policy if exists "leaderboard is updatable by owner" on public.leaderboard;
+create policy "leaderboard is updatable by owner"
+  on public.leaderboard for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+drop policy if exists "leaderboard is deletable by owner" on public.leaderboard;
+create policy "leaderboard is deletable by owner"
+  on public.leaderboard for delete
+  using (auth.uid() = user_id);
+
+-- Keep at most one row per (user, race): the player's best. Idempotent and
+-- non-fatal — first prune any pre-existing duplicates (keeping the fastest), then
+-- add the unique constraint if it isn't there. Wrapped so a re-run (or leftover
+-- dupes) can't abort the rest of the schema; the client also dedupes defensively,
+-- so it degrades gracefully whether or not this constraint is present.
+do $$
+begin
+  delete from public.leaderboard l
+  using public.leaderboard keep
+  where l.user_id = keep.user_id
+    and l.race_id = keep.race_id
+    and (keep.elapsed_hours < l.elapsed_hours
+         or (keep.elapsed_hours = l.elapsed_hours and keep.ctid < l.ctid));
+
+  if not exists (
+    select 1 from pg_constraint where conname = 'leaderboard_user_race_unique'
+  ) then
+    alter table public.leaderboard
+      add constraint leaderboard_user_race_unique unique (user_id, race_id);
+  end if;
+exception when others then
+  raise notice 'leaderboard dedupe constraint not applied: %', sqlerrm;
+end $$;

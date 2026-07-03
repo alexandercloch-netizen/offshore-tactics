@@ -281,7 +281,12 @@ const Debrief: React.FC<{ result: NonNullable<ReturnType<typeof useGame>['state'
   if (!result.finished || !race || !result.trail || result.trail.length < 2) return null;
 
   const mapWidth = Math.min(width - spacing.lg * 2, 720);
-  const mapHeight = Math.max(220, Math.min(Math.round(mapWidth * courseAspect(race.waypoints)), 420));
+  // Clamp the course aspect the same way the race and briefing charts do, so a
+  // very tall or very wide course doesn't render a letterbox-thin or towering
+  // debrief map. Keeping the three charts on one clamp is what makes the maps
+  // read as the same instrument throughout.
+  const mapAspect = Math.max(0.55, Math.min(courseAspect(race.waypoints), 1.3));
+  const mapHeight = Math.max(220, Math.min(Math.round(mapWidth * mapAspect), 420));
   const delta = result.optimalHours != null ? result.elapsedHours - result.optimalHours : null;
 
   return (

@@ -29,13 +29,23 @@ export const LeaderboardScreen: React.FC<Props> = () => {
   const [raceId, setRaceId] = useState<string | undefined>(undefined);
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
 
   const load = useCallback(async () => {
     if (!configured) return;
     setLoading(true);
-    const data = await fetchLeaderboard(raceId);
-    setEntries(data);
-    setLoading(false);
+    setError(false);
+    try {
+      const data = await fetchLeaderboard(raceId);
+      setEntries(data);
+    } catch {
+      // A failed fetch is distinct from an empty board — show a retry, not
+      // "no times yet".
+      setError(true);
+      setEntries([]);
+    } finally {
+      setLoading(false);
+    }
   }, [configured, raceId]);
 
   useEffect(() => {
@@ -84,7 +94,17 @@ export const LeaderboardScreen: React.FC<Props> = () => {
             { paddingBottom: insets.bottom + spacing.xl },
           ]}
         >
-          {entries.length === 0 ? (
+          {error ? (
+            <View style={styles.stateBlock}>
+              <Text style={styles.stateTitle}>Couldn't load the leaderboard</Text>
+              <Text style={styles.noEntries}>
+                Check your connection and try again.
+              </Text>
+              <Pressable style={styles.retryBtn} onPress={load} accessibilityRole="button">
+                <Text style={styles.retryText}>Retry</Text>
+              </Pressable>
+            </View>
+          ) : entries.length === 0 ? (
             <Text style={styles.noEntries}>
               No times posted yet. Be the first to finish and claim the top spot!
             </Text>
@@ -196,6 +216,29 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: spacing.xxl,
     lineHeight: 22,
+  },
+  stateBlock: {
+    alignItems: 'center',
+    marginTop: spacing.xxl,
+    gap: spacing.md,
+  },
+  stateTitle: {
+    color: colors.foam,
+    fontSize: fontSize.md,
+    fontWeight: fontWeight.bold,
+    textAlign: 'center',
+  },
+  retryBtn: {
+    borderWidth: 1,
+    borderColor: colors.steel,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+  },
+  retryText: {
+    color: colors.brassLight,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.bold,
   },
   row: {
     flexDirection: 'row',

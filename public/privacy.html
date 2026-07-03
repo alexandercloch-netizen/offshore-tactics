@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Privacy Policy — Offshore Tactics</title>
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0;
+        background: #06121f;
+        color: #dde7ee;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        line-height: 1.6;
+      }
+      main { max-width: 720px; margin: 0 auto; padding: 48px 24px 80px; }
+      h1 { color: #e6c44d; font-size: 28px; margin-bottom: 4px; }
+      h2 { color: #e6c44d; font-size: 18px; margin-top: 36px; }
+      .updated { color: #9fb3c8; font-size: 14px; margin-bottom: 32px; }
+      a { color: #e6c44d; }
+      p, li { color: #dde7ee; }
+      ul { padding-left: 20px; }
+      .home { display: inline-block; margin-top: 40px; color: #9fb3c8; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Privacy Policy</h1>
+      <p class="updated">Last updated: 3 July 2026</p>
+
+      <p>
+        Offshore Tactics is a sailing strategy game. This policy explains what
+        data the game handles and why. It is written to be read, not to hide
+        behind legalese.
+      </p>
+
+      <h2>Playing as a guest</h2>
+      <p>
+        You can play the entire game without an account. In guest mode your
+        campaign is saved only on your own device (using the browser or device's
+        local storage). Nothing is sent to us, there is no login, and no personal
+        data leaves your device.
+      </p>
+
+      <h2>Creating an account</h2>
+      <p>
+        If you choose to sign in, we use Supabase (our backend provider) to
+        authenticate you with an email address and password. Creating an account
+        lets your campaign sync across your devices and lets you post times to the
+        global leaderboard.
+      </p>
+
+      <h2>What we store when you have an account</h2>
+      <ul>
+        <li>
+          <strong>Your account</strong> — your email address and an encrypted
+          password, held by Supabase's authentication service.
+        </li>
+        <li>
+          <strong>Your game save</strong> — your campaign progress (funds, boats,
+          crew, race history and settings), stored as a single record in our
+          Supabase Postgres database.
+        </li>
+        <li>
+          <strong>Leaderboard entries</strong> — for races you finish, your chosen
+          display name and your finishing times/positions, so they can appear on
+          the public leaderboard.
+        </li>
+      </ul>
+      <p>
+        Every record is protected by row-level security, so you can only read and
+        write your own account data. Leaderboard entries are readable by everyone
+        (that is the point of a leaderboard); everything else is private to you.
+      </p>
+
+      <h2>Your display name</h2>
+      <p>
+        The display name you set is shown publicly on the leaderboard next to your
+        times. Please don't use your real name if you'd rather stay anonymous — any
+        nickname works.
+      </p>
+
+      <h2>What we don't do</h2>
+      <ul>
+        <li>We do not sell your data.</li>
+        <li>We do not use third-party advertising or ad-tracking.</li>
+        <li>We do not build advertising profiles or share your data with brokers.</li>
+      </ul>
+
+      <h2>Deleting your account</h2>
+      <p>
+        You can delete your account at any time from within the app (Profile →
+        Account → Delete account). Deleting your account removes your cloud save,
+        your profile and your leaderboard entries from our database, and clears the
+        game's cache on that device.
+      </p>
+
+      <h2>Children</h2>
+      <p>
+        Offshore Tactics is a general-audience game and is not directed at children
+        under 13. We do not knowingly collect data from children under 13.
+      </p>
+
+      <h2>Changes</h2>
+      <p>
+        If this policy changes, we will update the date at the top of this page.
+      </p>
+
+      <h2>Contact</h2>
+      <p>
+        Questions about privacy? Email
+        <a href="mailto:privacy@offshoretactics.example">privacy@offshoretactics.example</a>
+        (placeholder contact address).
+      </p>
+
+      <a class="home" href="/">← Back to Offshore Tactics</a>
+    </main>
+  </body>
+</html>
