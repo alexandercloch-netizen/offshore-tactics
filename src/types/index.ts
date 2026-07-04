@@ -102,6 +102,52 @@ export interface WindField {
   diurnalAmpKn?: number; // day/night swing in strength
   diurnalPhaseH?: number; // phase of the diurnal cycle, in hours
   texture?: WindTexture; // fine spatial streakiness
+  // Scenario-driven synoptic base (real model output). When present it replaces
+  // the static baseDir/baseSpeed evolution — and the synthetic front/rotation,
+  // whose job the real time-series does — while the seeded puffs/holes, texture
+  // and diurnal swing stay on top for the mesoscale detail a model can't carry.
+  scenarioBase?: WeatherScenarioPoint[];
+}
+
+// ---- Weather scenarios ----
+
+// One sampled location of a weather scenario: an hourly point time-series of
+// the synoptic wind (and optionally gusts/pressure) over the passage. `hours`
+// are race-relative (0 = the gun); the arrays run in lockstep.
+export interface WeatherScenarioPoint {
+  lat: number;
+  lon: number;
+  hours: number[];
+  fromDeg: number[];
+  speedKn: number[];
+  gustKn?: number[];
+  pressureHpa?: number[];
+}
+
+// A weather scenario: real model output (today's live forecast, or a historic
+// edition) fed to `createWindField` as the synoptic base in place of the
+// seasonal baseline. Seasonal remains the ABSENCE of a scenario — the default,
+// offline path is untouched, and the only mode ranked on the global board.
+export interface WeatherScenario {
+  kind: 'live' | 'historic';
+  raceId: string;
+  label: string; // e.g. "Today's forecast"
+  blurb?: string;
+  model: string; // pinned forecast model id (e.g. 'ecmwf_ifs025')
+  issuedAt: string; // ISO timestamp the scenario was fetched/issued
+  year?: number; // historic editions only
+  points: WeatherScenarioPoint[];
+  fieldVersion: number; // bump when the scenario→field mapping changes
+}
+
+// Compact provenance stamp for a scenario run — enough to label the run
+// honestly (results, logbook, the leaderboard gate) without the full series.
+export interface WeatherScenarioStamp {
+  kind: 'live' | 'historic';
+  model: string;
+  issuedAt: string;
+  label: string;
+  year?: number;
 }
 
 // ---- Tidal currents ----
@@ -656,6 +702,10 @@ export interface RaceResult {
   nearestRivalName?: string; // the boat just ahead/astern of the player on corrected time
   nearestRivalAhead?: boolean; // true if that boat beat the player on corrected time (player chased it)
   correctedWinnerName?: string; // who took line honours on corrected time (may be the player)
+  // Weather-scenario provenance: present only when the race sailed real model
+  // output ("Today's forecast" / a historic edition). Scenario runs stay in the
+  // local logbook — they never post to the global leaderboard.
+  scenario?: WeatherScenarioStamp;
 }
 
 export interface GameState {
@@ -670,6 +720,7 @@ export interface GameState {
   windField?: WindField;
   tidalField?: TidalField; // tidal stream for the race in progress (absent → slack)
   fleet?: Competitor[];
+  scenario?: WeatherScenarioStamp; // weather scenario the race in progress sails (absent → seasonal)
   strategy: PlayerStrategy;
   profile: Profile; // the player's fleet of custom boats (local-first)
   condition: BoatCondition;

@@ -25,6 +25,8 @@ import {
   TacticalChoice,
   TidalField,
   WeatherCondition,
+  WeatherScenario,
+  WeatherScenarioStamp,
   WindField,
 } from '../types';
 import {
@@ -59,7 +61,9 @@ import { detectCurrency, formatMoney } from '../lib/currency';
 import { useAuth } from './AuthContext';
 import { supabase } from '../lib/supabase';
 import { loadCloudSave, saveCloud } from '../services/cloudSave';
-import { submitToLeaderboard } from '../services/leaderboard';
+import { submitRaceResult } from '../services/leaderboard';
+import { scenarioStamp } from '../services/weather';
+import { applyReseed, ReseedPayload } from './reseed';
 
 const DEFAULT_CONDITION: BoatCondition = {
   hullIntegrity: 100,
@@ -117,8 +121,10 @@ type Action =
         tidalField: TidalField;
         fleet: Competitor[];
         cost: number;
+        scenario?: WeatherScenarioStamp;
       };
     }
+  | { type: 'RESEED_WEATHER'; payload: ReseedPayload }
   | {
       type: 'APPLY_STEP';
       payload: {
@@ -303,9 +309,15 @@ function reducer(state: GameState, action: Action): GameState {
         windField: action.payload.windField,
         tidalField: action.payload.tidalField,
         fleet: action.payload.fleet,
+        scenario: action.payload.scenario,
         lastResult: undefined,
         eventLog: [],
       };
+
+    // Swap the pre-start conditions (seasonal ↔ a weather scenario) atomically —
+    // the guard lives in applyReseed, which never nulls `progress`.
+    case 'RESEED_WEATHER':
+      return applyReseed(state, action.payload);
 
     case 'APPLY_STEP':
       return {
@@ -330,6 +342,7 @@ function reducer(state: GameState, action: Action): GameState {
         windField: undefined,
         tidalField: undefined,
         fleet: undefined,
+        scenario: undefined,
       };
 
     case 'PREPARE_NEXT_RACE':
@@ -347,6 +360,7 @@ function reducer(state: GameState, action: Action): GameState {
         windField: undefined,
         tidalField: undefined,
         fleet: undefined,
+        scenario: undefined,
         condition: DEFAULT_CONDITION,
       };
 
@@ -381,7 +395,8 @@ export interface GameContextValue {
   currency: Currency;
   money: (amount: number) => string;
   // race lifecycle
-  beginRace: () => void;
+  beginRace: (scenario?: WeatherScenario | null) => void;
+  reseedWeather: (scenario: WeatherScenario | null) => void;
   tick: () => StepResult;
   decide: (choice: TacticalChoice) => StepResult;
   retireRace: () => void;
@@ -692,7 +707,10 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
     []
   );
 
-  const beginRace = useCallback(() => {
+  // Commit the race. `scenario` is an ALREADY-RESOLVED weather scenario (or
+  // null/undefined for the seasonal default) — never a pending fetch: the start
+  // path must never await the network.
+  const beginRace = useCallback((scenario?: WeatherScenario | null) => {
     const current = stateRef.current;
     const race = getRaceById(current.selectedRaceId);
     const boat = resolveBoatById(current, current.selectedBoatId);
@@ -701,7 +719,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
       .map((id) => getCrewById(id))
       .filter((c): c is NonNullable<typeof c> => Boolean(c));
     const cost = campaignCost(current).total;
-    const windField = createWindField(race);
+    const windField = createWindField(race, scenario ?? undefined);
     const tidalField = createTidalField(race);
     const start = race.waypoints[0];
     const weather = weatherFromWind(sampleWind(windField, start.lat, start.lon, 0));
@@ -721,15 +739,48 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
         tidalField,
         fleet,
         cost,
+        scenario: scenario ? scenarioStamp(scenario) : undefined,
       },
     });
   }, []);
 
-  // Push a completed race to the global leaderboard when signed in.
+  // Re-seed the pre-start conditions for a chosen scenario (or back to the
+  // seasonal default with null): a fresh wind field, a fleet re-benchmarked
+  // through it, and a fresh start-line progress — dispatched as ONE action so
+  // `progress` is never nulled in between (the Briefing mounts on it).
+  const reseedWeather = useCallback((scenario: WeatherScenario | null) => {
+    const current = stateRef.current;
+    const race = getRaceById(current.selectedRaceId);
+    const boat = resolveBoatById(current, current.selectedBoatId);
+    if (!race || !boat || !current.progress) return;
+    const windField = createWindField(race, scenario ?? undefined);
+    const start = race.waypoints[0];
+    const weather = weatherFromWind(sampleWind(windField, start.lat, start.lon, 0));
+    const fleet = createFleet(
+      race,
+      raceDivision(race, current.selectedDivision),
+      fleetBenchmarkHours(race, windField, boat),
+      boat
+    );
+    dispatch({
+      type: 'RESEED_WEATHER',
+      payload: {
+        progress: initialProgress(race, boat, current.selectedDivision, windField),
+        weather,
+        windField,
+        fleet,
+        scenario: scenario ? scenarioStamp(scenario) : undefined,
+      },
+    });
+  }, []);
+
+  // Push a completed race to the global leaderboard when signed in. A weather-
+  // scenario run never posts (submitRaceResult fails closed on the stamp) — the
+  // ranked ladder is the seasonal game only.
   const publishResult = useCallback((result: RaceResult) => {
     const currentUser = userRef.current;
     if (!currentUser || !configured) return;
-    submitToLeaderboard({
+    submitRaceResult(result, {
       user_id: currentUser.id,
       display_name: displayNameRef.current ?? 'Sailor',
       race_id: result.raceId,
@@ -835,6 +886,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
       currency,
       money,
       beginRace,
+      reseedWeather,
       tick,
       decide,
       retireRace,
@@ -864,6 +916,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
       currency,
       money,
       beginRace,
+      reseedWeather,
       tick,
       decide,
       retireRace,

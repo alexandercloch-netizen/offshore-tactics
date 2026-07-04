@@ -9,8 +9,9 @@ import {
   View,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { EffortMode, RootStackParamList, RoutingBias } from '../types';
+import { EffortMode, RootStackParamList, RoutingBias, WeatherScenario } from '../types';
 import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
 import { getCrewById, getRaceById, storylineForRace } from '../data';
 import { LANDMASSES } from '../data/landmasses';
@@ -45,8 +46,14 @@ import ForecastScrubber from '../components/ForecastScrubber';
 import WindScaleLegend from '../components/WindScaleLegend';
 import ForecastGraph, { ForecastGraphReadout, ForecastPoint } from '../components/ForecastGraph';
 import ErrorBoundary from '../components/ErrorBoundary';
+import { fetchCourseSnapshot, liveWeatherEnabled } from '../services/weather';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Briefing'>;
+
+// Which conditions the race sails: the seasonal default, or today's real
+// forecast (behind the EXPO_PUBLIC_LIVE_WEATHER flag; falls back to seasonal).
+type ConditionsMode = 'seasonal' | 'live';
+type SnapshotState = 'idle' | 'fetching' | 'ready' | 'failed';
 
 // The pre-start briefing: a calm beat before the gun to read the course and the
 // conditions, and to set the plan (effort + which side to favour) you'll sail
@@ -54,12 +61,19 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Briefing'>;
 export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
-  const { state, beginRace, setStrategy } = useGame();
+  const { state, beginRace, reseedWeather, setStrategy } = useGame();
   // Forecast offset (hours from the start) the player is scrubbing through.
   const [forecastHour, setForecastHour] = useState(0);
   // Which overlay the chart shows — the breeze or, where the course runs a tide,
   // the stream. Stays on wind for tide-less courses (the toggle is hidden).
   const [mapLayer, setMapLayer] = useState<FlowLayer>('wind');
+  // Live-weather conditions (flag-gated). The snapshot resolves in the
+  // background while the briefing is read; picking "Today's forecast" reseeds
+  // the race world from the already-resolved scenario — never awaiting network.
+  const liveEnabled = liveWeatherEnabled();
+  const [conditions, setConditions] = useState<ConditionsMode>('seasonal');
+  const [snapshot, setSnapshot] = useState<WeatherScenario | null>(null);
+  const [snapState, setSnapState] = useState<SnapshotState>('idle');
 
   const race = getRaceById(state.selectedRaceId);
   const boat = resolveBoatById(state, state.selectedBoatId);
@@ -106,6 +120,43 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
       beginRace();
     }
   }, [state.progress, race, boat, state.selectedCrewIds.length, beginRace]);
+
+  // Resolve today's forecast in the background as the briefing opens (flag on
+  // only). Any failure quietly resolves to null — the seasonal game is intact.
+  const raceId = race?.id;
+  useEffect(() => {
+    if (!liveEnabled || !race) return undefined;
+    let mounted = true;
+    setSnapState('fetching');
+    fetchCourseSnapshot(race).then((s) => {
+      if (!mounted) return;
+      setSnapshot(s);
+      setSnapState(s ? 'ready' : 'failed');
+    });
+    return () => {
+      mounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveEnabled, raceId]);
+
+  // Apply the chosen conditions once both the race world and the snapshot
+  // exist. Idempotent on the state's scenario stamp, and RESEED_WEATHER swaps
+  // the world atomically — `progress` is never nulled, so the beginRace mount
+  // effect above can't re-fire. Only while this screen is focused: the Briefing
+  // stays mounted under the pushed StartSequence, and a slow fetch must never
+  // swap the conditions out from under the start (applyReseed also locks once
+  // the start outcome is baked in).
+  const isFocused = useIsFocused();
+  const scenarioActive = !!state.scenario;
+  useEffect(() => {
+    if (!liveEnabled || !isFocused || !state.progress) return;
+    if (conditions === 'live' && snapState === 'ready' && snapshot && !scenarioActive) {
+      reseedWeather(snapshot);
+    } else if (conditions === 'seasonal' && scenarioActive) {
+      reseedWeather(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveEnabled, isFocused, conditions, snapState, snapshot, scenarioActive, !!state.progress, reseedWeather]);
 
   if (!race || !boat || !state.progress || !state.weather || !state.windField) {
     return (
@@ -243,9 +294,43 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
                 confidence={confidence}
                 navName={navigator?.name}
                 navSkill={navSkill}
+                live={scenarioActive}
               />
             </View>
           </View>
+
+          {liveEnabled ? (
+            <View style={styles.panel} testID="conditions-selector">
+              <Text style={styles.panelTitle}>Conditions</Text>
+              <Segmented<ConditionsMode>
+                value={conditions}
+                options={[
+                  { value: 'seasonal', label: 'Seasonal' },
+                  { value: 'live', label: "Today's forecast" },
+                ]}
+                onSelect={setConditions}
+              />
+              {conditions === 'live' ? (
+                <View testID="conditions-live-note">
+                  {snapState === 'fetching' || snapState === 'idle' ? (
+                    <Text style={styles.liveNote}>Fetching today's forecast…</Text>
+                  ) : snapState === 'failed' || !snapshot ? (
+                    <Text style={styles.liveNoteWarn}>
+                      Couldn't reach the forecast — sailing the seasonal conditions instead.
+                    </Text>
+                  ) : (
+                    <>
+                      <Text style={styles.liveNote}>
+                        ECMWF forecast, issued {issuedLabel(snapshot.issuedAt)}. Practice run —
+                        doesn't post to the global leaderboard.
+                      </Text>
+                      <Text style={styles.liveDisclaimer}>Simulation — not for navigation.</Text>
+                    </>
+                  )}
+                </View>
+              ) : null}
+            </View>
+          ) : null}
 
           <View style={styles.panel}>
             <View style={styles.windRow}>
@@ -391,20 +476,28 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
 const sideName = (bias: RoutingBias): string =>
   bias < 0 ? 'Banking left' : bias > 0 ? 'Banking right' : 'The optimal line';
 
+// A short, honest issue time for the live forecast note.
+const issuedLabel = (iso: string): string => {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? iso.slice(0, 16) : d.toLocaleString();
+};
+
 // How far the forecast on screen can be trusted at the scrubbed hour — falls off
-// with the lookahead, held up by a strong Navigator.
-const ConfidenceBar: React.FC<{ confidence: number; navName?: string; navSkill: number }> = ({
-  confidence,
-  navName,
-  navSkill,
-}) => {
+// with the lookahead, held up by a strong Navigator. Under a live scenario the
+// truth is a real forecast, so the bar reads as the Navigator's own judgement.
+const ConfidenceBar: React.FC<{
+  confidence: number;
+  navName?: string;
+  navSkill: number;
+  live?: boolean;
+}> = ({ confidence, navName, navSkill, live }) => {
   const pct = Math.round(confidence * 100);
   const colour =
     confidence >= 0.75 ? colors.signalGreen : confidence >= 0.45 ? colors.warning : colors.signalRed;
   return (
     <View style={styles.confWrap}>
       <View style={styles.confHead}>
-        <Text style={styles.confLabel}>Forecast confidence</Text>
+        <Text style={styles.confLabel}>{live ? "Navigator's read" : 'Forecast confidence'}</Text>
         <Text style={[styles.confPct, { color: colour }]}>{pct}%</Text>
       </View>
       <View style={styles.confTrack}>
@@ -531,6 +624,9 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   planHint: { color: colors.slate, fontSize: fontSize.xs, marginTop: spacing.sm },
+  liveNote: { color: colors.mist, fontSize: fontSize.xs, marginTop: spacing.sm, lineHeight: 16 },
+  liveNoteWarn: { color: colors.warning, fontSize: fontSize.xs, marginTop: spacing.sm, lineHeight: 16 },
+  liveDisclaimer: { color: colors.slate, fontSize: fontSize.xs, marginTop: spacing.xs, fontStyle: 'italic' },
   confWrap: { marginTop: spacing.sm },
   confHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   confLabel: {

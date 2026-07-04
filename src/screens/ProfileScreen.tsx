@@ -9,6 +9,7 @@ import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
 import { useGame } from '../store/GameContext';
 import { useAuth } from '../store/AuthContext';
 import { formatDuration } from '../engine/gameEngine';
+import { scenarioTagLine } from '../services/weather';
 import { defaultPortForRegion, getPortById } from '../data/onboarding';
 import NauticalButton from '../components/NauticalButton';
 import { confirmAction } from '../lib/confirm';
@@ -87,7 +88,12 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={styles.logbookTitle}>Logbook</Text>
           {state.history.slice(0, 8).map((r) => (
             <View key={r.timestamp} style={styles.logRow}>
-              <Text style={styles.logRace}>{r.raceName}</Text>
+              <View style={styles.logRaceCol}>
+                <Text style={styles.logRace}>{r.raceName}</Text>
+                {r.scenario ? (
+                  <Text style={styles.logScenario}>{scenarioTagLine(r.scenario)}</Text>
+                ) : null}
+              </View>
               <Text
                 style={[
                   styles.logResult,
@@ -144,6 +150,8 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
           <NauticalButton label="Reset Campaign" variant="ghost" onPress={confirmReset} />
         ) : null}
       </View>
+
+      <Text style={styles.credits}>Weather data by Open-Meteo.com</Text>
     </ScrollView>
   );
 };
@@ -227,8 +235,16 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.hull,
   },
-  logRace: { color: colors.mist, fontSize: fontSize.sm, flex: 1 },
+  logRaceCol: { flex: 1, marginRight: spacing.sm },
+  logRace: { color: colors.mist, fontSize: fontSize.sm },
+  logScenario: { color: colors.brassLight, fontSize: fontSize.xs, marginTop: 2 },
   logResult: { fontSize: fontSize.sm, fontWeight: fontWeight.medium },
+  credits: {
+    color: colors.slate,
+    fontSize: fontSize.xs,
+    textAlign: 'center',
+    marginTop: spacing.lg,
+  },
   empty: {
     backgroundColor: colors.card,
     borderRadius: radius.lg,

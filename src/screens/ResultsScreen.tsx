@@ -8,6 +8,7 @@ import { getRaceById } from '../data';
 import { LANDMASSES } from '../data/landmasses';
 import { useGame } from '../store/GameContext';
 import { formatDuration, formatGap } from '../engine/gameEngine';
+import { scenarioTagLine } from '../services/weather';
 import { courseAspect } from '../engine/geo';
 import NauticalButton from '../components/NauticalButton';
 import RouteMap from '../components/RouteMap';
@@ -90,6 +91,11 @@ export const ResultsScreen: React.FC<Props> = ({ navigation }) => {
           ? ` • ${result.division === 'pro' ? 'Pro' : 'Corinthian'} Division`
           : ''}
       </Text>
+      {result.scenario ? (
+        <Text style={styles.scenarioTag} testID="results-scenario-tag">
+          {scenarioTagLine(result.scenario)} · not ranked on the leaderboard
+        </Text>
+      ) : null}
 
       <View style={styles.positionCard}>
         {result.retired ? (
@@ -345,6 +351,12 @@ const styles = StyleSheet.create({
   raceName: {
     color: colors.mist,
     fontSize: fontSize.md,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+  },
+  scenarioTag: {
+    color: colors.brassLight,
+    fontSize: fontSize.xs,
     textAlign: 'center',
     marginTop: spacing.xs,
   },
