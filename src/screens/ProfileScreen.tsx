@@ -9,6 +9,7 @@ import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
 import { useGame } from '../store/GameContext';
 import { useAuth } from '../store/AuthContext';
 import { formatDuration } from '../engine/gameEngine';
+import { defaultPortForRegion, getPortById } from '../data/onboarding';
 import NauticalButton from '../components/NauticalButton';
 import { confirmAction } from '../lib/confirm';
 
@@ -23,6 +24,11 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
   const { configured, user, displayName } = useAuth();
   const best = state.history.find((r) => r.finished && r.position === 1);
   const wins = state.history.filter((r) => r.finished && r.position === 1).length;
+  // The player's home port: the one on the profile, else the default for their
+  // onboarding region. Old profiles (and guests without a region) simply show
+  // nothing — fully back-compatible.
+  const player = state.profile.player;
+  const homePort = getPortById(player?.homePort ?? defaultPortForRegion(player?.region));
 
   const confirmReset = () => {
     confirmAction({
@@ -101,6 +107,13 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={styles.emptySub}>Your results and best finishes will appear here.</Text>
         </View>
       )}
+
+      {homePort ? (
+        <View style={styles.currencyRow}>
+          <Text style={styles.currencyLabel}>Home port</Text>
+          <Text style={styles.homePortValue}>{homePort.name}</Text>
+        </View>
+      ) : null}
 
       <View style={styles.currencyRow}>
         <Text style={styles.currencyLabel}>Currency</Text>
@@ -240,6 +253,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
+  homePortValue: { color: colors.foam, fontSize: fontSize.sm, fontWeight: fontWeight.medium },
   currencyToggle: {
     flexDirection: 'row',
     backgroundColor: colors.navy,

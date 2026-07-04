@@ -43,7 +43,7 @@ import {
   conditionBand,
   racePhase,
 } from '../data';
-import { HAZARD_EVENTS, signatureOutcomeFor } from '../data/events';
+import { hazardEventForRace, signatureOutcomeFor } from '../data/events';
 import { debriefBeat, storylineForRace } from '../data/storylines';
 import { rnd, rndRange } from './rng';
 import {
@@ -1354,7 +1354,7 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
     phase: racePhase(distanceCoveredNm, total),
     pending: pendingKey,
   };
-  const hazardEvent = HAZARD_EVENTS[race.hazard];
+  const hazardEvent = hazardEventForRace(race);
   const hazardId = hazardEvent.id;
   // A storied race pins its signature decision to a named mark and guarantees it
   // exactly once via the `signatureFired` latch on progress; an un-storied race
@@ -1397,7 +1397,7 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
       progress.shownEventIds = [...progress.shownEventIds, event.id];
     }
   } else if (canDecide && nearHazard && !progress.shownEventIds.includes(hazardId)) {
-    event = HAZARD_EVENTS[race.hazard];
+    event = hazardEvent;
     progress.decisionsTaken = prev.decisionsTaken + 1;
     progress.shownEventIds = [...progress.shownEventIds, event.id];
     progress.nextDecisionAtNm =
@@ -1545,7 +1545,7 @@ export function applyDecision(state: GameState, choice: TacticalChoice): StepRes
   // choice belonging to the race's pinned hazard event — purely from the choice,
   // so it needs no extra plumbing through the context.
   const story = storylineForRace(race.id);
-  const hazardEvent = HAZARD_EVENTS[race.hazard];
+  const hazardEvent = hazardEventForRace(race);
   const isSignatureChoice =
     !!story &&
     !!hazardEvent.pinToWaypoint &&
@@ -1791,7 +1791,7 @@ export function buildResult(state: GameState, outcome: StepResult): RaceResult {
   let signatureOutcome: RaceResult['signatureOutcome'];
   let storyDebrief: string | undefined;
   if (story && signatureChoiceId) {
-    signatureOutcome = signatureOutcomeFor(HAZARD_EVENTS[race.hazard], signatureChoiceId);
+    signatureOutcome = signatureOutcomeFor(hazardEventForRace(race), signatureChoiceId);
     storyDebrief = debriefBeat(story, signatureOutcome)?.body;
   }
 

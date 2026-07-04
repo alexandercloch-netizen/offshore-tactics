@@ -29,8 +29,17 @@ function hazardProfile(hazard: HazardKey, baseSpeed: number): HazardProfile {
     case 'tidal_rapids':
       // Inside-passage sailing: light and fickle, tide-dominated, sheltered.
       return { speedMul: 0.8, shiftAmp: 30, rotatePerH: 0.7, featureDeltaMul: -0.35, featureRadiusNm: 40 };
+    case 'strait_fog':
+      // A fog-bound strait: soft, grey and shifty, with a big slack patch to dodge.
+      return { speedMul: 0.75, shiftAmp: 28, rotatePerH: 0.5, featureDeltaMul: -0.4, featureRadiusNm: 45 };
     case 'island_accel':
       return { speedMul: 1.0, shiftAmp: 14, rotatePerH: 0.3, featureDeltaMul: 0.5, featureRadiusNm: 22 };
+    case 'island_lee':
+      // The inverse of island_accel: a tight, deep hole in the island's shadow.
+      return { speedMul: 0.85, shiftAmp: 24, rotatePerH: 0.4, featureDeltaMul: -0.5, featureRadiusNm: 28 };
+    case 'eac_coastal':
+      // NSW coastal running: a working sea breeze that swings with the land.
+      return { speedMul: 0.95, shiftAmp: 22, rotatePerH: 0.8, featureDeltaMul: 0.35, featureRadiusNm: 50 };
     case 'gulf_stream':
       return { speedMul: 1.0, shiftAmp: 18, rotatePerH: 0.8, featureDeltaMul: 0.35, featureRadiusNm: 70 };
     case 'celtic_weather':

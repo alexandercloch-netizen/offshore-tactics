@@ -1,4 +1,4 @@
-import { ExperienceLevel, SailingGoal, SailingRegion } from '../types';
+import { ExperienceLevel, PortId, SailingGoal, SailingRegion } from '../types';
 
 // Catalogs for the quick onboarding quiz — three taps, playful copy. Each
 // option carries the value stored on the player profile plus friendly card text.
@@ -35,14 +35,49 @@ export const EXPERIENCE_OPTIONS: Choice<ExperienceLevel>[] = [
 ];
 
 // Region → the races that best match it, in preference order. Used to pick a
-// recommended race for the player's home waters.
+// recommended race for the player's home waters. The home-port classic — the
+// accessible, always-open local race — leads each list as the region's on-ramp;
+// the crown jewels follow.
 export const REGION_RACES: Record<SailingRegion, string[]> = {
-  uk: ['race-round-island', 'race-fastnet'],
-  med: ['race-middle-sea'],
-  caribbean: ['race-caribbean-600'],
-  usEast: ['race-newport-bermuda'],
-  usWest: ['race-r2ak', 'race-transpac'],
-  greatLakes: ['race-chicago-mac'],
-  ausNz: ['race-sydney-hobart'],
+  uk: ['race-cowes-dinard', 'race-round-island', 'race-fastnet'],
+  med: ['race-malta-syracuse', 'race-middle-sea'],
+  caribbean: ['race-antigua-360', 'race-caribbean-600'],
+  usEast: ['race-annapolis-newport', 'race-newport-bermuda'],
+  usWest: ['race-islands-race', 'race-transpac', 'race-swiftsure', 'race-r2ak'],
+  greatLakes: ['race-tri-state', 'race-chicago-mac'],
+  ausNz: ['race-cabbage-tree', 'race-sydney-hobart'],
   other: ['race-round-island', 'race-chicago-mac'],
 };
+
+// ---- Home ports ----
+//
+// One real harbour per sailing region: the player's home-port identity. Each
+// port carries its local fleet's crown-jewel race for flavour; the accessible
+// home race is whatever leads REGION_RACES for the port's region.
+export interface Port {
+  id: PortId;
+  name: string; // display name, e.g. "Cowes, Isle of Wight"
+  region: SailingRegion;
+  crownJewelRaceId: string; // the port's famous race (must be a real race id)
+}
+
+export const PORTS: Port[] = [
+  { id: 'cowes', name: 'Cowes, Isle of Wight', region: 'uk', crownJewelRaceId: 'race-fastnet' },
+  { id: 'valletta', name: 'Valletta, Malta', region: 'med', crownJewelRaceId: 'race-middle-sea' },
+  { id: 'antigua', name: 'English Harbour, Antigua', region: 'caribbean', crownJewelRaceId: 'race-caribbean-600' },
+  { id: 'newportRI', name: 'Newport, Rhode Island', region: 'usEast', crownJewelRaceId: 'race-newport-bermuda' },
+  { id: 'sanPedro', name: 'San Pedro, California', region: 'usWest', crownJewelRaceId: 'race-transpac' },
+  { id: 'portTownsend', name: 'Port Townsend, Washington', region: 'usWest', crownJewelRaceId: 'race-r2ak' },
+  { id: 'chicago', name: 'Chicago, Illinois', region: 'greatLakes', crownJewelRaceId: 'race-chicago-mac' },
+  { id: 'sydney', name: 'Sydney, New South Wales', region: 'ausNz', crownJewelRaceId: 'race-sydney-hobart' },
+];
+
+export function getPortById(id?: PortId): Port | undefined {
+  return PORTS.find((p) => p.id === id);
+}
+
+// The default home port for an onboarding region — the first port in that
+// region's waters ('other' has none; the profile simply carries no port).
+export function defaultPortForRegion(region?: SailingRegion): PortId | undefined {
+  return PORTS.find((p) => p.region === region)?.id;
+}

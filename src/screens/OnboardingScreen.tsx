@@ -15,6 +15,7 @@ import {
   EXPERIENCE_OPTIONS,
   GOAL_OPTIONS,
   REGION_OPTIONS,
+  defaultPortForRegion,
 } from '../data/onboarding';
 import { useGame } from '../store/GameContext';
 import { detectCurrency } from '../lib/currency';
@@ -49,12 +50,19 @@ export const OnboardingScreen: React.FC<Props> = ({ navigation }) => {
     // Re-entry from "Edit Preferences" must not rebuild the profile from scratch:
     // merge over any existing one so the player's chosen currency, their original
     // onboardedAt date and any other fields (role, boatType) survive the edit.
+    const region = final.region ?? existing?.region ?? 'other';
     const profile: PlayerProfile = {
       ...existing,
-      region: final.region ?? existing?.region ?? 'other',
+      region,
       goal: final.goal ?? existing?.goal ?? 'destress',
       experience: final.experience ?? existing?.experience ?? 'club',
       currency: existing?.currency ?? detectCurrency(),
+      // Home port follows the region: keep a port already on the profile while
+      // the region stands, re-default it when the region changes.
+      homePort:
+        existing?.region === region && existing?.homePort
+          ? existing.homePort
+          : defaultPortForRegion(region),
       onboardedAt: existing?.onboardedAt ?? Date.now(),
     };
     setPlayerProfile(profile);

@@ -19,13 +19,21 @@ export interface RaceClimate {
 }
 
 export const WEATHER_CLIMATOLOGY: Record<string, RaceClimate> = {
+  'race-annapolis-newport': {"fromDeg":210,"speedKn":11,"gustFactor":0.2,"variabilityDeg":20,"source":"seed"},
+  'race-antigua-360': {"fromDeg":80,"speedKn":16,"gustFactor":0.2,"variabilityDeg":20,"source":"seed"},
+  'race-cabbage-tree': {"fromDeg":45,"speedKn":14,"gustFactor":0.2,"variabilityDeg":20,"source":"seed"},
   'race-caribbean-600': {"fromDeg":95.2,"speedKn":12.1,"gustFactor":0.33,"variabilityDeg":52.8,"source":"open-meteo","sampledAt":"2026-07-01"},
   'race-chicago-mac': {"fromDeg":268,"speedKn":7.2,"gustFactor":0.42,"variabilityDeg":70,"source":"open-meteo","sampledAt":"2026-07-01"},
+  'race-cowes-dinard': {"fromDeg":225,"speedKn":14,"gustFactor":0.2,"variabilityDeg":20,"source":"seed"},
   'race-fastnet': {"fromDeg":251.5,"speedKn":11.9,"gustFactor":0.47,"variabilityDeg":61,"source":"open-meteo","sampledAt":"2026-07-01"},
+  'race-islands-race': {"fromDeg":290,"speedKn":9,"gustFactor":0.2,"variabilityDeg":20,"source":"seed"},
+  'race-malta-syracuse': {"fromDeg":315,"speedKn":10,"gustFactor":0.2,"variabilityDeg":20,"source":"seed"},
   'race-middle-sea': {"fromDeg":44.3,"speedKn":9,"gustFactor":0.58,"variabilityDeg":70,"source":"open-meteo","sampledAt":"2026-07-01"},
   'race-newport-bermuda': {"fromDeg":226.6,"speedKn":12.9,"gustFactor":0.46,"variabilityDeg":70,"source":"open-meteo","sampledAt":"2026-07-01"},
   'race-r2ak': {"fromDeg":199.3,"speedKn":3.1,"gustFactor":0.56,"variabilityDeg":70,"source":"open-meteo","sampledAt":"2026-07-01"},
   'race-round-island': {"fromDeg":273.4,"speedKn":8.4,"gustFactor":0.52,"variabilityDeg":67,"source":"open-meteo","sampledAt":"2026-07-01"},
+  'race-swiftsure': {"fromDeg":255,"speedKn":12,"gustFactor":0.2,"variabilityDeg":20,"source":"seed"},
   'race-sydney-hobart': {"fromDeg":286.9,"speedKn":16.1,"gustFactor":0.44,"variabilityDeg":69.1,"source":"open-meteo","sampledAt":"2026-07-01"},
   'race-transpac': {"fromDeg":39.5,"speedKn":13.1,"gustFactor":0.36,"variabilityDeg":36.7,"source":"open-meteo","sampledAt":"2026-07-01"},
+  'race-tri-state': {"fromDeg":190,"speedKn":9,"gustFactor":0.2,"variabilityDeg":20,"source":"seed"},
 };

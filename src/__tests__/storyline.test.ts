@@ -11,7 +11,7 @@ import { createWindField, sampleWind, weatherFromWind } from '../engine/wind';
 import { createFleet } from '../engine/fleet';
 import { mulberry32, resetRng, setRng } from '../engine/rng';
 import {
-  HAZARD_EVENTS,
+  hazardEventForRace,
   RACES,
   STORYLINES,
   getBoatById,
@@ -23,7 +23,8 @@ import { GameState, StepResult, TacticalChoice } from '../types';
 
 const healthy = { hullIntegrity: 100, crewStamina: 100, crewMorale: 100 };
 
-// After PR2 every race is storied — the framework now covers the whole roster.
+// After PR2 every race is storied — the framework now covers the whole roster
+// (the original nine plus the eight home-port classics).
 const STORIED_RACE_IDS = RACES.map((r) => r.id);
 
 // Build a race-ready state mirroring the engine suite's harness.
@@ -101,7 +102,7 @@ const safest = (event: { choices: TacticalChoice[] }): TacticalChoice =>
   event.choices.reduce((a, b) => (b.risk < a.risk ? b : a), event.choices[0]);
 
 describe('storyline content', () => {
-  it('covers every race after PR2 (all nine storied)', () => {
+  it('covers every race after PR2 (the whole roster storied)', () => {
     expect(STORYLINES.map((s) => s.raceId).sort()).toEqual([...STORIED_RACE_IDS].sort());
     expect(STORYLINES).toHaveLength(RACES.length);
   });
@@ -118,7 +119,7 @@ describe('storyline content', () => {
       // ...and the matching hazard event fires at exactly that mark. (The pin is
       // the *signature* mark, which need not be the race's hazardWaypoint — e.g.
       // Chicago–Mac's signature is the Manitou fork, not its mid-lake hazard.)
-      expect(HAZARD_EVENTS[race.hazard].pinToWaypoint).toBe(beat!.pinnedWaypoint);
+      expect(hazardEventForRace(race).pinToWaypoint).toBe(beat!.pinnedWaypoint);
     }
   });
 
@@ -135,7 +136,7 @@ describe('storyline content', () => {
   it('links each signature event to its storyline via storyBeat', () => {
     for (const story of STORYLINES) {
       const race = getRaceById(story.raceId)!;
-      expect(HAZARD_EVENTS[race.hazard].storyBeat).toBe(story.raceId);
+      expect(hazardEventForRace(race).storyBeat).toBe(story.raceId);
     }
   });
 });
@@ -147,7 +148,7 @@ describe('signature choice fork', () => {
     // (timeDelta), risk and hull/stamina/morale loss; we compare the player-facing
     // "cost" of each axis. A field-resolved bold option always exists too.
     for (const story of STORYLINES) {
-      const event = HAZARD_EVENTS[getRaceById(story.raceId)!.hazard];
+      const event = hazardEventForRace(getRaceById(story.raceId)!);
       expect(event.choices.some((c) => c.field)).toBe(true);
       // Express each axis as a cost (higher = worse), then check Pareto-undominated.
       const cost = (c: TacticalChoice) => [
@@ -175,7 +176,7 @@ describe('signature choice fork', () => {
 
   it('maps each choice to its bold/safe/hedge outcome', () => {
     for (const story of STORYLINES) {
-      const event = HAZARD_EVENTS[getRaceById(story.raceId)!.hazard];
+      const event = hazardEventForRace(getRaceById(story.raceId)!);
       const outcomes = event.choices.map((c) => signatureOutcomeFor(event, c.id)).sort();
       expect(outcomes).toEqual(['bold', 'hedge', 'safe']);
     }
@@ -184,7 +185,7 @@ describe('signature choice fork', () => {
 
 describe('pinned signature firing (engine)', () => {
   it.each(STORIED_RACE_IDS)('fires the signature exactly once, at its mark: %s', (raceId) => {
-    const event = HAZARD_EVENTS[getRaceById(raceId)!.hazard];
+    const event = hazardEventForRace(getRaceById(raceId)!);
     const { shown, terminal } = sailRace(raceId, safest);
     expect(terminal).not.toBeNull();
     expect(shown.filter((id) => id === event.id)).toHaveLength(1);
@@ -192,7 +193,7 @@ describe('pinned signature firing (engine)', () => {
 
   it('records the signature choice and selects the matching debrief beat', () => {
     const raceId = 'race-fastnet';
-    const event = HAZARD_EVENTS[getRaceById(raceId)!.hazard];
+    const event = hazardEventForRace(getRaceById(raceId)!);
     const bold = event.choices.find((c) => c.field)!;
     // Always take the bold option at the signature, safe elsewhere.
     const { terminal, state } = sailRace(raceId, (e) =>
@@ -230,7 +231,7 @@ describe('the whole roster is storied (PR2)', () => {
     for (const race of RACES) {
       const story = storylineForRace(race.id);
       expect(story).toBeDefined();
-      const pin = HAZARD_EVENTS[race.hazard].pinToWaypoint;
+      const pin = hazardEventForRace(race).pinToWaypoint;
       expect(pin).toBeDefined();
       expect(race.waypoints.map((w) => w.name)).toContain(pin);
     }

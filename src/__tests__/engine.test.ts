@@ -30,6 +30,7 @@ import {
   applyStipend,
   getBoatById,
   getRaceById,
+  hazardEventForRace,
 } from '../data';
 import {
   Boat,
@@ -479,8 +480,10 @@ describe('data integrity', () => {
     RACES.forEach((race) => {
       expect(race.waypoints.some((w) => w.name === race.hazardWaypoint)).toBe(true);
       // The hazard must have a matching decision (Record<HazardKey> guarantees
-      // this at compile time; assert it too for a clear failure message).
+      // this at compile time; assert it too for a clear failure message) — and
+      // the per-race lookup must resolve one for every race.
       expect(HAZARD_EVENTS[race.hazard]).toBeDefined();
+      expect(hazardEventForRace(race)).toBeDefined();
     });
   });
 

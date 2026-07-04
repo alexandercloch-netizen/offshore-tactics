@@ -24,27 +24,31 @@ function win(raceId: string): RaceResult {
 
 describe('recommendedRace', () => {
   it('suggests a home-waters race that is unlocked', () => {
+    // The home-port classic (always open) leads each region's list.
     const r = recommendedRace(player('greatLakes'), []);
-    expect(r?.id).toBe('race-chicago-mac');
+    expect(r?.id).toBe('race-tri-state');
   });
 
   it('honours the unlock ladder — locked regional races are skipped', () => {
-    // The Med race (Middle Sea) is locked until Chicago Mac is won, so a Med
-    // sailor with no history gets an unlocked race instead, never a locked one.
+    // A Med sailor with no history gets an unlocked race (the always-open
+    // Malta–Syracuse), never a locked one (the Middle Sea until Mac is won).
     const r = recommendedRace(player('med'), []);
     expect(r).toBeDefined();
+    expect(r?.id).toBe('race-malta-syracuse');
     expect(isRaceUnlocked(r!, [])).toBe(true);
   });
 
-  it('picks the UK inshore race for a UK sailor at the start', () => {
-    expect(recommendedRace(player('uk'), [])?.id).toBe('race-round-island');
+  it('picks the UK home-port classic for a UK sailor at the start', () => {
+    expect(recommendedRace(player('uk'), [])?.id).toBe('race-cowes-dinard');
   });
 
-  it('moves on to a fresh race once the home one is won', () => {
-    const r = recommendedRace(player('uk'), [win('race-round-island')]);
+  it('moves on to a fresh race once the home ones are won', () => {
+    const history = [win('race-cowes-dinard'), win('race-round-island')];
+    const r = recommendedRace(player('uk'), history);
     expect(r).toBeDefined();
+    expect(r?.id).not.toBe('race-cowes-dinard');
     expect(r?.id).not.toBe('race-round-island');
-    expect(isRaceUnlocked(r!, [win('race-round-island')])).toBe(true);
+    expect(isRaceUnlocked(r!, history)).toBe(true);
   });
 
   it('still returns an unlocked race with no profile', () => {
