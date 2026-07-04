@@ -8,6 +8,6 @@ import { GameState } from '../types';
 // it's unit-testable without the Supabase/React Native chain.
 export function cloudSnapshot(state: GameState): GameState {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { progress, windField, tidalField, fleet, weather, ...durable } = state;
+  const { progress, windField, tidalField, fleet, weather, scenario, ...durable } = state;
   return durable;
 }

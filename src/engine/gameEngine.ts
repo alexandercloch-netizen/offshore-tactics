@@ -1853,6 +1853,9 @@ export function buildResult(state: GameState, outcome: StepResult): RaceResult {
     nearestRivalName,
     nearestRivalAhead,
     correctedWinnerName,
+    // Weather-scenario provenance: a run sailed on real model output carries
+    // its stamp into history (and is thereby gated off the global leaderboard).
+    scenario: state.scenario,
   };
 }
 

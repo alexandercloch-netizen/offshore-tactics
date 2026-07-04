@@ -1,4 +1,13 @@
-import { HazardKey, Race, WeatherCondition, WindFeature, WindField, WindSample } from '../types';
+import {
+  HazardKey,
+  Race,
+  WeatherCondition,
+  WeatherScenario,
+  WeatherScenarioPoint,
+  WindFeature,
+  WindField,
+  WindSample,
+} from '../types';
 import { WEATHER } from '../data/weather';
 import { WEATHER_CLIMATOLOGY } from '../data/weatherClimatology';
 import { CourseBounds, haversineNm, movePoint } from './geo';
@@ -60,7 +69,17 @@ function courseCentre(race: Race): { lat: number; lon: number } {
 // Build a fresh, seeded wind field for a race. The realistic seasonal baseline
 // comes from the baked climatology (see data/weatherClimatology.ts) when present,
 // else the race's prevailing wind; the hazard then shapes the variability.
-export function createWindField(race: Race): WindField {
+//
+// With a `scenario` (real model output — today's forecast or a historic
+// edition), the time-series becomes the synoptic base instead: it drives the
+// base direction/strength over race hours and carries the real veer/build, so
+// the synthetic front and rotation are retired (keeping them would sweep a
+// second, invented front through the real one). The seeded puffs/holes, texture
+// and diurnal swing stay on top — a 25 km model has no mesoscale detail, and
+// it's that texture that keeps the racing tactical. Seasonal is the ABSENCE of
+// a scenario: the scenario is only read AFTER every seeded draw below, so the
+// default path is byte-identical — same rnd() order, count and output.
+export function createWindField(race: Race, scenario?: WeatherScenario): WindField {
   const climate = WEATHER_CLIMATOLOGY[race.id];
   const baseDirSrc = climate ? climate.fromDeg : race.prevailingWind.fromDeg;
   const baseSpeedSrc = climate ? climate.speedKn : race.prevailingWind.speedKn;
@@ -107,7 +126,7 @@ export function createWindField(race: Race): WindField {
   // hazard already implies frontal weather (high rotatePerH).
   const frontStrength = 0.6 + profile.rotatePerH * 0.4;
 
-  return {
+  const field: WindField = {
     baseDir: norm360(jitter(baseDirSrc, 15)),
     baseSpeed,
     shiftAmpDeg: profile.shiftAmp * jitter(1, 0.2) * variabilityMul,
@@ -138,6 +157,134 @@ export function createWindField(race: Race): WindField {
       phaseB: rndRange(0, Math.PI * 2),
       dirDeg: rndRange(0, 360),
     },
+  };
+
+  if (!scenario || scenario.points.length === 0) return field;
+  return applyScenario(field, variabilityMul, gustMul, scenario);
+}
+
+const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v));
+
+// Retune a freshly-seeded field to a weather scenario. Pure and draw-free (all
+// randomness already happened): the series becomes the synoptic base, the
+// synthetic front/rotation retire, and the mesoscale amplitudes rescale to the
+// forecast breeze — within the same clamps the seasonal climatology respects,
+// so a wild model run can't blow the simulation out.
+function applyScenario(
+  field: WindField,
+  seasonalVariabilityMul: number,
+  seasonalGustMul: number,
+  scenario: WeatherScenario
+): WindField {
+  const speeds: number[] = [];
+  let sumSin = 0;
+  let sumCos = 0;
+  let gustRatioSum = 0;
+  let gustRatioN = 0;
+  for (const p of scenario.points) {
+    for (let i = 0; i < p.speedKn.length; i += 1) {
+      speeds.push(p.speedKn[i]);
+      const r = toRad(p.fromDeg[i] ?? 0);
+      sumSin += Math.sin(r);
+      sumCos += Math.cos(r);
+      const gust = p.gustKn?.[i];
+      if (gust != null && p.speedKn[i] > 0) {
+        gustRatioSum += gust / p.speedKn[i];
+        gustRatioN += 1;
+      }
+    }
+  }
+  if (speeds.length === 0) return field;
+
+  const n = speeds.length;
+  const meanKn = Math.max(3, speeds.reduce((s, v) => s + v, 0) / n);
+  const sd = Math.sqrt(speeds.reduce((s, v) => s + (v - meanKn) ** 2, 0) / n);
+  const meanDir = norm360((Math.atan2(sumSin / n, sumCos / n) * 180) / Math.PI);
+  // Circular directional spread, the same statistic the baked climatology uses.
+  const resultant = Math.min(1, Math.hypot(sumSin / n, sumCos / n));
+  const circStdDeg = resultant > 0 ? Math.sqrt(-2 * Math.log(resultant)) * (180 / Math.PI) : 90;
+
+  // Swap the scenario's character in for the climatology's, inside its clamps.
+  const variabilityMul = clamp(circStdDeg / 50, 0.7, 1.3);
+  const gustFactor = gustRatioN > 0 ? gustRatioSum / gustRatioN - 1 : sd / meanKn;
+  const gustMul = 1 + Math.max(0, Math.min(0.6, gustFactor));
+  // Mesoscale amplitudes track the forecast breeze — a gale's puffs bite like a
+  // gale's, a drifter's stay soft — bounded so texture never drowns the model.
+  const ampMul = clamp(meanKn / field.baseSpeed, 0.5, 2) * (gustMul / seasonalGustMul);
+
+  const features = (field.features ?? [field.feature]).map((f) => ({
+    ...f,
+    deltaKn: f.deltaKn * ampMul,
+  }));
+
+  return {
+    ...field,
+    // Informational anchors for direct readers; sampling walks the series.
+    baseDir: meanDir,
+    baseSpeed: meanKn,
+    shiftAmpDeg: (field.shiftAmpDeg / seasonalVariabilityMul) * variabilityMul,
+    rotateDegPerH: 0, // the real temporal veer/back lives in the series
+    front: undefined, // ditto the frontal passage — no double-counting
+    feature: features[0],
+    features,
+    diurnalAmpKn: field.diurnalAmpKn != null ? field.diurnalAmpKn * ampMul : undefined,
+    texture: field.texture ? { ...field.texture, ampKn: field.texture.ampKn * ampMul } : undefined,
+    scenarioBase: scenario.points,
+  };
+}
+
+// Interpolate one scenario point's series at race-relative `hours`, clamped at
+// the ends. Direction blends along the shortest arc so a 350°→10° veer doesn't
+// whip the fleet through south.
+function scenarioPointSample(
+  p: WeatherScenarioPoint,
+  hours: number
+): { dirDeg: number; speedKn: number } {
+  const n = p.hours.length;
+  if (n === 0) return { dirDeg: 0, speedKn: 0 }; // defensive; a scenario always carries samples
+  if (hours <= p.hours[0]) return { dirDeg: p.fromDeg[0], speedKn: p.speedKn[0] };
+  if (hours >= p.hours[n - 1]) return { dirDeg: p.fromDeg[n - 1], speedKn: p.speedKn[n - 1] };
+  let i = 1;
+  while (i < n - 1 && p.hours[i] < hours) i += 1;
+  const h0 = p.hours[i - 1];
+  const h1 = p.hours[i];
+  const t = h1 > h0 ? (hours - h0) / (h1 - h0) : 0;
+  let dd = p.fromDeg[i] - p.fromDeg[i - 1];
+  if (dd > 180) dd -= 360;
+  if (dd < -180) dd += 360;
+  return {
+    dirDeg: p.fromDeg[i - 1] + dd * t,
+    speedKn: p.speedKn[i - 1] + (p.speedKn[i] - p.speedKn[i - 1]) * t,
+  };
+}
+
+// The scenario's synoptic base at a position/time. A single point is a uniform
+// base (a short course sees one synoptic sky); several points blend by inverse
+// distance, giving a long course the real spatial gradient the model carries.
+function scenarioBaseAt(
+  points: WeatherScenarioPoint[],
+  lat: number,
+  lon: number,
+  hours: number
+): { dirDeg: number; speedKn: number } {
+  if (points.length === 1) return scenarioPointSample(points[0], hours);
+  let wSum = 0;
+  let sinSum = 0;
+  let cosSum = 0;
+  let spdSum = 0;
+  for (const p of points) {
+    const d = haversineNm(lat, lon, p.lat, p.lon);
+    const w = 1 / Math.max(d * d, 25); // ≥5 nm floor so a boat at the point doesn't spike
+    const s = scenarioPointSample(p, hours);
+    const r = toRad(s.dirDeg);
+    sinSum += Math.sin(r) * w;
+    cosSum += Math.cos(r) * w;
+    spdSum += s.speedKn * w;
+    wSum += w;
+  }
+  return {
+    dirDeg: norm360((Math.atan2(sinSum, cosSum) * 180) / Math.PI),
+    speedKn: spdSum / wSum,
   };
 }
 
@@ -187,14 +334,26 @@ export function sampleWind(field: WindField, lat: number, lon: number, hours: nu
       Math.cos((2 * Math.PI * v) / field.texture.scaleBNm + field.texture.phaseB);
   }
 
+  // The synoptic base: normally the seeded baseline rotating with time; under a
+  // scenario, the real model series looked up at this position and hour (the
+  // scenario field carries rotate = 0 and no front, so nothing double-counts).
+  const base = field.scenarioBase?.length
+    ? scenarioBaseAt(field.scenarioBase, lat, lon, hours)
+    : undefined;
+
   const dir =
-    field.baseDir +
-    field.rotateDegPerH * hours +
+    (base ? base.dirDeg : field.baseDir + field.rotateDegPerH * hours) +
     field.shiftAmpDeg * Math.sin((2 * Math.PI * hours) / field.shiftPeriodH + field.shiftPhase) +
     along * 0.02 +
     frontDir;
 
-  const speed = field.baseSpeed + field.gradientPerNm * along + featTerm + frontSpeed + diurnal + texture;
+  const speed =
+    (base ? base.speedKn : field.baseSpeed) +
+    field.gradientPerNm * along +
+    featTerm +
+    frontSpeed +
+    diurnal +
+    texture;
 
   return { fromDeg: norm360(dir), speedKn: Math.max(2, Math.min(50, speed)) };
 }

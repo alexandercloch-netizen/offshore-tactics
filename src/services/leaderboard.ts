@@ -1,5 +1,18 @@
-import { LeaderboardEntry } from '../types';
+import { LeaderboardEntry, RaceResult } from '../types';
 import { supabase } from '../lib/supabase';
+
+// The single submission choke point, gated fail-closed: the ranked ladder is
+// the SEASONAL game only. A weather-scenario run (live forecast or a historic
+// edition) sails a different course in all but name, so it never posts to the
+// global board — it stays in the local logbook, honestly tagged.
+export async function submitRaceResult(
+  result: RaceResult,
+  entry: LeaderboardEntry,
+  submit: (entry: LeaderboardEntry) => Promise<void> = submitToLeaderboard
+): Promise<void> {
+  if (result.scenario) return;
+  await submit(entry);
+}
 
 // Submits a finished/retired race to the global leaderboard, keeping only the
 // player's BEST corrected/elapsed time per race. It first reads the player's
