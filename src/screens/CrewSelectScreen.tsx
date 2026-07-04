@@ -89,6 +89,11 @@ export const CrewSelectScreen: React.FC<Props> = ({ navigation }) => {
             <Text style={styles.clear}>Clear crew</Text>
           </Pressable>
         ) : null}
+        <Text style={styles.rolesNote}>
+          Roles earn their keep: the Navigator reads the breeze, the Tactician limits a misread
+          call, Bowman & Trimmer steady the sail handling, and the Skipper keeps her on her feet
+          in a blow.
+        </Text>
       </View>
 
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: spacing.xxl }]}>
@@ -228,6 +233,12 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     marginTop: spacing.sm,
     alignSelf: 'flex-end',
+  },
+  rolesNote: {
+    color: colors.mist,
+    fontSize: fontSize.xs,
+    fontStyle: 'italic',
+    marginTop: spacing.sm,
   },
   content: {
     padding: spacing.lg,

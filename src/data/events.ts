@@ -71,6 +71,8 @@ export const GENERIC_EVENTS: GameEvent[] = [
         hullDelta: -4,
         risk: 0.25,
         field: true,
+        crewSkill: 'Bowman',
+        sets: 'big-kite',
       },
       {
         id: 'evt-spinnaker-small',
@@ -81,6 +83,7 @@ export const GENERIC_EVENTS: GameEvent[] = [
         moraleDelta: 2,
         hullDelta: -1,
         risk: 0.12,
+        crewSkill: 'Bowman',
       },
       {
         id: 'evt-spinnaker-white',
@@ -110,6 +113,7 @@ export const GENERIC_EVENTS: GameEvent[] = [
         moraleDelta: -1,
         hullDelta: -6,
         risk: 0.3,
+        sets: 'jury-rig',
       },
       {
         id: 'evt-gear-proper',
@@ -171,6 +175,7 @@ export const GENERIC_EVENTS: GameEvent[] = [
         hullDelta: 0,
         risk: 0.2,
         field: true,
+        crewSkill: 'Trimmer',
       },
       {
         id: 'evt-lane-duck',
@@ -262,6 +267,7 @@ export const GENERIC_EVENTS: GameEvent[] = [
         hullDelta: -6,
         risk: 0.3,
         field: true,
+        crewSkill: 'Trimmer',
       },
       {
         id: 'evt-reef-tuck',
@@ -272,6 +278,8 @@ export const GENERIC_EVENTS: GameEvent[] = [
         moraleDelta: 1,
         hullDelta: -1,
         risk: 0.06,
+        crewSkill: 'Bowman',
+        sets: 'reefed',
       },
     ],
   },
@@ -294,6 +302,8 @@ export const GENERIC_EVENTS: GameEvent[] = [
         hullDelta: -3,
         risk: 0.26,
         field: true,
+        crewSkill: 'Bowman',
+        sets: 'big-kite',
       },
       {
         id: 'evt-peel-hold',
@@ -304,6 +314,7 @@ export const GENERIC_EVENTS: GameEvent[] = [
         moraleDelta: 0,
         hullDelta: 0,
         risk: 0.05,
+        crewSkill: 'Trimmer',
       },
     ],
   },
@@ -326,6 +337,7 @@ export const GENERIC_EVENTS: GameEvent[] = [
         hullDelta: -6,
         risk: 0.36,
         field: true,
+        crewSkill: 'Trimmer',
       },
       {
         id: 'evt-broach-ease',
@@ -336,6 +348,7 @@ export const GENERIC_EVENTS: GameEvent[] = [
         moraleDelta: 2,
         hullDelta: -2,
         risk: 0.2,
+        crewSkill: 'Trimmer',
       },
       {
         id: 'evt-broach-soak',
@@ -491,6 +504,7 @@ export const GENERIC_EVENTS: GameEvent[] = [
         moraleDelta: -4,
         hullDelta: 0,
         risk: 0.2,
+        sets: 'strapped-hand',
       },
       {
         id: 'evt-injury-rest',
@@ -526,6 +540,7 @@ export const MORALE_EVENTS: GameEvent[] = [
         moraleDelta: -5,
         hullDelta: 0,
         risk: 0.18,
+        sets: 'burned-watch',
       },
       {
         id: 'evt-fatigue-rest',
@@ -615,6 +630,7 @@ export const MORALE_EVENTS: GameEvent[] = [
         hullDelta: 0,
         risk: 0.16,
         field: true,
+        sets: 'burned-watch',
       },
       {
         id: 'evt-nightwatch-sleep',
@@ -681,6 +697,7 @@ export const WEATHER_EVENTS: GameEvent[] = [
         hullDelta: -12,
         risk: 0.35,
         field: true,
+        crewSkill: 'Trimmer',
       },
       {
         id: 'evt-squall-shorten',
@@ -691,6 +708,7 @@ export const WEATHER_EVENTS: GameEvent[] = [
         moraleDelta: 2,
         hullDelta: -5,
         risk: 0.2,
+        crewSkill: 'Bowman',
       },
       {
         id: 'evt-squall-reef',
@@ -856,6 +874,183 @@ export const WEATHER_EVENTS: GameEvent[] = [
         moraleDelta: 0,
         hullDelta: 0,
         risk: 0.06,
+      },
+    ],
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Follow-on decisions — decision memory. Each is chained to a situation an
+// earlier choice left the boat in (its `followsFrom` matches a choice's
+// `sets`): the reef you tucked is the reef you're later asked to shake out.
+// They are ONLY eligible while that situation is live on progress, so they can
+// never fire out of the blue — and with no situation pending the picker's path
+// is byte-identical to the plain draw.
+// ---------------------------------------------------------------------------
+export const FOLLOWON_EVENTS: GameEvent[] = [
+  {
+    id: 'evt-fo-shakeout',
+    title: 'Shake Out the Reef?',
+    prompt:
+      'The blast you reefed for has blown through and she feels under-canvassed, wallowing off her numbers. Shake it out and power up, or keep the reef in your pocket for the next line of dark water?',
+    kind: 'tactical',
+    followsFrom: 'reefed',
+    choices: [
+      {
+        id: 'evt-fo-shakeout-full',
+        label: 'Shake it out',
+        description: 'Full sail back on and chase the fleet — betting the ease is real.',
+        timeDelta: -0.6,
+        staminaDelta: -5,
+        moraleDelta: 3,
+        hullDelta: 0,
+        risk: 0.22,
+        field: true,
+        crewSkill: 'Bowman',
+      },
+      {
+        id: 'evt-fo-shakeout-keep',
+        label: 'Keep the reef in',
+        description: 'Stay snugged down and give nothing back if the breeze returns.',
+        timeDelta: 0.3,
+        staminaDelta: -1,
+        moraleDelta: -1,
+        hullDelta: 0,
+        risk: 0.04,
+      },
+    ],
+  },
+  {
+    id: 'evt-fo-kitedrop',
+    title: 'The Kite Has Overstayed',
+    prompt:
+      'The breeze has built well past the big kite\'s range and the bow is starting to bury. The drop is overdue — and every minute it waits, the foredeck\'s job gets uglier.',
+    kind: 'tactical',
+    pointOfSail: 'Downwind',
+    followsFrom: 'big-kite',
+    choices: [
+      {
+        id: 'evt-fo-kitedrop-hang',
+        label: 'Hang on for the miles',
+        description: 'Carry it through the worst and bet the pressure softens — glorious or grim.',
+        timeDelta: -0.5,
+        staminaDelta: -7,
+        moraleDelta: 2,
+        hullDelta: -5,
+        risk: 0.34,
+        field: true,
+        crewSkill: 'Trimmer',
+      },
+      {
+        id: 'evt-fo-kitedrop-letterbox',
+        label: 'Letterbox it down now',
+        description: 'A brutal, practised drop through the boom slot while it\'s still possible.',
+        timeDelta: 0.3,
+        staminaDelta: -5,
+        moraleDelta: 1,
+        hullDelta: -1,
+        risk: 0.16,
+        crewSkill: 'Bowman',
+      },
+      {
+        id: 'evt-fo-kitedrop-smother',
+        label: 'Run deep and smother it',
+        description: 'Bear away, blanket the kite behind the main and take it down soft — slow, sure.',
+        timeDelta: 0.6,
+        staminaDelta: -3,
+        moraleDelta: -1,
+        hullDelta: 0,
+        risk: 0.06,
+      },
+    ],
+  },
+  {
+    id: 'evt-fo-hand',
+    title: 'The Strapped Hand Is Fading',
+    prompt:
+      'The arm you strapped is stiffening and the grinding is a hand short of honest. Keep them in the rotation and hold the boat\'s pace, or stand them down at last and split the watch?',
+    kind: 'tactical',
+    followsFrom: 'strapped-hand',
+    choices: [
+      {
+        id: 'evt-fo-hand-press',
+        label: 'Keep them in the watch',
+        description: 'Every hand still counts — the pace holds while the arm, and the mood, wear thin.',
+        timeDelta: -0.2,
+        staminaDelta: -8,
+        moraleDelta: -4,
+        hullDelta: 0,
+        risk: 0.18,
+      },
+      {
+        id: 'evt-fo-hand-stand',
+        label: 'Stand them down at last',
+        description: 'Overdue but right: send them below and cover the gap — slower, and the boat knows it.',
+        timeDelta: 0.5,
+        staminaDelta: -2,
+        moraleDelta: 4,
+        hullDelta: 0,
+        risk: 0.04,
+      },
+    ],
+  },
+  {
+    id: 'evt-fo-jury',
+    title: 'The Jury Rig Is Working Loose',
+    prompt:
+      'The lashing on your on-the-fly repair has started to creep under load — you can hear it groan on every wave. Heave-to and make it permanent, or nurse it and pray it holds to the line?',
+    kind: 'tactical',
+    followsFrom: 'jury-rig',
+    choices: [
+      {
+        id: 'evt-fo-jury-nurse',
+        label: 'Nurse it to the finish',
+        description: 'Ease the sheets a shade and will it to hold — quick while it lasts.',
+        timeDelta: -0.1,
+        staminaDelta: -3,
+        moraleDelta: -2,
+        hullDelta: -7,
+        risk: 0.3,
+      },
+      {
+        id: 'evt-fo-jury-fix',
+        label: 'Heave-to and fix it properly',
+        description: 'Park the boat and do it once, right — the repair outlives the race.',
+        timeDelta: 0.9,
+        staminaDelta: -4,
+        moraleDelta: 2,
+        hullDelta: 6,
+        risk: 0.04,
+      },
+    ],
+  },
+  {
+    id: 'evt-fo-watch',
+    title: 'Paying for the Night',
+    prompt:
+      'The watch you drove through the dark is moving like treacle and small mistakes are creeping in. Force a proper rest cycle now, or keep the ragged rotation and stay in the fight?',
+    kind: 'tactical',
+    followsFrom: 'burned-watch',
+    choices: [
+      {
+        id: 'evt-fo-watch-rest',
+        label: 'Force a rest cycle',
+        description: 'Half the crew horizontal by order — pace given up now, bought back sharper.',
+        timeDelta: 0.6,
+        staminaDelta: 10,
+        moraleDelta: 6,
+        hullDelta: 0,
+        risk: 0.03,
+      },
+      {
+        id: 'evt-fo-watch-grind',
+        label: 'Keep the ragged rotation',
+        description: 'No one sleeps while there are boats to catch — the mistakes are the price.',
+        timeDelta: -0.3,
+        staminaDelta: -7,
+        moraleDelta: -3,
+        hullDelta: 0,
+        risk: 0.2,
       },
     ],
   },
@@ -1292,11 +1487,13 @@ export const HAZARD_EVENTS: Record<HazardKey, GameEvent> = {
   },
 };
 
-// Flat list of every generic/morale/weather event for fallbacks and lookups.
+// Flat list of every generic/morale/weather/follow-on event for fallbacks and
+// lookups.
 export const EVENTS: GameEvent[] = [
   ...GENERIC_EVENTS,
   ...MORALE_EVENTS,
   ...WEATHER_EVENTS,
+  ...FOLLOWON_EVENTS,
 ];
 
 export function pickEvent(): GameEvent {
@@ -1334,6 +1531,10 @@ export interface EventContext {
   raceId?: string;
   band?: ConditionBand;
   phase?: RacePhase;
+  // Decision memory: the key of a live situation an earlier choice opened (a
+  // choice's `sets`). Matching follow-on events become eligible AND preferred;
+  // absent, follow-ons are excluded entirely and the draw is unchanged.
+  pending?: string;
 }
 
 // Map the live wind speed to a coarse breeze band (matches the WindStrength
@@ -1404,27 +1605,37 @@ export function pickEventForRace(
     return MOB_EVENTS[0];
   }
   // Everyday tactical/weather/crew calls, filtered to the current leg's point of
-  // sail so the decision can't contradict what the boat is doing.
-  const everyday = [...WEATHER_EVENTS, ...MORALE_EVENTS, ...GENERIC_EVENTS].filter(
-    (e) => !pointOfSail || !e.pointOfSail || e.pointOfSail === pointOfSail
+  // sail so the decision can't contradict what the boat is doing. Follow-on
+  // events are gated to their live situation: with nothing pending they are
+  // excluded entirely, so the no-memory path is byte-identical to the plain
+  // draw over the everyday pool.
+  const everyday = [...WEATHER_EVENTS, ...MORALE_EVENTS, ...GENERIC_EVENTS, ...FOLLOWON_EVENTS].filter(
+    (e) =>
+      (!pointOfSail || !e.pointOfSail || e.pointOfSail === pointOfSail) &&
+      (!e.followsFrom || e.followsFrom === context.pending)
   );
 
   // Preference tiers, each narrower than the last, falling through to a set that
   // is guaranteed non-empty. Fresh (unseen) events are always preferred, so the
   // "no repeat until the pool is exhausted" behaviour holds; within the fresh
-  // set, events whose tags fit the moment come first. The final `rndPick` is the
-  // only source of randomness, so determinism is preserved.
+  // set, a follow-on chained to the live situation trumps everything (the story
+  // beat the boat is actually in), then events whose tags fit the moment. The
+  // final `rndPick` is the only source of randomness, so determinism is
+  // preserved.
   const fresh = everyday.filter((e) => !seen.has(e.id));
+  const followFresh = fresh.filter((e) => e.followsFrom !== undefined);
   const fittingFresh = fresh.filter((e) => eventFits(e, context));
   const flatFresh = fresh.filter(isFlat);
   const candidates =
-    fittingFresh.length > 0
-      ? fittingFresh
-      : flatFresh.length > 0
-        ? flatFresh
-        : fresh.length > 0
-          ? fresh
-          : everyday;
+    followFresh.length > 0
+      ? followFresh
+      : fittingFresh.length > 0
+        ? fittingFresh
+        : flatFresh.length > 0
+          ? flatFresh
+          : fresh.length > 0
+            ? fresh
+            : everyday;
   return rndPick(candidates);
 }
 

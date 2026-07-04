@@ -73,9 +73,22 @@ The simulation is a **pure, deterministic engine** with a thin React UI on top.
     real wind & tide** (clean-/dirty-air `startSpeedMul` faded over the first leg,
     a committed bias, OCS/time penalty). Pure; the only chance is an injected roll.
   - Tactical decisions (`data/events.ts`) tagged `field: true` are *resolved
-    against the real wind* in `applyDecision` via `tacticalEdge` — a bold call
-    only pays when the field supports it; `tacticalRead` gives the Navigator's
-    (confidence-hedged) hint shown in the decision modal.
+    against the real wind* in `applyDecision` via `resolveFieldDelta` (the single
+    source of truth the cockpit preview shares, so the card can't promise what the
+    resolution won't deliver) — a bold call only pays when the field supports it,
+    and the edge decays (`edgeDecay`) if the boat sails past the trigger point.
+    `tacticalRead` gives the Navigator's (confidence-hedged) hint; `vmgPreview`
+    projects a field choice as an honest confidence *band* plus a per-choice
+    downside line. `applyDecision` returns a typed `resolution` (bold/safe/hedge,
+    paid-off/bungled) whose summary is the race-log line. **Crew roles are
+    load-bearing** (`roleSkill`): the Navigator drives read confidence, the
+    Tactician forgives part of a misread bold call, Bowman/Trimmer steady bungles
+    on choices tagged `crewSkill`, the Skipper trims heavy-weather risk — all
+    capped so a call never drops below half its authored risk
+    (`decisionBungleChance`). Choices can `set` a transient situation
+    (`RaceProgress.pendingSituation`, distance-bounded) that makes matching
+    `followsFrom` follow-on events eligible & preferred in `pickEventForRace`;
+    with nothing pending the draw is byte-identical to the plain picker (tested).
 - **`src/data/`** — content & catalogues: `races.ts`, `boats.ts`, `crew.ts`,
   `provisions.ts`, `events.ts` (tactical decisions), `weather.ts`,
   `landmasses.ts`, `polarLibrary.ts`, `sails.ts`, `onboarding.ts`. `index.ts`

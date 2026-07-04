@@ -384,6 +384,14 @@ export interface TacticalChoice {
   hullDelta: number; // hull integrity change
   risk: number; // 0-1 chance of an adverse twist
   field?: boolean; // the bold option — its time outcome is resolved against the real wind field
+  // Which hands execute this call: a sail-handling choice tagged with a role
+  // (Bowman for foredeck work, Trimmer for holding the boat under press) lets
+  // that specialist steady the bungle odds — role skill matters, not just the
+  // crew average. Untagged choices are whole-boat calls.
+  crewSkill?: CrewRole;
+  // A situation this choice leaves the boat in (e.g. 'reefed'), opening a
+  // follow-on decision later in the passage. Transient; expires with distance.
+  sets?: string;
 }
 
 export type EventKind = 'tactical' | 'weather' | 'mob' | 'hazard';
@@ -418,6 +426,10 @@ export interface GameEvent {
   // before (drawn on the everyday cadence near their hazard mark).
   pinToWaypoint?: string; // waypoint name where this signature decision fires
   storyBeat?: string; // id of the Storyline beat this decision belongs to
+  // Decision memory: a follow-on event is only eligible while its triggering
+  // situation (a choice's `sets` key) is live on progress — the reef you tucked
+  // is the reef you're later asked to shake out. Absent → an ordinary draw.
+  followsFrom?: string;
   choices: TacticalChoice[];
 }
 
@@ -451,10 +463,21 @@ export interface Storyline {
 }
 
 // Velocity-made-good preview shown in the tactical decision modal: the current
-// VMG and the projected VMG for each choice.
+// VMG and the projected VMG for each choice. A field-resolved (bold) choice's
+// projection is honest about what the Navigator can actually know: a confidence
+// band around the believed edge rather than a single false-precision number —
+// computed from the SAME resolution maths `applyDecision` uses, so the cockpit
+// can never promise a gain the resolution won't deliver.
+export interface VmgBand {
+  lo: number;
+  hi: number;
+}
 export interface VmgPreview {
   before: number;
-  after: Record<string, number>;
+  after: Record<string, number>; // field choices carry the band's midpoint here
+  band?: Record<string, VmgBand>; // field choices only: the Navigator's projected range
+  confidence?: number; // 0–1 — the Navigator's trust in the field read (band width)
+  downside?: Record<string, string>; // per choice: the legible "if it goes wrong" line
 }
 
 // A single instrument sample, recorded as the boat sails, so a decision can be
@@ -502,6 +525,21 @@ export interface RaceProgress {
   // records the choice the player made, so the debrief can pick its matching beat.
   signatureFired?: boolean;
   signatureChoiceId?: string; // id of the TacticalChoice taken at the signature decision
+  // Where the active decision was triggered. A field-resolved call's edge decays
+  // as the boat sails on past this point — the shift you spotted doesn't wait —
+  // so a late commit is worth less than an immediate one. Cleared on resolution.
+  decisionTriggerNm?: number;
+  // Decision memory: a transient situation a choice left the boat in (a tucked
+  // reef, a big kite up, a strapped hand). While live it makes matching
+  // follow-on events eligible; it expires with distance sailed.
+  pendingSituation?: PendingSituation;
+}
+
+// A transient situation opened by a tactical choice, carried on progress so a
+// follow-on decision can pick the story up later in the passage.
+export interface PendingSituation {
+  key: string; // matches a choice's `sets` / an event's `followsFrom`
+  expiresAtNm: number; // distance covered beyond which the moment has passed
 }
 
 // ---- Race start sequence ----
@@ -625,6 +663,17 @@ export interface GameState {
   savedAt?: number; // epoch ms the save was last written; drives cloud sync reconciliation
 }
 
+// How a tactical decision actually resolved — the causal truth behind the
+// debrief line, using the same bold/safe/hedge vocabulary as the storyline
+// debrief. `paidOff` is only meaningful for a bold (field-resolved) call.
+export interface DecisionResolution {
+  outcome: SignatureOutcome; // bold (field-resolved) | safe | hedge
+  paidOff?: boolean; // bold only: the real wind backed the call
+  bungled: boolean; // the crew fumbled the manoeuvre (the risk roll bit)
+  lostHours: number; // realised on-water time cost of the call
+  summary: string; // one causally-true debrief line for the race log
+}
+
 // Outcome returned by the engine after a simulation step.
 export interface StepResult {
   progress: RaceProgress;
@@ -635,6 +684,7 @@ export interface StepResult {
   log?: string;
   finished: boolean;
   retired: boolean;
+  resolution?: DecisionResolution; // present when this step resolved a decision
 }
 
 // Global leaderboard row (mirrors the Supabase `leaderboard` table)
