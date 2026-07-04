@@ -2,24 +2,29 @@ import {
   pickEventForRace,
   conditionBand,
   racePhase,
+  EventContext,
+  RACE_REGION,
   HAZARD_EVENTS,
   MOB_EVENTS,
   GENERIC_EVENTS,
   WEATHER_EVENTS,
   MORALE_EVENTS,
+  FOLLOWON_EVENTS,
 } from '../data/events';
 import { GameEvent, PointOfSail, TacticalChoice } from '../types';
-import { mulberry32, resetRng, setRng } from '../engine/rng';
+import { mulberry32, resetRng, rnd, rndPick, setRng } from '../engine/rng';
 
 afterEach(() => resetRng());
 
 const HAZARD_IDS = new Set(Object.values(HAZARD_EVENTS).map((e) => e.id));
 
-// Every authored decision, across every pool, for the invariants below.
+// Every authored decision, across every pool (incl. the follow-on chains), for
+// the invariants below.
 const ALL_EVENTS: GameEvent[] = [
   ...GENERIC_EVENTS,
   ...MORALE_EVENTS,
   ...WEATHER_EVENTS,
+  ...FOLLOWON_EVENTS,
   ...MOB_EVENTS,
   ...Object.values(HAZARD_EVENTS),
 ];
@@ -195,6 +200,124 @@ describe('pickEventForRace — context tagging', () => {
     const drawn = pickEventForRace(shown, 'Upwind', { band: 'light' });
     expect(allowed.has(drawn.id)).toBe(true);
     expect(drawn.id).toBe('evt-reef'); // the sole fresh candidate — a draw is always possible
+  });
+});
+
+// Decision memory: a follow-on event is only ever eligible while its triggering
+// situation is pending, in which case it jumps the queue; with nothing pending
+// the picker must behave byte-for-byte as it always has.
+describe('pickEventForRace — follow-on chains', () => {
+  const FOLLOW_IDS = new Set(FOLLOWON_EVENTS.map((e) => e.id));
+
+  it('every follow-on chains from a situation some choice actually sets', () => {
+    const setKeys = new Set(
+      ALL_EVENTS.flatMap((e) => e.choices.map((c) => c.sets)).filter(
+        (k): k is string => typeof k === 'string'
+      )
+    );
+    expect(FOLLOWON_EVENTS.length).toBeGreaterThanOrEqual(4);
+    FOLLOWON_EVENTS.forEach((e) => {
+      expect(typeof e.followsFrom).toBe('string');
+      expect(setKeys.has(e.followsFrom as string)).toBe(true);
+    });
+    // And every set situation has at least one follow-on to pay it off.
+    setKeys.forEach((key) => {
+      expect(FOLLOWON_EVENTS.some((e) => e.followsFrom === key)).toBe(true);
+    });
+  });
+
+  it('never draws a follow-on without its situation pending', () => {
+    [7, 21, 99, 4].forEach((seed) => {
+      setRng(mulberry32(seed));
+      const shown: string[] = [];
+      for (let i = 0; i < 40; i += 1) {
+        const evt = pickEventForRace(shown, undefined, {
+          raceId: 'race-round-island',
+          band: 'moderate',
+          phase: 'mid',
+        });
+        expect(FOLLOW_IDS.has(evt.id)).toBe(false);
+        shown.push(evt.id);
+      }
+    });
+  });
+
+  it('prefers the matching follow-on while its situation is live, under any seed', () => {
+    // The man-overboard drama is marked seen so its rare preemption (unchanged,
+    // tested elsewhere) can't mask the chain tier.
+    [1, 7, 21, 99].forEach((seed) => {
+      setRng(mulberry32(seed));
+      const evt = pickEventForRace([MOB_EVENTS[0].id], undefined, { pending: 'reefed' });
+      expect(evt.id).toBe('evt-fo-shakeout');
+    });
+  });
+
+  it('respects the point-of-sail gate even for a live chain', () => {
+    setRng(() => 0.5);
+    // The overdue kite drop is Downwind-only: upwind it must not fire.
+    const evt = pickEventForRace([], 'Upwind', { pending: 'big-kite' });
+    expect(evt.id).not.toBe('evt-fo-kitedrop');
+    setRng(() => 0.5);
+    const down = pickEventForRace([], 'Downwind', { pending: 'big-kite' });
+    expect(down.id).toBe('evt-fo-kitedrop');
+  });
+
+  // The frozen pre-chain picker, reimplemented verbatim, as the byte-identical
+  // baseline: with no pending situation the live picker must reproduce its
+  // draws exactly — same rng consumption, same candidates, same event — across
+  // seeds, points of sail and contexts.
+  function referencePick(shown: string[], pointOfSail?: PointOfSail, context: EventContext = {}): GameEvent {
+    const seen = new Set(shown);
+    const roll = rnd();
+    if (!seen.has(MOB_EVENTS[0].id) && roll < 0.08) return MOB_EVENTS[0];
+    const everyday = [...WEATHER_EVENTS, ...MORALE_EVENTS, ...GENERIC_EVENTS].filter(
+      (e) => !pointOfSail || !e.pointOfSail || e.pointOfSail === pointOfSail
+    );
+    const fits = (e: GameEvent): boolean => {
+      if (e.conditions && context.band && !e.conditions.includes(context.band)) return false;
+      if (e.phase && context.phase && e.phase !== context.phase) return false;
+      if (e.regions && context.raceId) {
+        const region = RACE_REGION[context.raceId];
+        if (!e.regions.some((r) => r === context.raceId || r === region)) return false;
+      }
+      return true;
+    };
+    const flat = (e: GameEvent): boolean => !e.conditions && !e.regions && !e.phase;
+    const fresh = everyday.filter((e) => !seen.has(e.id));
+    const fittingFresh = fresh.filter(fits);
+    const flatFresh = fresh.filter(flat);
+    const candidates =
+      fittingFresh.length > 0
+        ? fittingFresh
+        : flatFresh.length > 0
+          ? flatFresh
+          : fresh.length > 0
+            ? fresh
+            : everyday;
+    return rndPick(candidates);
+  }
+
+  it('with no pending situation the draw is byte-identical to the pre-chain picker', () => {
+    const contexts: (EventContext | undefined)[] = [
+      undefined,
+      {},
+      { raceId: 'race-fastnet', band: 'fresh', phase: 'mid' },
+      { raceId: 'race-middle-sea', band: 'light', phase: 'early' },
+    ];
+    const sails: (PointOfSail | undefined)[] = [undefined, 'Upwind', 'Downwind', 'Reach'];
+    [7, 21, 42, 99].forEach((seed) => {
+      contexts.forEach((ctx) => {
+        sails.forEach((pos) => {
+          setRng(mulberry32(seed));
+          const live: string[] = [];
+          for (let i = 0; i < 15; i += 1) live.push(pickEventForRace(live, pos, ctx ?? {}).id);
+          setRng(mulberry32(seed));
+          const ref: string[] = [];
+          for (let i = 0; i < 15; i += 1) ref.push(referencePick(ref, pos, ctx ?? {}).id);
+          expect(live).toEqual(ref);
+        });
+      });
+    });
   });
 });
 

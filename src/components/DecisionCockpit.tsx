@@ -76,7 +76,10 @@ function formatDelta(value: number, suffix = ''): string {
 
 function impactLine(choice: TacticalChoice): string {
   const parts: string[] = [];
-  if (choice.timeDelta !== 0) parts.push(`${choice.timeDelta < 0 ? '' : '+'}${choice.timeDelta}h`);
+  // A field-resolved call's time outcome depends on the wind read — the honest
+  // band above carries it, so no false-precision hours here.
+  if (!choice.field && choice.timeDelta !== 0)
+    parts.push(`${choice.timeDelta < 0 ? '' : '+'}${choice.timeDelta}h`);
   if (choice.hullDelta !== 0) parts.push(`Hull ${formatDelta(choice.hullDelta)}`);
   if (choice.staminaDelta !== 0) parts.push(`Crew ${formatDelta(choice.staminaDelta)}`);
   if (choice.moraleDelta !== 0) parts.push(`Morale ${formatDelta(choice.moraleDelta)}`);
@@ -261,13 +264,26 @@ export const DecisionCockpit: React.FC<DecisionCockpitProps> = ({
 
   const renderChoice = (choice: TacticalChoice): React.ReactNode => {
     const after = vmg?.after[choice.id];
+    const band = choice.field ? vmg?.band?.[choice.id] : undefined;
+    const downside = vmg?.downside?.[choice.id];
+    // The Navigator's projection for a wind-resolved call: a band, not a number
+    // — wide when the read is hard to trust (or the call is genuinely on the
+    // fence), tight when they're sure. The cue keys off the band's own relative
+    // width, so it scales from a dinghy drifter to an ocean flyer.
+    const hardToCall =
+      !!band && !!vmg && band.hi - band.lo >= Math.max(vmg.before, 1) * 0.08;
     const highRisk = choice.risk >= 0.2;
     const impact = impactLine(choice);
     const riskWord = choice.risk >= 0.2 ? 'high risk' : choice.risk >= 0.1 ? 'some risk' : 'low risk';
     const a11y = [
       choice.label,
-      after !== undefined ? `projected VMG ${after.toFixed(1)} knots` : null,
+      band
+        ? `Navigator projects VMG ${band.lo.toFixed(1)} to ${band.hi.toFixed(1)} knots${hardToCall ? ', hard to call' : ''}`
+        : after !== undefined
+          ? `projected VMG ${after.toFixed(1)} knots`
+          : null,
       riskWord,
+      downside ?? null,
     ]
       .filter(Boolean)
       .join(', ');
@@ -292,13 +308,23 @@ export const DecisionCockpit: React.FC<DecisionCockpitProps> = ({
           {choice.description}
         </Text>
         <View style={styles.choiceFoot}>
-          {vmg && after !== undefined ? (
+          {vmg && band && after !== undefined ? (
+            <Text style={[styles.vmgAfter, { color: vmgColor(vmg.before, after) }]}>
+              {vmgArrow(vmg.before, after)} VMG ~{band.lo.toFixed(1)}–{band.hi.toFixed(1)} kn
+              {hardToCall ? ' — hard to call' : ''}
+            </Text>
+          ) : vmg && after !== undefined ? (
             <Text style={[styles.vmgAfter, { color: vmgColor(vmg.before, after) }]}>
               {vmgArrow(vmg.before, after)} VMG {after.toFixed(1)} kn
             </Text>
           ) : null}
           {impact ? <Text style={styles.impact}>{impact}</Text> : null}
         </View>
+        {downside ? (
+          <Text style={styles.downside} numberOfLines={1}>
+            {downside}
+          </Text>
+        ) : null}
       </Pressable>
     );
   };
@@ -622,6 +648,12 @@ const styles = StyleSheet.create({
     color: colors.brassLight,
     fontSize: fontSize.xs,
     fontWeight: fontWeight.medium,
+  },
+  downside: {
+    color: colors.mist,
+    fontSize: fontSize.xs,
+    fontStyle: 'italic',
+    marginTop: spacing.xs,
   },
 });
 

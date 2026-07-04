@@ -7,6 +7,7 @@ import {
   CrewMember,
   CrewRole,
   CrewTier,
+  DecisionResolution,
   DivisionKey,
   FleetBoat,
   GameEvent,
@@ -23,6 +24,7 @@ import {
   RaceProgress,
   RaceResult,
   RoutingBias,
+  SignatureOutcome,
   StepResult,
   TacticalChoice,
   TidalField,
@@ -86,6 +88,10 @@ const DECISION_MAX = 0.16;
 const FIRST_DECISION_MIN = 0.04;
 const FIRST_DECISION_MAX = 0.1;
 const MAX_DECISIONS = 14;
+// How long (fraction of the course) a choice-opened situation (a tucked reef, a
+// big kite up) stays live before the moment has passed and its follow-on
+// decision can no longer fire. Wide enough for one or two decision beats.
+const SITUATION_WINDOW_FRACTION = 0.35;
 // Nominal stretch (fraction of course) used to project VMG for a choice.
 const DECISION_STRETCH = 1 / 12;
 // Re-route when the local wind has shifted this much from the planned route.
@@ -315,11 +321,28 @@ export function crewSkillAverage(crewIds: string[]): number {
 // The skill that drives forecast confidence: the boat's Navigator(s) if one is
 // aboard, else the crew's general nous. Rewards signing a strong Navigator.
 export function navigatorSkill(crewIds: string[]): number {
-  const navs = crewIds
+  return roleSkill(crewIds, 'Navigator');
+}
+
+// The skill the boat can call on for a given role: the signed specialist(s) if
+// any are aboard, else the crew's general nous (someone always covers the job,
+// just not as well). This is what makes the roster tactical — each role earns
+// its keep somewhere specific: the Navigator in the read, the Tactician in
+// saving a misread call, Bowman/Trimmer in the sail handling, the Skipper in
+// keeping her on her feet when it blows.
+export function roleSkill(crewIds: string[], role: CrewRole): number {
+  const hands = crewIds
     .map((id) => getCrewById(id))
-    .filter((c): c is NonNullable<typeof c> => !!c && c.role === 'Navigator');
-  if (navs.length) return average(navs.map((n) => n.skill), DEFAULT_CREW_SKILL);
+    .filter((c): c is NonNullable<typeof c> => !!c && c.role === role);
+  if (hands.length) return average(hands.map((h) => h.skill), DEFAULT_CREW_SKILL);
   return crewSkillAverage(crewIds);
+}
+
+// A role's relief factor in [0, max]: only above-average specialists earn it,
+// scaling linearly to `max` at skill 100. Kept small and capped everywhere it's
+// used, so a stacked crew tunes the odds rather than trivialising them.
+function roleRelief(crewIds: string[], role: CrewRole, max: number): number {
+  return (clamp(roleSkill(crewIds, role) - 50, 0, 50) / 50) * max;
 }
 
 // Crew skill as a multiplier on boat speed: a green crew (skill 0) sails at 0.9,
@@ -831,8 +854,44 @@ export function tacticalEdge(state: GameState): number {
   return Math.max(-1, Math.min(1, edge));
 }
 
+// The edge threshold above which a bold call genuinely pays ("send it"), and
+// the single source of truth for how a field-resolved choice's authored time
+// turns into hours against the live edge. BOTH the resolution (`applyDecision`)
+// and the cockpit preview (`vmgPreview`) go through this helper, so the number
+// on the card and the number on the water can never drift apart again — the
+// bug this replaces was the cockpit projecting the raw authored `timeDelta`
+// (a green gain) for a call the field resolution was about to charge for.
+export const EDGE_SEND = 0.35;
+export function resolveFieldDelta(choice: TacticalChoice, edge: number): number {
+  if (!choice.field) return choice.timeDelta;
+  // A misread bold call costs time, but not catastrophically: tuned so a single
+  // wrong corner is a couple of places against a tight fleet, not the race.
+  return Math.max(0, Math.abs(choice.timeDelta) * (EDGE_SEND - edge));
+}
+
+// A spotted shift doesn't wait: the further the boat sails past the point where
+// the decision fired, the less of the edge is left to commit to. Smooth and
+// distance-driven (no timers, no withdrawn options) — the window scales with
+// the course so a day-race and an ocean passage decay alike.
+const EDGE_WINDOW_FRACTION = 0.05; // e-folding distance as a fraction of the course
+export function edgeDecay(distPastTriggerNm: number, courseNm: number): number {
+  const windowNm = Math.max(courseNm * EDGE_WINDOW_FRACTION, 1);
+  return Math.exp(-Math.max(0, distPastTriggerNm) / windowNm);
+}
+
+// The edge a commitment made NOW would actually resolve against: the live read,
+// faded by how far the boat has sailed since the decision was triggered. In the
+// normal flow the boat holds station while the call is made (decay 1); an
+// engine driven past its trigger pays for the delay.
+export function effectiveTacticalEdge(state: GameState): number {
+  const p = state.progress;
+  const edge = tacticalEdge(state);
+  if (!p || p.decisionTriggerNm === undefined) return edge;
+  return edge * edgeDecay(p.distanceCoveredNm - p.decisionTriggerNm, p.totalDistanceNm);
+}
+
 export interface TacticalRead {
-  edge: number; // the true edge (resolution uses this)
+  edge: number; // the edge a commitment now resolves against (decayed if stale)
   shiftDeg: number; // signed forecast shift over the next stretch (+veer / −back)
   buildKn: number; // forecast speed change
   reliable: number; // 0–1 — how much the Navigator trusts this read
@@ -846,7 +905,7 @@ export interface TacticalRead {
 export function tacticalRead(state: GameState): TacticalRead {
   const field = state.windField;
   const p = state.progress;
-  const edge = tacticalEdge(state);
+  const edge = effectiveTacticalEdge(state);
   let shiftDeg = 0;
   let buildKn = 0;
   if (field && p) {
@@ -870,6 +929,71 @@ export function tacticalRead(state: GameState): TacticalRead {
   return { edge, shiftDeg, buildKn, reliable, hint };
 }
 
+// The on-water cost of a single call, damped and capped. A tightly-packed fleet
+// means a small time loss is many places, so without this one decision could
+// leapfrog the whole field ("flew past for no reason"). Capping keeps any one
+// call to a few recoverable places; the player only falls out of contention by
+// stacking up bad calls (the cost is per-decision, so repeated mistakes still
+// compound) or sailing far off pace. The cap is relative to the race so it
+// scales from a day-race to an ocean passage. Shared by the resolution AND the
+// cockpit preview/downside, so the card projects the realised economy.
+const DECISION_TIME_SCALE = 0.65;
+const DECISION_TIME_CAP_H = 0.5; // absolute: one call costs ~30 min on the water at most
+export function realisedDecisionHours(extraHours: number): number {
+  return Math.min(Math.max(extraHours, 0) * DECISION_TIME_SCALE, DECISION_TIME_CAP_H);
+}
+
+// The Tactician's forgiveness on a committed bold call that the field didn't
+// back: a sharp tactician bails out of a phantom corner early and gives back
+// part of the misread penalty. Scoped to field-resolved misreads ONLY (the
+// Navigator owns the read, the hands own the manoeuvre), and capped well short
+// of half so a misread always leaves a real mark.
+const TACTICIAN_FORGIVE_MAX = 0.35;
+export function misreadForgiveness(crewIds: string[]): number {
+  return roleRelief(crewIds, 'Tactician', TACTICIAN_FORGIVE_MAX);
+}
+
+// The pessimistic edge behind the "if it goes wrong" line: a flat field where
+// the shift never comes (tacticalEdge's practical floor).
+const MISREAD_EDGE = -0.25;
+
+// How wide the Navigator's uncertainty about the edge is, from their read
+// confidence: a sharp Navigator pins the edge down (a tight band), a weak one
+// can only offer a spread. The band is centred on the believed edge, so the
+// realised resolution always falls inside it. (At the read's 1.5h lookahead
+// `reliable` lives in roughly 0.85–0.94 across the skill range, hence the
+// generous multiplier — it maps that narrow range to a visible width swing.)
+function edgeHalfWidth(reliable: number): number {
+  return 0.05 + 0.9 * (1 - clamp(reliable, 0, 1));
+}
+
+// One legible line of what this choice costs when it goes wrong, derived from
+// the real resolution + bungle model (never invented): the realised extra hours
+// of a misread-plus-fumble over a clean outcome, plus a qualitative word for
+// the soft costs — hours and words, never raw "Hull −6" integers.
+function downsideSoftCost(choice: TacticalChoice): string | null {
+  if (choice.crewSkill === 'Bowman') return 'risks the sail change';
+  if (choice.crewSkill === 'Trimmer') return 'risks overpressing her';
+  if (choice.hullDelta <= -6) return 'hard on the boat';
+  if (choice.staminaDelta <= -8) return 'burns the crew';
+  return null;
+}
+
+export function choiceDownside(state: GameState, choice: TacticalChoice): string {
+  const riskMod = state.weather?.riskModifier ?? 0;
+  const forgive = choice.field ? misreadForgiveness(state.selectedCrewIds) : 0;
+  const bungleRaw = choice.risk > 0.02 ? 0.3 + riskMod * 0.5 : 0;
+  const wrongRaw = choice.field
+    ? resolveFieldDelta(choice, MISREAD_EDGE) * (1 - forgive) + bungleRaw
+    : Math.max(choice.timeDelta, 0) + bungleRaw;
+  const rightRaw = choice.field ? 0 : Math.max(choice.timeDelta, 0);
+  const hours = Math.max(0, realisedDecisionHours(wrongRaw) - realisedDecisionHours(rightRaw));
+  const soft = downsideSoftCost(choice);
+  if (hours < 0.05 && !soft) return 'Little to go wrong.';
+  const time = hours >= 0.05 ? `~+${hours.toFixed(1)}h` : 'a few minutes';
+  return `If it goes wrong: ${time}${soft ? `, ${soft}` : ''}`;
+}
+
 export function vmgPreview(state: GameState, event: GameEvent): VmgPreview {
   const race = getRaceById(state.selectedRaceId);
   if (!race || !state.progress) return { before: 0, after: {} };
@@ -878,12 +1002,48 @@ export function vmgPreview(state: GameState, event: GameEvent): VmgPreview {
   const stretchNm = race.distanceNm * DECISION_STRETCH;
   const baseHours = Math.max(stretchNm / smg, 0.2);
 
+  // The Navigator's read is only computed when a field choice is on the table —
+  // it's what the band hangs off.
+  const hasField = event.choices.some((c) => c.field);
+  const read = hasField ? tacticalRead(state) : null;
+  const forgive = misreadForgiveness(state.selectedCrewIds);
+
   const after: Record<string, number> = {};
+  const band: Record<string, { lo: number; hi: number }> = {};
+  const downside: Record<string, string> = {};
   event.choices.forEach((choice) => {
-    const projHours = Math.max(baseHours + choice.timeDelta, 0.2);
-    after[choice.id] = Math.round((stretchNm / projHours) * 10) / 10;
+    downside[choice.id] = choiceDownside(state, choice);
+    if (choice.field && read) {
+      // The honest projection: run the believed edge (± the Navigator's
+      // uncertainty) through the SAME resolution the decision will get, so the
+      // band always brackets the realised outcome and never shows false
+      // precision. Rounded outward so the bracket survives display rounding.
+      const project = (edge: number): number => {
+        const extra = realisedDecisionHours(
+          resolveFieldDelta(choice, Math.max(-1, Math.min(1, edge))) * (1 - forgive)
+        );
+        return stretchNm / Math.max(baseHours + extra, 0.2);
+      };
+      const hw = edgeHalfWidth(read.reliable);
+      const a = project(read.edge - hw); // pessimistic (lowest VMG)
+      const b = project(read.edge + hw); // optimistic
+      const lo = Math.floor(Math.min(a, b) * 10) / 10;
+      const hi = Math.ceil(Math.max(a, b) * 10) / 10;
+      band[choice.id] = { lo, hi };
+      after[choice.id] = Math.round(((lo + hi) / 2) * 10) / 10;
+    } else {
+      // Non-field choices keep the exact authored preview.
+      const projHours = Math.max(baseHours + choice.timeDelta, 0.2);
+      after[choice.id] = Math.round((stretchNm / projHours) * 10) / 10;
+    }
   });
-  return { before: Math.round(smg * 10) / 10, after };
+  return {
+    before: Math.round(smg * 10) / 10,
+    after,
+    band: hasField ? band : undefined,
+    confidence: read?.reliable,
+    downside,
+  };
 }
 
 // ---- Simulation ----
@@ -1158,6 +1318,13 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
     startFadeNm: prev.startFadeNm,
     signatureFired: prev.signatureFired,
     signatureChoiceId: prev.signatureChoiceId,
+    decisionTriggerNm: prev.decisionTriggerNm,
+    // A choice-opened situation expires once the boat has sailed past its
+    // window — the reef question answers itself, the moment is gone.
+    pendingSituation:
+      prev.pendingSituation && distanceCoveredNm < prev.pendingSituation.expiresAtNm
+        ? prev.pendingSituation
+        : undefined,
   };
 
   // Advance the AI fleet through the same elapsed time, wind and tide, then rank.
@@ -1177,10 +1344,15 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
   // and how far through the passage we are. The picker only *prefers* matching
   // events (it always falls back to the flat pool), so this shapes flavour, not
   // the deterministic single-pick contract.
+  // A live pending situation (from an earlier choice) is offered to the picker
+  // so a matching follow-on event is preferred; with none the picker's path is
+  // exactly what it always was.
+  const pendingKey = progress.pendingSituation?.key;
   const decisionContext = {
     raceId: race.id,
     band: conditionBand(wind.speedKn),
     phase: racePhase(distanceCoveredNm, total),
+    pending: pendingKey,
   };
   const hazardEvent = HAZARD_EVENTS[race.hazard];
   const hazardId = hazardEvent.id;
@@ -1234,8 +1406,18 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
     progress.decisionsTaken = prev.decisionsTaken + 1;
     progress.nextDecisionAtNm =
       distanceCoveredNm + rndRange(DECISION_MIN, DECISION_MAX) * total;
-    event = pickEventForRace(progress.shownEventIds, progress.pointOfSail);
+    // Only the pending situation is offered here (the un-storied path is
+    // otherwise context-free): with none live this is byte-identical to the
+    // plain draw, so legacy behaviour is untouched.
+    event = pickEventForRace(progress.shownEventIds, progress.pointOfSail, { pending: pendingKey });
     progress.shownEventIds = [...progress.shownEventIds, event.id];
+  }
+  if (event) {
+    // Anchor the read: a field-resolved call's edge decays with distance sailed
+    // past this point, so a commitment delayed is a commitment diminished.
+    progress.decisionTriggerNm = distanceCoveredNm;
+    // A drawn follow-on consumes its situation — the story beat is spent.
+    if (event.followsFrom) progress.pendingSituation = undefined;
   }
 
   let log: string | undefined;
@@ -1248,6 +1430,65 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
   }
 
   return { progress, condition, weather, fleet, event, log, finished, retired };
+}
+
+// The odds the crew fumbles this call, pure and inspectable. On top of the
+// long-standing model (morale/push pressure, crew-average steadiness, safety
+// gear), the roster's specialists earn scoped relief: a tagged sail-handling
+// choice leans on its Bowman/Trimmer, and the Skipper takes a small edge off
+// heavy-weather (broach/seaway) risk — nothing else. The floor caps the TOTAL
+// relief: however stacked the crew and kit, a call never drops below half its
+// authored risk, so a dream team tunes the odds rather than deleting them.
+const HANDS_RELIEF_MAX = 0.12; // the specialist's shave on a tagged manoeuvre
+const SKIPPER_RELIEF_MAX = 0.05; // the skipper's trim on heavy-weather risk
+const SKIPPER_RISK_REF = 0.24; // weather riskModifier at which the skipper fully earns it
+const BUNGLE_FLOOR_FRACTION = 0.5; // relief cap: never below half the authored risk
+export function decisionBungleChance(state: GameState, choice: TacticalChoice): number {
+  const race = getRaceById(state.selectedRaceId);
+  const ids = state.selectedCrewIds;
+  const safety = race ? provisioningPlan(state.provisions, ids.length, race).safety : 0;
+  const moralePenalty = state.condition.crewMorale < 40 ? 0.1 : 0;
+  const pushPenalty = strategyOf(state).effort === 'push' ? 0.05 : 0;
+  const skillRelief = ((crewSkillAverage(ids) - 50) / 100) * 0.12;
+  const safetyRelief = safety * 0.2;
+  const handsRelief = choice.crewSkill ? roleRelief(ids, choice.crewSkill, HANDS_RELIEF_MAX) : 0;
+  const riskMod = state.weather?.riskModifier ?? 0;
+  const skipperRelief =
+    roleRelief(ids, 'Skipper', SKIPPER_RELIEF_MAX) * Math.min(1, riskMod / SKIPPER_RISK_REF);
+  return Math.max(
+    choice.risk * BUNGLE_FLOOR_FRACTION,
+    choice.risk + moralePenalty + pushPenalty - skillRelief - safetyRelief - handsRelief - skipperRelief
+  );
+}
+
+// Who owns the fumble, for a debrief line that's true to the manoeuvre.
+function fumbleClause(choice: TacticalChoice): string {
+  if (choice.crewSkill === 'Bowman') return 'the bowman fumbled the change';
+  if (choice.crewSkill === 'Trimmer') return 'the trimmer lost the shape of it';
+  return 'the crew made a hash of it';
+}
+
+// One causally-true debrief line for the race log — built from what actually
+// resolved (the edge, the fumble, the realised cost), never canned flavour.
+function resolutionSummary(
+  choice: TacticalChoice,
+  paidOff: boolean | undefined,
+  effEdge: number,
+  bungled: boolean,
+  lostHours: number
+): string {
+  const cost = lostHours >= 1 / 60 ? ` (~${Math.round(lostHours * 60)}m lost)` : '';
+  const fumble = fumbleClause(choice);
+  if (bungled) {
+    if (choice.field && paidOff === false) return `Phantom corner — and ${fumble}${cost}.`;
+    return `${fumble.charAt(0).toUpperCase()}${fumble.slice(1)}${cost}.`;
+  }
+  if (choice.field) {
+    if (paidOff) return 'Read it right — you banked the shift.';
+    if (effEdge > 0.05) return `The shift came soft and late — a wash, near enough${cost}.`;
+    return `Phantom corner — the breeze never came${cost}.`;
+  }
+  return `${choice.label}.`;
 }
 
 // Apply the player's choice to the active decision (no distance is sailed),
@@ -1265,28 +1506,26 @@ export function applyDecision(state: GameState, choice: TacticalChoice): StepRes
   // A bold, field-resolved call pays off only if the wind actually supports it.
   // Read it right (a real shift/pressure to exploit) and it costs ~nothing — so
   // you beat the safe option, which always bleeds a little time. Read it wrong
-  // and you've banged a phantom corner: real time lost, and the crew feels it.
-  // The conservative option keeps its authored, dependable outcome.
+  // and you've banged a phantom corner: real time lost (a sharp Tactician bails
+  // early and gives some of it back), and the crew feels it. The conservative
+  // option keeps its authored, dependable outcome.
   let extraHours = choice.timeDelta;
+  let paidOff: boolean | undefined;
+  const effEdge = effectiveTacticalEdge(state); // ~[-0.25, 1], decayed if committed late
   if (choice.field) {
-    const edge = tacticalEdge(state); // ~[-0.25, 1]; ≥ EDGE_SEND means send it
-    const EDGE_SEND = 0.35;
-    // A misread bold call costs time, but not catastrophically: tuned so a single
-    // wrong corner is a couple of places against a tight fleet, not the race.
-    extraHours = Math.max(0, Math.abs(choice.timeDelta) * 1.0 * (EDGE_SEND - edge));
-    morale += edge >= EDGE_SEND ? 2 : -3;
+    paidOff = effEdge >= EDGE_SEND;
+    extraHours = resolveFieldDelta(choice, effEdge);
+    if (extraHours > 0) extraHours *= 1 - misreadForgiveness(state.selectedCrewIds);
+    morale += paidOff ? 2 : -3;
   }
 
   // A demoralized crew — or a boat being pushed hard — is more likely to bungle;
-  // a skilled crew is steadier and shaves the odds (±0.06 across the skill range).
-  // Safety gear & a medical kit aboard further steady the hands.
+  // steady hands (the crew average, the tagged specialist, the skipper in a
+  // blow) and safety gear shave the odds — see `decisionBungleChance`.
   const prov = provisioningPlan(state.provisions, state.selectedCrewIds.length, race);
-  const moralePenalty = state.condition.crewMorale < 40 ? 0.1 : 0;
-  const pushPenalty = strategyOf(state).effort === 'push' ? 0.05 : 0;
-  const skillRelief = (crewSkillAverage(state.selectedCrewIds) - 50) / 100 * 0.12;
-  const safetyRelief = prov.safety * 0.2;
-  const bungleChance = Math.max(0, choice.risk + moralePenalty + pushPenalty - skillRelief - safetyRelief);
-  if (rnd() < bungleChance) {
+  const bungleChance = decisionBungleChance(state, choice);
+  const bungled = rnd() < bungleChance;
+  if (bungled) {
     extraHours += 0.3 + state.weather.riskModifier * 0.5;
     hull -= 6 * (1 - prov.hullWearResist);
     morale -= 4;
@@ -1300,16 +1539,7 @@ export function applyDecision(state: GameState, choice: TacticalChoice): StepRes
     hullIntegrity: clamp(hull),
   };
 
-  // The on-water cost of a single call, damped and capped. A tightly-packed fleet
-  // means a small time loss is many places, so without this one decision could
-  // leapfrog the whole field ("flew past for no reason"). Capping keeps any one
-  // call to a few recoverable places; the player only falls out of contention by
-  // stacking up bad calls (the cost is per-decision, so repeated mistakes still
-  // compound) or sailing far off pace. The cap is relative to the race so it
-  // scales from a day-race to an ocean passage.
-  const DECISION_TIME_SCALE = 0.65;
-  const DECISION_TIME_CAP_H = 0.5; // absolute: one call costs ~30 min on the water at most
-  const lostHours = Math.min(Math.max(extraHours, 0) * DECISION_TIME_SCALE, DECISION_TIME_CAP_H);
+  const lostHours = realisedDecisionHours(extraHours);
   // If this decision was the storied race's signature set-piece, record which
   // choice was taken so the debrief can pick its matching beat. Detected by the
   // choice belonging to the race's pinned hazard event — purely from the choice,
@@ -1328,6 +1558,18 @@ export function applyDecision(state: GameState, choice: TacticalChoice): StepRes
     legStartNm: state.progress.distanceCoveredNm,
     readings: (state.progress.readings ?? []).slice(-1),
     signatureChoiceId: isSignatureChoice ? choice.id : state.progress.signatureChoiceId,
+    // The decision is resolved: the trigger point is spent (a fresh event will
+    // set its own), and if this choice leaves the boat in a situation (a tucked
+    // reef, a big kite up), open the follow-on window from here.
+    decisionTriggerNm: undefined,
+    pendingSituation: choice.sets
+      ? {
+          key: choice.sets,
+          expiresAtNm:
+            state.progress.distanceCoveredNm +
+            state.progress.totalDistanceNm * SITUATION_WINDOW_FRACTION,
+        }
+      : state.progress.pendingSituation,
   };
 
   // While the player handles the decision, the fleet sails on — a costly call
@@ -1340,15 +1582,26 @@ export function applyDecision(state: GameState, choice: TacticalChoice): StepRes
   // Only a destroyed hull ends the race (see stepRace); an exhausted crew just
   // sails slowly.
   const retired = condition.hullIntegrity <= 0;
+  // The typed truth of how the call resolved, in the storyline's bold/safe/
+  // hedge vocabulary, plus the one debrief line the race log shows.
+  const outcome: SignatureOutcome = choice.field ? 'bold' : choice.risk <= 0.12 ? 'safe' : 'hedge';
+  const resolution: DecisionResolution = {
+    outcome,
+    paidOff,
+    bungled,
+    lostHours,
+    summary: resolutionSummary(choice, paidOff, effEdge, bungled, lostHours),
+  };
   return {
     progress,
     condition,
     weather: state.weather,
     fleet,
     event: null,
-    log: `${choice.label}.`,
+    log: resolution.summary,
     finished: false,
     retired,
+    resolution,
   };
 }
 
