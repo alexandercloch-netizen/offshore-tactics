@@ -3,6 +3,7 @@ import {
   GameEvent,
   HazardKey,
   PointOfSail,
+  Race,
   RacePhase,
   SignatureOutcome,
 } from '../types';
@@ -1313,6 +1314,135 @@ export const HAZARD_EVENTS: Record<HazardKey, GameEvent> = {
       },
     ],
   },
+  island_lee: {
+    id: 'evt-hz-islandlee',
+    title: 'The Lee of Antigua',
+    prompt:
+      'Round the corner and the west coast is the short road home — dead in the island\'s wind shadow. Dive into the lee and gamble the breeze carries, or stand offshore where the trade still blows?',
+    kind: 'hazard',
+    hazard: 'island_lee',
+    pinToWaypoint: 'Boon Point', // the lee-shore fork — fired at the NW corner
+    storyBeat: 'race-antigua-360',
+    choices: [
+      {
+        id: 'evt-hz-islandlee-dive',
+        label: 'Dive into the lee',
+        description: 'Take the short line tight along the shore and bet the zephyrs hold under the hills.',
+        timeDelta: -1.2,
+        staminaDelta: -6,
+        moraleDelta: 4,
+        hullDelta: 0,
+        risk: 0.36,
+        field: true,
+      },
+      {
+        id: 'evt-hz-islandlee-edge',
+        label: 'Skirt the shadow line',
+        description: 'Run the seam between the dead air and the pressure — some of the short road, an exit to windward.',
+        timeDelta: -0.3,
+        staminaDelta: -4,
+        moraleDelta: 2,
+        hullDelta: 0,
+        risk: 0.2,
+      },
+      {
+        id: 'evt-hz-islandlee-off',
+        label: 'Stand offshore in pressure',
+        description: 'Sail the extra miles in the live trade and give the shadow nothing.',
+        timeDelta: 0.5,
+        staminaDelta: -2,
+        moraleDelta: 0,
+        hullDelta: 0,
+        risk: 0.08,
+      },
+    ],
+  },
+  eac_coastal: {
+    id: 'evt-hz-eac',
+    title: 'Cheating the East Australian Current',
+    prompt:
+      'The EAC pours south down the coast, a river of foul water between you and Cabbage Tree. Tight under the headlands runs a thin lane of relief — and rocks. How hard do you hug the beach?',
+    kind: 'hazard',
+    hazard: 'eac_coastal',
+    pinToWaypoint: 'Norah Head', // the inshore-lane commitment — fired at the headland
+    storyBeat: 'race-cabbage-tree',
+    choices: [
+      {
+        id: 'evt-hz-eac-hug',
+        label: 'Hug the beach inside the current',
+        description: 'Work headland to headland in the counter-eddies, the surf line close aboard — every tack, current cheated.',
+        timeDelta: -1.2,
+        staminaDelta: -7,
+        moraleDelta: 4,
+        hullDelta: -2,
+        risk: 0.36,
+        field: true,
+      },
+      {
+        id: 'evt-hz-eac-mid',
+        label: 'Work the mid-ground',
+        description: 'Stay inside the worst of the stream without threading the bricks — a measure of relief, room to breathe.',
+        timeDelta: -0.3,
+        staminaDelta: -4,
+        moraleDelta: 2,
+        hullDelta: 0,
+        risk: 0.2,
+      },
+      {
+        id: 'evt-hz-eac-off',
+        label: 'Hold the offshore lane',
+        description: 'Take the foul current on the chin in open water and sail your own boat.',
+        timeDelta: 0.5,
+        staminaDelta: -2,
+        moraleDelta: 0,
+        hullDelta: 0,
+        risk: 0.09,
+      },
+    ],
+  },
+  strait_fog: {
+    id: 'evt-hz-fogbank',
+    title: 'Swiftsure Bank in the Fog',
+    prompt:
+      'The Bank is somewhere in that wall of grey, the ebb about to turn against the westerly and stand the sea up. Round it now, blind on the instruments, or stand off and wait for the fog to thin?',
+    kind: 'hazard',
+    hazard: 'strait_fog',
+    pinToWaypoint: 'Swiftsure Bank', // the blind rounding — fired at the Bank
+    storyBeat: 'race-swiftsure',
+    choices: [
+      {
+        id: 'evt-hz-fogbank-blind',
+        label: 'Round the Bank blind on the ebb',
+        description: 'Trust the plot, take the mark close aboard and hook the last of the fair stream home.',
+        timeDelta: -1.4,
+        staminaDelta: -8,
+        moraleDelta: 5,
+        hullDelta: -2,
+        risk: 0.38,
+        field: true,
+      },
+      {
+        id: 'evt-hz-fogbank-feel',
+        label: 'Feel in along the contour',
+        description: 'Creep down the depth line with a lookout forward — slower, surer, still racing.',
+        timeDelta: -0.3,
+        staminaDelta: -5,
+        moraleDelta: 2,
+        hullDelta: -1,
+        risk: 0.22,
+      },
+      {
+        id: 'evt-hz-fogbank-wait',
+        label: 'Stand off till it thins',
+        description: 'Hold clear of the Bank and the shipping until you can see what you\'re rounding.',
+        timeDelta: 0.6,
+        staminaDelta: -2,
+        moraleDelta: 0,
+        hullDelta: 0,
+        risk: 0.09,
+      },
+    ],
+  },
   island_accel: {
     id: 'evt-hz-island',
     title: 'The Saba Funnel',
@@ -1487,6 +1617,253 @@ export const HAZARD_EVENTS: Record<HazardKey, GameEvent> = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// Per-race signature overrides.
+//
+// HAZARD_EVENTS is one authored, site-locked decision per hazard key — "The
+// Needles Tidal Gate", "Inside or Outside the Manitous". A race that *reuses* a
+// key over different water would fire the wrong prose, so it gets its own
+// authored signature event here, keyed by race id. Every consumer draws the
+// signature through `hazardEventForRace`, which checks this table before the
+// shared per-key fallback — a pure data lookup, so races without an entry are
+// byte-identical to before.
+// ---------------------------------------------------------------------------
+export const HAZARD_RACE_EVENTS: Record<string, GameEvent> = {
+  // Cowes–Dinard–St Malo: the tidal gate is the Alderney Race, not the Needles.
+  'race-cowes-dinard': {
+    id: 'evt-hz-alderney',
+    title: 'The Alderney Race',
+    prompt:
+      'The stream through the Alderney Race runs harder than most boats sail. Carry it fair and it slings you down on Guernsey; arrive late and the whole Channel pours back against you.',
+    kind: 'hazard',
+    hazard: 'tidal_gate',
+    pinToWaypoint: 'Alderney Race', // the Channel Islands gate — fired in the Race
+    storyBeat: 'race-cowes-dinard',
+    choices: [
+      {
+        id: 'evt-hz-alderney-shoot',
+        label: 'Shoot the Race on the fair tide',
+        description: 'Commit to the gate and ride the slingshot past Alderney — if your Channel crossing timed it true.',
+        timeDelta: -1.4,
+        staminaDelta: -7,
+        moraleDelta: 5,
+        hullDelta: -2,
+        risk: 0.4,
+        field: true,
+      },
+      {
+        id: 'evt-hz-alderney-shade',
+        label: 'Shade toward the Race',
+        description: 'Edge for the fair stream without betting the crossing on the tide table.',
+        timeDelta: -0.3,
+        staminaDelta: -5,
+        moraleDelta: 2,
+        hullDelta: -1,
+        risk: 0.22,
+      },
+      {
+        id: 'evt-hz-alderney-west',
+        label: 'Stand west of the Casquets',
+        description: 'Give the overfalls a wide berth and take the longer, kinder water to Les Hanois.',
+        timeDelta: 0.5,
+        staminaDelta: -3,
+        moraleDelta: 1,
+        hullDelta: 0,
+        risk: 0.1,
+      },
+    ],
+  },
+  // Tri-State: light air again, but the trap is the evening lake shutdown on the
+  // overnight diagonal — no islands, no Manitous.
+  'race-tri-state': {
+    id: 'evt-hz-lakeshutdown',
+    title: 'The Evening Shutdown',
+    prompt:
+      'The sun is down and the lake is letting go of its breeze, the way it does. There is darker water standing off to windward of the rhumb — commit out to it, or hold the short line and hope the night air keeps a pulse?',
+    kind: 'hazard',
+    hazard: 'light_air',
+    pinToWaypoint: 'Mid-Lake Michigan', // the dusk glass-off — fired mid-crossing
+    storyBeat: 'race-tri-state',
+    choices: [
+      {
+        id: 'evt-hz-lakeshutdown-commit',
+        label: 'Commit offshore for pressure',
+        description: 'Sail away from the rhumb toward the surviving breeze and trust it to carry you into St. Joe.',
+        timeDelta: -1.2,
+        staminaDelta: -5,
+        moraleDelta: 4,
+        hullDelta: 0,
+        risk: 0.35,
+        field: true,
+      },
+      {
+        id: 'evt-hz-lakeshutdown-bow',
+        label: 'Bow out to windward',
+        description: 'Shade a few degrees toward the pressure and keep the short line in reach.',
+        timeDelta: -0.3,
+        staminaDelta: -3,
+        moraleDelta: 1,
+        hullDelta: 0,
+        risk: 0.2,
+      },
+      {
+        id: 'evt-hz-lakeshutdown-rhumb',
+        label: 'Hold the rhumb line',
+        description: 'Bank the distance and drift through the soft patch — glassy, glum, and sometimes right.',
+        timeDelta: 0.5,
+        staminaDelta: -1,
+        moraleDelta: -1,
+        hullDelta: 0,
+        risk: 0.1,
+      },
+    ],
+  },
+  // Malta–Syracuse: fickle Med air again, but the trap is the night crossing and
+  // the wind shadow of Capo Murro di Porco — Messina is nowhere near this course.
+  'race-malta-syracuse': {
+    id: 'evt-hz-murro',
+    title: 'The Shadow of Capo Murro di Porco',
+    prompt:
+      'The Sicilian shore is close now and the night breeze is thinning under the land. Capo Murro di Porco guards the last miles — cut close under the cape for the short road, or stand wide where the sea wind still lives?',
+    kind: 'hazard',
+    hazard: 'med_fickle',
+    pinToWaypoint: 'Capo Murro di Porco', // the cape's wind shadow — fired at the headland
+    storyBeat: 'race-malta-syracuse',
+    choices: [
+      {
+        id: 'evt-hz-murro-cut',
+        label: 'Cut close under the cape',
+        description: 'Shave the limestone for the shortest water to the finish and gamble the katabatic puffs off the cliffs.',
+        timeDelta: -1.1,
+        staminaDelta: -5,
+        moraleDelta: 4,
+        hullDelta: 0,
+        risk: 0.36,
+        field: true,
+      },
+      {
+        id: 'evt-hz-murro-half',
+        label: 'Round at half a mile',
+        description: 'Respect the shadow without surrendering the corner — a working middle line.',
+        timeDelta: -0.2,
+        staminaDelta: -3,
+        moraleDelta: 2,
+        hullDelta: 0,
+        risk: 0.2,
+      },
+      {
+        id: 'evt-hz-murro-wide',
+        label: 'Stand wide in the seaway',
+        description: 'Keep the offshore breeze and sail the long way round the dead air.',
+        timeDelta: 0.5,
+        staminaDelta: -2,
+        moraleDelta: 0,
+        hullDelta: 0,
+        risk: 0.09,
+      },
+    ],
+  },
+  // Annapolis to Newport: light air again, but the trap is the Chesapeake
+  // bay-mouth parking lot at Cape Henry — a Great Lakes island fork it is not.
+  'race-annapolis-newport': {
+    id: 'evt-hz-baymouth',
+    title: 'The Bay-Mouth Parking Lot',
+    prompt:
+      'Dawn off Cape Henry and the Chesapeake has exhaled: glass across the bay mouth, the fleet\'s wakes the only texture on it. The ebb still drains out the ship channel — ride the current through the calm, or hold wide and wait for the sea breeze?',
+    kind: 'hazard',
+    hazard: 'light_air',
+    pinToWaypoint: 'Cape Henry', // the bay-exit crux — fired at the capes
+    storyBeat: 'race-annapolis-newport',
+    choices: [
+      {
+        id: 'evt-hz-baymouth-ebb',
+        label: 'Ride the ebb out the channel',
+        description: 'Ghost into the shipping lane and let the last of the tide carry you to sea before it turns.',
+        timeDelta: -1.3,
+        staminaDelta: -6,
+        moraleDelta: 4,
+        hullDelta: 0,
+        risk: 0.37,
+        field: true,
+      },
+      {
+        id: 'evt-hz-baymouth-edge',
+        label: 'Work the channel edge',
+        description: 'A lane on the fringe of the current, clear of the ships — some of the push, an exit if it dies.',
+        timeDelta: -0.3,
+        staminaDelta: -4,
+        moraleDelta: 2,
+        hullDelta: 0,
+        risk: 0.21,
+      },
+      {
+        id: 'evt-hz-baymouth-wide',
+        label: 'Hold wide for the sea breeze',
+        description: 'Stay out of the parking lot and bet on the afternoon southerly filling first offshore.',
+        timeDelta: 0.5,
+        staminaDelta: -2,
+        moraleDelta: 0,
+        hullDelta: 0,
+        risk: 0.1,
+      },
+    ],
+  },
+  // Islands Race: the island lee again, but it's Catalina's shadow in the dark,
+  // not Antigua's west coast.
+  'race-islands-race': {
+    id: 'evt-hz-catalina',
+    title: "Catalina's Night Lee",
+    prompt:
+      'Night, and the gradient is going home with the sun. Catalina\'s black shoulder lies across the short road south — cut the corner through her lee and gamble on the land breeze, or stand offshore where the westerly still breathes?',
+    kind: 'hazard',
+    hazard: 'island_lee',
+    pinToWaypoint: 'Catalina West End', // the lee gamble — fired at the West End
+    storyBeat: 'race-islands-race',
+    choices: [
+      {
+        id: 'evt-hz-catalina-cut',
+        label: 'Cut the corner through the lee',
+        description: 'Take the island close aboard and bet the night drainage off the hills keeps you sliding.',
+        timeDelta: -1.2,
+        staminaDelta: -5,
+        moraleDelta: 4,
+        hullDelta: 0,
+        risk: 0.36,
+        field: true,
+      },
+      {
+        id: 'evt-hz-catalina-shave',
+        label: "Shave the shadow's edge",
+        description: 'Carry the seam where the shadow meets the breeze — most of the corner, a lane back out.',
+        timeDelta: -0.3,
+        staminaDelta: -3,
+        moraleDelta: 2,
+        hullDelta: 0,
+        risk: 0.2,
+      },
+      {
+        id: 'evt-hz-catalina-off',
+        label: 'Stand offshore in the breeze',
+        description: 'Sail the miles around the shadow and keep the boat moving all night.',
+        timeDelta: 0.5,
+        staminaDelta: -2,
+        moraleDelta: 0,
+        hullDelta: 0,
+        risk: 0.09,
+      },
+    ],
+  },
+};
+
+// The signature decision for a race: its per-race override when one is
+// authored, else the hazard key's shared event. The single lookup every
+// consumer uses (stepRace's pinned fire, applyDecision's signature detection,
+// buildResult's debrief), so the prose always belongs to the water it fires
+// over.
+export function hazardEventForRace(race: Pick<Race, 'id' | 'hazard'>): GameEvent {
+  return HAZARD_RACE_EVENTS[race.id] ?? HAZARD_EVENTS[race.hazard];
+}
+
 // Flat list of every generic/morale/weather/follow-on event for fallbacks and
 // lookups.
 export const EVENTS: GameEvent[] = [
@@ -1513,14 +1890,22 @@ export function pickEvent(): GameEvent {
 // ---------------------------------------------------------------------------
 export const RACE_REGION: Record<string, string> = {
   'race-round-island': 'uk',
+  'race-cowes-dinard': 'uk',
   'race-fastnet': 'uk',
   'race-middle-sea': 'med',
+  'race-malta-syracuse': 'med',
   'race-chicago-mac': 'lakes',
+  'race-tri-state': 'lakes',
   'race-newport-bermuda': 'atlantic',
+  'race-annapolis-newport': 'atlantic',
   'race-caribbean-600': 'caribbean',
+  'race-antigua-360': 'caribbean',
   'race-sydney-hobart': 'tasman',
+  'race-cabbage-tree': 'tasman',
   'race-transpac': 'pacific',
+  'race-islands-race': 'pacific',
   'race-r2ak': 'pnw',
+  'race-swiftsure': 'pnw',
 };
 
 // The moment the picker fits an everyday decision to: which race/region, the

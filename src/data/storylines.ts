@@ -339,6 +339,294 @@ export const STORYLINES: Storyline[] = [
       },
     ],
   },
+
+  // -- Cowes–Dinard–St Malo: the Alderney Race tidal gate ---------------------
+  {
+    raceId: 'race-cowes-dinard',
+    theme: 'The oldest offshore race of them all — and the fiercest tide in the Channel.',
+    stakes:
+      'A hundred and fifty-one miles from the Squadron line to St Malo, sailed since 1906, and the whole crossing is a sum done before the gun: when will you reach the Alderney Race, and which way will it be running? The stream through that gap runs faster than most of the fleet sails. Arrive fair and it slings you down onto Guernsey; arrive foul and you park in mid-Channel while the boats that did the arithmetic disappear south.',
+    coached:
+      "Navigator: the Race is the whole crossing. I've worked the tide back from the gate — hold pace and we carry the fair stream through, a slingshot past Alderney. Fall behind the sum and the stream turns in the gap; then we stand west of the Casquets and take the long, kind water instead. Speed made good between here and there decides which race we sail.",
+    beats: [
+      {
+        kind: 'briefing',
+        body: 'Out past the Needles the Island drops astern and the Channel opens grey and wide, a hundred boats settling onto the same rhumb. Somewhere ahead, invisible, the tide is already running through the Alderney Race — and every navigator below is working the same sum against the same clock.',
+      },
+      {
+        kind: 'beat',
+        pinnedWaypoint: 'Alderney Race',
+        body: 'Alderney lifts out of the haze to starboard, Cap de la Hague fine to port, and the water ahead is seamed where the stream runs through the gap. The window is real but closing. Shoot the Race on the fair tide and take the slingshot south — or bear away west of the Casquets and sail the longer, safer water to Les Hanois?',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'bold',
+        body: 'You shot the Alderney Race on the last of the fair stream and it flung you down the Little Russel like a thing possessed, the log reading numbers the wind never made. The boats that hesitated met the turn in the gap — and stopped. That is how Dinard races have been won for a century.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'safe',
+        body: 'You stood west of the Casquets and gave the overfalls their room, sailing the long way round the gate. The Race-runners who timed it stole miles you never got back — but the ones who mistimed it spent the afternoon going backwards past Alderney, and you were already reaching for Les Hanois.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'hedge',
+        body: 'You shaded toward the Race without betting the crossing on the tide table — close enough to catch the edge of the fair stream, far enough out to escape if the gate shut. A pilot\'s passage of the Channel Islands: no slingshot, no trap, and the race to St Malo still open.',
+      },
+    ],
+  },
+
+  // -- Tri-State Regatta: the evening lake shutdown ---------------------------
+  {
+    raceId: 'race-tri-state',
+    theme: 'Friday dusk out of Chicago — and a lake that goes to sleep before you get there.',
+    stakes:
+      'Fifty-one miles on the diagonal, Chicago to St. Joseph, sailed on Labor Day weekend for seventy-odd years — the friendliest overnight in fresh water, and one of the trickiest. The lake breeze dies with the sun, mid-crossing, nearly every year. The fleet that finds the surviving pressure ghosts into Michigan before dawn; the fleet that doesn\'t sits on a black mirror listening to the halyards slat.',
+    coached:
+      "Navigator: the gradient's soft and the sun's going down — the lake will let go of its breeze somewhere out here, it always does. There's better pressure standing off to windward of the rhumb; commit out to it and we keep sailing all night. Hold the short line and we save the miles, but if it glasses off on us we're parked with everyone who thought the same.",
+    beats: [
+      {
+        kind: 'briefing',
+        body: 'The gun goes off Chicago at dusk, the skyline lighting up astern as the fleet stretches out onto the long diagonal. It\'s warm, it\'s gentle, and every old hand aboard is watching the water to windward — because somewhere between here and St. Joe, the lake is going to stop breathing.',
+      },
+      {
+        kind: 'beat',
+        pinnedWaypoint: 'Mid-Lake Michigan',
+        body: 'Mid-lake, midnight. The breeze has gone patchy and soft, the telltales lifting and dying. Off to windward there\'s a band of darker water still moving — real pressure, real miles away from the rhumb. Commit offshore to the breeze that\'s left, or hold the short line and gamble the night air keeps a pulse?',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'bold',
+        body: 'You sailed away from the rhumb and out into the dark water, and the pressure held — the boat slipping along all night while the short-line fleet sat slatting on the glass behind you. St. Joe\'s pierhead lights came up before dawn, and the hard miles were the fast ones.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'safe',
+        body: 'You held the rhumb and banked the distance, drifting through the soft patch with the rest of the direct-line thinkers. No detour, no drama — and when the night air finally stirred, the short road was still the short road. Not glorious, but in a fifty-mile race, miles are money.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'hedge',
+        body: 'You bowed out to windward of the rhumb — a few degrees toward the pressure, the short line still in reach. Some of the breeze, most of the distance saved: the cautious read of a lake that punishes both the greedy and the stubborn in equal measure.',
+      },
+    ],
+  },
+
+  // -- Malta–Syracuse: the wind shadow at Capo Murro di Porco -----------------
+  {
+    raceId: 'race-malta-syracuse',
+    theme: 'The Med\'s oldest offshore race — decided in the shadow of one Sicilian cape.',
+    stakes:
+      'Eighty miles from Marsamxett to Siracusa, sailed since 1952 — an overnight sprint across the Malta Channel that the island\'s whole fleet turns out for. The channel crossing is honest enough; the trap is the far shore. The night breeze thins under the Sicilian land, and Capo Murro di Porco stands its wind shadow across the final miles like a doorman. Boats have led for seventy-five miles and parked within sight of the finish.',
+    coached:
+      "Navigator: the crossing will sail itself — it's the last five miles that need deciding now. Capo Murro di Porco throws a shadow at night, and the short road to the line runs straight through it. Cut close under the cape and there are puffs off the cliffs if you're lucky; stand wide and the sea breeze lives, but the miles are real. Leaders park there every year, skipper.",
+    beats: [
+      {
+        kind: 'briefing',
+        body: 'Out of Marsamxett in the golden evening, Valletta\'s bastions astern, the fleet fanning north into the Malta Channel as the light goes. Sicily is a rumour beyond the horizon. Below, the navigator is already thinking about a cape nobody can see yet — because that\'s where this race has always been won and lost.',
+      },
+      {
+        kind: 'beat',
+        pinnedWaypoint: 'Capo Murro di Porco',
+        body: 'The Sicilian shore is close now, the lighthouse on Capo Murro di Porco blinking over a sea gone quiet under the land. The short road to Siracusa runs tight under the cape — through its shadow. Cut close and gamble on the puffs off the limestone, or stand wide in the living breeze and sail the long way round the dead air?',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'bold',
+        body: 'You cut in under Capo Murro di Porco and the cape let you pass — katabatic breaths off the cliffs walking you along the short road while the wide boats sailed their insurance miles. You carried your way round the corner and into Siracusa with the race in hand. The locals will say you sailed it like one of them.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'safe',
+        body: 'You stood wide of the cape and kept the sea breeze, sailing real miles in real wind while the inshore gamblers flirted with the shadow. Some of them ghosted through; some of them are still there. You rounded into the great harbour with steerage way and your race intact — the navigator\'s finish.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'hedge',
+        body: 'You rounded at half a mile — inside the insurance line, outside the graveyard — feeling the shadow\'s edge the whole way. A little of the corner saved, none of the parking lot: a careful, local-knowledge rounding of the cape that guards Siracusa.',
+      },
+    ],
+  },
+
+  // -- Annapolis to Newport: the bay-mouth parking lot ------------------------
+  {
+    raceId: 'race-annapolis-newport',
+    theme: 'A hundred miles of bay, then an ocean — and the doorway between them jams.',
+    stakes:
+      'Four hundred and seventy-five miles from Annapolis to Newport, and the race is really two races: a light-air, current-riddled chess match down the Chesapeake, then a proper ocean passage past Montauk to Castle Hill. The hinge is the bay mouth. Dawn at Cape Henry is notorious glass — the bay exhales, the gradient hasn\'t woken, and a fleet that raced a hundred miles of tide tables sits watching the ships go by. Get out the door and the ocean is yours.',
+    coached:
+      "Navigator: everything I've done down this bay buys us one thing — arriving at Cape Henry with the ebb still running. If it goes glassy at the capes, and it will, the ship channel's current is the only thing moving. Ride it out to sea before the flood, or hold wide of the lanes and wait for the sea breeze to fill offshore. The bay gives you the race; the bay mouth can take it back.",
+    beats: [
+      {
+        kind: 'briefing',
+        body: 'Off Annapolis the gun echoes across a river of boats, and the longest small-boat corridor in American racing opens south: a hundred miles of Chesapeake, thin air, thick current, crab pots and patience. The ocean is two days away. The navigator has the tide tables out before the spinnaker is drawing.',
+      },
+      {
+        kind: 'beat',
+        pinnedWaypoint: 'Cape Henry',
+        body: 'Dawn at the capes, and the bay has exhaled: glass from shore to shore, the fleet\'s wakes the only texture on it. But the ebb still drains out the ship channel — a moving road through the parking lot, with freighters on it. Ghost into the channel and ride the current to sea, or hold wide of the lanes and bet on the sea breeze filling first offshore?',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'bold',
+        body: 'You eased into the ship channel and let the ebb do the racing — the land sliding by while the boats parked either side of the lanes shrank astern. By the time the flood turned, you were at sea in the new breeze with the bay closed behind you. The one moving road out of the parking lot, and you took it.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'safe',
+        body: 'You held wide of the shipping lanes and waited on the sea breeze, trading the current\'s free ride for open water and no freighters in the fog of dawn. When the southerly filled offshore, you were first to feel it — and the passage race to Newport began with the boat whole and the crew unhurried.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'hedge',
+        body: 'You worked the edge of the channel — a lane on the fringe of the ebb, clear of the ships, a way out if the current died with the tide. A portion of the push, none of the white-knuckle crossings: a delivery skipper\'s exit from the Chesapeake, with the whole ocean leg still to race.',
+      },
+    ],
+  },
+
+  // -- Antigua 360: the dive into the island's lee ----------------------------
+  {
+    raceId: 'race-antigua-360',
+    theme: 'One island, one lap — and a wind shadow lying across the road home.',
+    stakes:
+      'Forty-eight miles around Antigua at full noise: trade-wind reaching up the wild east side, reef-dodging through the north, and then the decision the whole lap funnels into — the west coast. It\'s the short road home and it\'s dead in the island\'s lee, a wind shadow miles wide where the trade simply isn\'t. Carry your way through it and the lap is a record run; park in it and you watch the offshore boats reach round the outside with everything you lost.',
+    coached:
+      "Navigator: the east side will sail itself — big trade, big smiles. The race is the far corner. Round Boon Point and the island's shadow owns the short line down the west coast; there are zephyrs under the hills if the day's kind, and nothing at all if it isn't. Dive into the lee and we cut the corner to English Harbour. Stand offshore and the trade never leaves us — but the miles are real.",
+    beats: [
+      {
+        kind: 'briefing',
+        body: 'Out of English Harbour into a fat February trade, the fleet cracking sheets up the east coast with the Atlantic swell under the quarter. It\'s glorious, and everyone knows it\'s a loan — because on the other side of the island the same hills that make the harbour calm make a hole in the wind, and the lap runs straight at it.',
+      },
+      {
+        kind: 'beat',
+        pinnedWaypoint: 'Boon Point',
+        body: 'Boon Point drops astern and the west coast opens ahead — the short road to the finish, glassy and pale in the island\'s shadow, the trade streaking the sea a mile further out. Dive into the lee and gamble the zephyrs under the hills carry you home, or stand offshore in pressure and sail the long way round the shadow?',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'bold',
+        body: 'You dove into the lee and the island was kind — cat\'s-paws off the hills handing you along the short road while the offshore boats sailed their big, honest miles in the trade. You slipped past Cades Reef with the lap sewn up and ghosted into English Harbour ahead of boats that never stopped moving. Robbery, done politely.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'safe',
+        body: 'You stood offshore and kept the trade, reaching round the outside of the shadow with the rail down while the corner-cutters inshore slatted in the glass. More water under the keel, never a slow mile on it — and at English Harbour the lee had given back most of what the short road promised.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'hedge',
+        body: 'You ran the seam — the line where the shadow meets the pressure — carrying half the corner and keeping a lane back out to the breeze. When the lee breathed you gained; when it didn\'t you escaped. A local\'s line down the west coast, and the lap decided on the last reach.',
+      },
+    ],
+  },
+
+  // -- Cabbage Tree Island Race: cheating the EAC -----------------------------
+  {
+    raceId: 'race-cabbage-tree',
+    theme: 'North against the river — the current that helps you to Hobart is the enemy tonight.',
+    stakes:
+      'A hundred and seventy-two miles, Sydney to Cabbage Tree Island and back — the classic Hobart qualifier, and a race sailed against the grain. The East Australian Current pours south down this coast at better than a knot, a river in the sea running exactly the wrong way. The fleet that hugs the beach, working headland to headland inside the stream, cheats it; the fleet that stands out into the dark water donates a knot to the ocean, all night. Round the island, turn south, and the river becomes your friend for the ride home.',
+    coached:
+      "Navigator: the EAC's running hard and it's foul the whole way north. Inside the current line, tight under the headlands, there's relief — and bricks. Hug the beach and we cheat the river all the way to Cabbage Tree, but it's tacks, rocks and no sleep. Hold the offshore lane and we sail in peace and give the current a knot for the privilege. Coming home it's all fair — the race is won going north.",
+    beats: [
+      {
+        kind: 'briefing',
+        body: 'Off Point Piper the gun sends the fleet down the harbour and out through the Heads into the late-November evening, bows turning north — against the East Australian Current, against the grain of every Hobart ever sailed. Somewhere off Port Stephens, in the dark, a bird-sanctuary island is waiting to be rounded. The navigator is drawing the current line on the chart like a fence.',
+      },
+      {
+        kind: 'beat',
+        pinnedWaypoint: 'Norah Head',
+        body: 'Norah Head\'s light swings overhead and the choice is on the table: inside, the beach glows under the moon and the current is thin — headland to headland, close enough to hear the surf. Outside, clean water, sea room, and the river running foul at a knot and more. How hard do you hug the coast to cheat the EAC?',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'bold',
+        body: 'You hugged the beach the whole way north, surf on the beam and the depth sounder honest, cheating the river out of every southbound yard while the offshore boats paid their knot to the ocean. You rounded Cabbage Tree with a lead the current built for you — and turned south to let it carry you home.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'safe',
+        body: 'You held the offshore lane and took the EAC on the chin — a knot of foul current, paid in full, in exchange for sea room, clean air and a crew that never once heard breakers in the dark. The beach-crawlers beat you to the island; the ride home on the fair stream kept your race alive.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'hedge',
+        body: 'You worked the mid-ground — inside the worst of the river, outside the surf line — buying back part of the current without ever betting the boat on a moonlit headland. A seamanlike passage north, and the run home from Cabbage Tree still fair for everyone.',
+      },
+    ],
+  },
+
+  // -- Islands Race: Catalina's lee in the dark -------------------------------
+  {
+    raceId: 'race-islands-race',
+    theme: 'A winter night among the islands — and Catalina\'s shadow across the road south.',
+    stakes:
+      'A hundred and forty-two miles from the LA start to Point Loma, sailed in February, mostly in the dark — seaward of Catalina, seaward of San Clemente, then the long board into San Diego. The catch is the timing: the winter gradient goes home with the sun, and the fleet reaches Catalina\'s West End just as the island\'s lee grows teeth. Cut the corner through the shadow and the race is yours by midnight; park in it and you spend the night watching masthead lights reach round the outside.',
+    coached:
+      "Navigator: we make the West End right at shutdown — the gradient's dying and Catalina's lee will be a mile-wide hole by the time we're in it. There's sometimes a land breeze draining off the hills at night, enough to carry a boat through the corner. Cut inside and we bank real miles on the fleet. Stand offshore and the westerly's last breath is ours, for the price of the long way round.",
+    beats: [
+      {
+        kind: 'briefing',
+        body: 'The start off Point Fermin goes in pale winter sunshine, kites up for the slide down to Catalina with the island standing black against the afternoon glare. It\'s pretty now. By the West End it will be dark, the gradient will be dying, and the first real decision of a long cold night will be waiting under the island\'s shoulder.',
+      },
+      {
+        kind: 'beat',
+        pinnedWaypoint: 'Catalina West End',
+        body: 'The West End light blinks overhead and the breeze is already going soft. South, the short road to San Clemente runs tight under Catalina\'s black shoulder — through her lee. Offshore, the last of the westerly still streaks the water. Cut the corner through the shadow and gamble on the night drainage off the hills, or stand out in the breeze and sail the miles?',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'bold',
+        body: 'You cut the corner through Catalina\'s lee and the island breathed for you — a thread of land breeze off the hills walking the boat through the dark while the offshore fleet sailed the long way round in the dying westerly. You came out the far side with miles in the bank and San Clemente next on the list.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'safe',
+        body: 'You stood offshore and kept the last of the gradient, sailing honest miles in moving air while the corner-cutters ghosted into the shadow and, mostly, stayed there. The long road south was never quick — but it never stopped, and a boat that keeps sailing on a February night wins more Islands Races than one that doesn\'t.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'hedge',
+        body: 'You shaved the shadow\'s edge — most of the corner, with a lane back out to the westerly if the lee went dead on you. Half a gain when the drainage breathed, a quick escape when it didn\'t: a watch captain\'s line past Catalina, with the whole cold night still to race.',
+      },
+    ],
+  },
+
+  // -- Swiftsure: the Bank rounding in the fog --------------------------------
+  {
+    raceId: 'race-swiftsure',
+    theme: 'The Lightship Classic — a hundred boats, one fog bank, and an ebb with a deadline.',
+    stakes:
+      'A hundred and thirty-eight miles from Victoria to the edge of the open Pacific and back — Swiftsure, the Northwest\'s great race since 1930. The Strait of Juan de Fuca is a tide machine: the ebb sluices you west past Race Rocks, the flood slams the door, and out at Swiftsure Bank the shallows stand the whole thing on end when wind and stream disagree. Then there\'s the fog. Most years the Bank rounding happens inside a wall of grey, on instruments and nerve, with the ebb-gate clock running the whole time.',
+    coached:
+      "Navigator: the Bank is in that fog and the ebb turns in a couple of hours — round it on the fair stream and the flood carries us home; miss the window and we beat back against the whole strait. I can put us on the mark blind, on the plot, close aboard in the grey. Or we stand off until it thins and round it with our eyes — and give the gate away. Fog, ships, tide: pick two to fight, skipper.",
+    beats: [
+      {
+        kind: 'briefing',
+        body: 'Off Clover Point the fleet starts west into the strait, Race Rocks already boiling ahead and the Olympics standing white to port. Somewhere past the entrance the forecast says fog — it usually does. The navigator is running the tide sums for a bank of gravel at the edge of the Pacific that nobody expects to actually see.',
+      },
+      {
+        kind: 'beat',
+        pinnedWaypoint: 'Swiftsure Bank',
+        body: 'The world has gone grey — a fog bank swallowing sea, sky and fleet, the Bank somewhere inside it and the ebb running out its last hours. Foghorns somewhere to seaward. Round the mark now, blind on the instruments, and hook the fair stream home — or stand off in clear water until the grey thins and the gate is gone?',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'bold',
+        body: 'You ran into the grey on the numbers, called the Bank close aboard without ever seeing it, and came round onto the fair stream as the ebb\'s last hour drained east — the flood carrying you up the strait while the fleet behind waited for eyes. A blind rounding, perfectly plotted: the kind Swiftsure legends are made of.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'safe',
+        body: 'You stood off in clear water and let the fog have the Bank until it thinned, rounding late with your eyes open and the ships accounted for. The gate went with the ebb, and the beat home against the flood was long and honest — but nobody aboard will ever wonder what you nearly hit out there.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'hedge',
+        body: 'You felt your way in along the depth contour, a lookout forward and the plot updating, rounding the Bank slow and sure inside the murk. Not the full slingshot, never quite blind: a fisherman\'s rounding of Swiftsure Bank, with most of the fair stream saved and all of the boat.',
+      },
+    ],
+  },
 ];
 
 // Lookup: the storyline authored for a race, or undefined for an un-storied one.

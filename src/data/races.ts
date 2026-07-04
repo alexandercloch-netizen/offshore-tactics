@@ -452,4 +452,294 @@ export const RACES: Race[] = [
       pro: { entryFee: 5500, prizeMoney: 48000, fleetSize: 28, paceTarget: 1.06 },
     },
   },
+
+  // -------------------------------------------------------------------------
+  // Home-port classics — the races the local fleets actually sail out of each
+  // home port, one per port. All always open (no unlockAfter): these are the
+  // club races you can enter the day you arrive, alongside the ladder.
+  // -------------------------------------------------------------------------
+  {
+    id: 'race-cowes-dinard',
+    name: 'Cowes–Dinard–St Malo Race',
+    location: 'Cowes → St Malo, France',
+    description:
+      'The oldest offshore race still sailed (est. 1906) — 151 miles from the Squadron line, across the Channel and down through the Channel Islands to St Malo. Tschüss 2 set the course record of 10h 56m in 2023.',
+    distanceNm: 151,
+    difficulty: 'Coastal',
+    recordTimeHours: 11,
+    corinthianRating: 4,
+    hazard: 'tidal_gate',
+    hazardWaypoint: 'Alderney Race',
+    prevailingWind: { fromDeg: 225, speedKn: 14 },
+    signatureHazard:
+      'The Alderney Race — the hardest-running tidal gate in the Channel. Carry it fair or crawl against it.',
+    season: 'July',
+    // The Channel flood sets ENE (the Fastnet pattern), running hardest through
+    // the Alderney Race between Cap de la Hague and the island — the race's
+    // signature gate, and the reason the Channel crossing is a tide sum first
+    // and a wind call second.
+    tide: {
+      floodDeg: 75,
+      peakRateKn: 1.0,
+      gates: [{ waypoint: 'Alderney Race', gain: 1.4, radiusNm: 12 }],
+    },
+    waypoints: [
+      { name: 'Cowes (RYS Line)', lat: 50.7946, lon: -1.2835, type: 'start' },
+      { name: 'Gurnard Ledge', lat: 50.7525, lon: -1.4024, type: 'turn' },
+      { name: 'Hamstead Ledge', lat: 50.698, lon: -1.5741, type: 'turn' },
+      { name: 'Needles Fairway', lat: 50.63, lon: -1.7, type: 'turn' },
+      { name: 'Mid-Channel', lat: 50.2, lon: -1.9, type: 'turn' },
+      { name: 'Alderney Race', lat: 49.71, lon: -2.02, type: 'turn' },
+      { name: 'Les Hanois approach 1', lat: 49.55, lon: -2.65, type: 'turn' },
+      { name: 'Les Hanois', lat: 49.42, lon: -2.76, type: 'turn' },
+      { name: 'St Malo (Le Grand Jardin)', lat: 48.668, lon: -2.083, type: 'finish' },
+    ],
+    divisions: {
+      corinthian: { entryFee: 600, prizeMoney: 4500, fleetSize: 24, paceTarget: 1.29 },
+      pro: { entryFee: 1500, prizeMoney: 10500, fleetSize: 44, paceTarget: 1.07 },
+    },
+  },
+  {
+    id: 'race-tri-state',
+    name: 'Tri-State Regatta',
+    location: 'Chicago → St. Joseph, Michigan',
+    description:
+      'The Labor Day weekend classic, sailed for over seventy years — the Friday-dusk overnight diagonal across southern Lake Michigan from Chicago to St. Joseph. Short, sociable, and famous for shutting down after sunset.',
+    distanceNm: 51,
+    difficulty: 'Inshore',
+    recordTimeHours: 7,
+    corinthianRating: 5,
+    hazard: 'light_air',
+    hazardWaypoint: 'Mid-Lake Michigan',
+    prevailingWind: { fromDeg: 190, speedKn: 9 },
+    signatureHazard:
+      'The evening lake shutdown — the breeze goes home with the sun, mid-crossing, every year.',
+    season: 'September',
+    waypoints: [
+      { name: 'Chicago Harbor Light', lat: 41.89, lon: -87.59, type: 'start' },
+      { name: 'Mid-Lake Michigan', lat: 42.0, lon: -87.05, type: 'turn' },
+      { name: 'St. Joseph, MI (Finish)', lat: 42.11, lon: -86.52, type: 'finish' },
+    ],
+    divisions: {
+      corinthian: { entryFee: 300, prizeMoney: 2000, fleetSize: 28, paceTarget: 1.3 },
+      pro: { entryFee: 700, prizeMoney: 4800, fleetSize: 52, paceTarget: 1.08 },
+    },
+  },
+  {
+    id: 'race-malta-syracuse',
+    name: 'Malta–Syracuse Race',
+    location: 'Valletta → Siracusa, Sicily',
+    description:
+      "The Mediterranean's oldest offshore race (est. 1952) — 80 miles out of Marsamxett Harbour, overnight across the Malta Channel to the ancient harbour of Siracusa. A fickle-air sprint the Maltese fleet sails every July.",
+    distanceNm: 80,
+    difficulty: 'Coastal',
+    recordTimeHours: 9,
+    corinthianRating: 4,
+    hazard: 'med_fickle',
+    hazardWaypoint: 'Capo Murro di Porco',
+    prevailingWind: { fromDeg: 315, speedKn: 10 },
+    signatureHazard:
+      'The night crossing dies under the Sicilian shore — and Capo Murro di Porco casts a wind shadow over the last miles.',
+    season: 'July',
+    waypoints: [
+      { name: 'Marsamxett Harbour', lat: 35.915, lon: 14.518, type: 'start' },
+      { name: 'Malta Channel', lat: 36.35, lon: 14.9, type: 'turn' },
+      { name: 'Capo Murro di Porco', lat: 37.0, lon: 15.36, type: 'turn' },
+      { name: 'Siracusa (Finish)', lat: 37.045, lon: 15.315, type: 'finish' },
+    ],
+    divisions: {
+      corinthian: { entryFee: 400, prizeMoney: 2800, fleetSize: 20, paceTarget: 1.3 },
+      pro: { entryFee: 950, prizeMoney: 6500, fleetSize: 38, paceTarget: 1.08 },
+    },
+  },
+  {
+    id: 'race-annapolis-newport',
+    name: 'Annapolis to Newport Race',
+    location: 'Annapolis → Newport, RI',
+    description:
+      'The 475-mile East Coast passage race: a light-air, current-riddled prologue down Chesapeake Bay, the parking lot at the capes, then open Atlantic past Montauk to the Castle Hill finish. Warrior set the record of 40h 14m in 2019.',
+    distanceNm: 475,
+    difficulty: 'Offshore',
+    recordTimeHours: 40,
+    corinthianRating: 4,
+    hazard: 'light_air',
+    hazardWaypoint: 'Cape Henry',
+    prevailingWind: { fromDeg: 210, speedKn: 11 },
+    signatureHazard:
+      'The Chesapeake bay-mouth parking lot — a hundred miles of bay tactics decided in one glassy morning at Cape Henry.',
+    season: 'June (biennial)',
+    // The Chesapeake is a current race before it's a wind race: an oscillating
+    // bay tide (flooding N up the bay) over a gentle net outflow, running
+    // hardest where the whole bay drains past Cape Henry. Offshore the drift
+    // fades into the mid-Atlantic Bight's weak southerly set.
+    tide: {
+      floodDeg: 355,
+      peakRateKn: 0.5,
+      driftDeg: 170,
+      driftKn: 0.25,
+      gates: [{ waypoint: 'Cape Henry', gain: 1.2, radiusNm: 10 }],
+    },
+    waypoints: [
+      { name: 'Annapolis (Start)', lat: 38.95, lon: -76.41, type: 'start' },
+      { name: 'Bloody Point', lat: 38.83, lon: -76.4, type: 'turn' },
+      { name: 'Sharps Island Light', lat: 38.64, lon: -76.38, type: 'turn' },
+      { name: 'Point No Point', lat: 38.13, lon: -76.3, type: 'turn' },
+      { name: 'Smith Point Light', lat: 37.9, lon: -76.1, type: 'turn' },
+      { name: 'Wolf Trap Light', lat: 37.39, lon: -76.19, type: 'turn' },
+      { name: 'Cape Henry', lat: 36.96, lon: -76.0, type: 'turn' },
+      { name: 'Chesapeake Light', lat: 36.91, lon: -75.71, type: 'mark' },
+      { name: 'Montauk Point', lat: 41.02, lon: -71.8, type: 'turn' },
+      { name: 'Block Island (SE)', lat: 41.15, lon: -71.46, type: 'turn' },
+      { name: 'Castle Hill (Newport Finish)', lat: 41.4386, lon: -71.3432, type: 'finish' },
+    ],
+    divisions: {
+      corinthian: { entryFee: 1500, prizeMoney: 12000, fleetSize: 16, paceTarget: 1.27 },
+      pro: { entryFee: 3600, prizeMoney: 28000, fleetSize: 30, paceTarget: 1.06 },
+    },
+  },
+  {
+    id: 'race-antigua-360',
+    name: 'Antigua 360 Race',
+    location: 'Antigua, one lap',
+    description:
+      "A single flat-out lap of Antigua from English Harbour — 48 miles of trade-wind reaching, reef-dodging and one long gamble in the island's lee. Leopard 3 holds the record at 3h 32m.",
+    distanceNm: 48,
+    difficulty: 'Inshore',
+    recordTimeHours: 3.5,
+    corinthianRating: 4,
+    hazard: 'island_lee',
+    hazardWaypoint: 'Boon Point',
+    prevailingWind: { fromDeg: 80, speedKn: 16 },
+    signatureHazard:
+      "The lee of Antigua — the west coast is the short road home, and it's dead in the island's wind shadow.",
+    season: 'February',
+    waypoints: [
+      { name: 'Antigua (English Harbour)', lat: 16.9799, lon: -61.7539, type: 'start' },
+      { name: 'Green Island', lat: 17.0718, lon: -61.6461, type: 'mark' },
+      { name: 'Great Bird Island', lat: 17.18, lon: -61.68, type: 'turn' },
+      { name: 'Prickly Pear Island', lat: 17.2, lon: -61.79, type: 'turn' },
+      { name: 'Boon Point', lat: 17.2, lon: -61.87, type: 'turn' },
+      { name: 'Pearns Point', lat: 17.02, lon: -61.93, type: 'turn' },
+      { name: 'Cades Reef', lat: 16.95, lon: -61.89, type: 'turn' },
+      { name: 'Antigua (Finish)', lat: 16.9899, lon: -61.7675, type: 'finish' },
+    ],
+    divisions: {
+      corinthian: { entryFee: 350, prizeMoney: 2400, fleetSize: 18, paceTarget: 1.3 },
+      pro: { entryFee: 800, prizeMoney: 5500, fleetSize: 34, paceTarget: 1.08 },
+    },
+  },
+  {
+    id: 'race-cabbage-tree',
+    name: 'Cabbage Tree Island Race',
+    location: 'Sydney → Cabbage Tree Island → Sydney',
+    description:
+      'The CYCA\'s 172-mile Hobart qualifier: out of the Heads, north up the NSW coast against the East Australian Current, round Cabbage Tree Island off Port Stephens in the dark, and home to Watsons Bay. Andoo Comanche set the record of 12h 19m in 2022.',
+    distanceNm: 172,
+    difficulty: 'Coastal',
+    recordTimeHours: 12.3,
+    corinthianRating: 4,
+    hazard: 'eac_coastal',
+    hazardWaypoint: 'Norah Head',
+    prevailingWind: { fromDeg: 45, speedKn: 14 },
+    signatureHazard:
+      'The East Australian Current pours south against the northbound fleet — how hard you hug the coast to cheat it decides the race.',
+    season: 'November',
+    // The EAC sets south down the NSW coast (~1 kn) — foul all the way north to
+    // Cabbage Tree, fair on the run home — over a light coastal tide. The same
+    // stream Sydney–Hobart rides south is the enemy here: the inversion is the
+    // whole tactical problem.
+    tide: {
+      floodDeg: 280,
+      peakRateKn: 0.3,
+      driftDeg: 195,
+      driftKn: 0.9,
+    },
+    waypoints: [
+      { name: 'Point Piper (Start)', lat: -33.862, lon: 151.27, type: 'start' },
+      { name: 'Sydney Heads', lat: -33.8487, lon: 151.3068, type: 'turn' },
+      { name: 'Long Reef', lat: -33.73, lon: 151.35, type: 'turn' },
+      { name: 'Norah Head', lat: -33.29, lon: 151.63, type: 'turn' },
+      { name: 'Newcastle Bight', lat: -32.9, lon: 152.05, type: 'turn' },
+      { name: 'Cabbage Tree Island', lat: -32.695, lon: 152.245, type: 'island' },
+      { name: 'Newcastle Bight (Return)', lat: -32.95, lon: 152.1, type: 'turn' },
+      { name: 'Norah Head (Return)', lat: -33.32, lon: 151.66, type: 'turn' },
+      { name: 'Long Reef (Return)', lat: -33.75, lon: 151.38, type: 'turn' },
+      { name: 'Watsons Bay (Finish)', lat: -33.848, lon: 151.28, type: 'finish' },
+    ],
+    divisions: {
+      corinthian: { entryFee: 700, prizeMoney: 5200, fleetSize: 20, paceTarget: 1.28 },
+      pro: { entryFee: 1700, prizeMoney: 12000, fleetSize: 38, paceTarget: 1.07 },
+    },
+  },
+  {
+    id: 'race-islands-race',
+    name: 'Islands Race',
+    location: 'Los Angeles → San Diego, via the islands',
+    description:
+      'The Southern California winter overnighter — 142 miles from the LA start, seaward of Catalina and San Clemente islands, to the Point Loma finish off San Diego. Sailed in the dark, in the lees, in February.',
+    distanceNm: 142,
+    difficulty: 'Coastal',
+    recordTimeHours: 13,
+    corinthianRating: 4,
+    hazard: 'island_lee',
+    hazardWaypoint: 'Catalina West End',
+    prevailingWind: { fromDeg: 290, speedKn: 9 },
+    signatureHazard:
+      "Catalina's lee at night — the gradient dies with the sun and the island's shadow lies across the short road south.",
+    season: 'February',
+    waypoints: [
+      { name: 'Point Fermin (Start)', lat: 33.7, lon: -118.29, type: 'start' },
+      { name: 'Catalina West End', lat: 33.5, lon: -118.64, type: 'turn' },
+      { name: 'Catalina Windward Side', lat: 33.32, lon: -118.5, type: 'turn' },
+      { name: 'San Clemente Island (West)', lat: 32.92, lon: -118.68, type: 'turn' },
+      { name: 'Pyramid Head', lat: 32.76, lon: -118.36, type: 'turn' },
+      { name: 'Point Loma (Finish)', lat: 32.66, lon: -117.26, type: 'finish' },
+    ],
+    divisions: {
+      corinthian: { entryFee: 500, prizeMoney: 3600, fleetSize: 18, paceTarget: 1.29 },
+      pro: { entryFee: 1200, prizeMoney: 8500, fleetSize: 34, paceTarget: 1.07 },
+    },
+  },
+  {
+    id: 'race-swiftsure',
+    name: 'Swiftsure International Yacht Race',
+    location: 'Victoria, BC → Swiftsure Bank → Victoria',
+    description:
+      'The Pacific Northwest\'s crown jewel since 1930 — the Lightship Classic: 138 miles from Clover Point, west down the Strait of Juan de Fuca, round Swiftsure Bank at the open Pacific\'s edge, and back east to Victoria. Fog, ships, and a tide that owns the strait.',
+    distanceNm: 138,
+    difficulty: 'Coastal',
+    recordTimeHours: 16,
+    corinthianRating: 4,
+    hazard: 'strait_fog',
+    hazardWaypoint: 'Swiftsure Bank',
+    prevailingWind: { fromDeg: 255, speedKn: 12 },
+    signatureHazard:
+      'Rounding Swiftsure Bank in fog, with the ebb about to turn against the westerly and stand the strait on end.',
+    season: 'May',
+    // The Strait of Juan de Fuca floods ENE and ebbs hard out to sea, squeezing
+    // to a race at Race Rocks and boiling over the shallows of Swiftsure Bank —
+    // the ebb-gate timing at the Bank is the race.
+    tide: {
+      floodDeg: 75,
+      peakRateKn: 1.0,
+      gates: [
+        { waypoint: 'Race Rocks', gain: 1.4, radiusNm: 8 },
+        { waypoint: 'Swiftsure Bank', gain: 0.7, radiusNm: 12 },
+      ],
+    },
+    waypoints: [
+      { name: 'Clover Point (Start)', lat: 48.395, lon: -123.343, type: 'start' },
+      { name: 'Race Rocks', lat: 48.28, lon: -123.54, type: 'turn' },
+      { name: 'Strait of Juan de Fuca', lat: 48.3, lon: -123.95, type: 'turn' },
+      { name: 'Juan de Fuca Entrance', lat: 48.47, lon: -124.67, type: 'turn' },
+      { name: 'Swiftsure Bank', lat: 48.55, lon: -125.0, type: 'turn' },
+      { name: 'Strait of Juan de Fuca (Return)', lat: 48.28, lon: -124.1, type: 'turn' },
+      { name: 'Race Passage (Return)', lat: 48.27, lon: -123.55, type: 'turn' },
+      { name: 'Victoria (Finish)', lat: 48.405, lon: -123.385, type: 'finish' },
+    ],
+    divisions: {
+      corinthian: { entryFee: 550, prizeMoney: 3800, fleetSize: 24, paceTarget: 1.29 },
+      pro: { entryFee: 1300, prizeMoney: 9000, fleetSize: 46, paceTarget: 1.07 },
+    },
+  },
 ];

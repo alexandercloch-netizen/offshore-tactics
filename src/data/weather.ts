@@ -83,9 +83,16 @@ const HAZARD_WEATHER_BIAS: Record<HazardKey, Partial<Record<string, number>>> = 
   gulf_stream: { 'wx-fresh': 2, 'wx-strong': 2 },
   celtic_weather: { 'wx-fresh': 2, 'wx-strong': 2.5, 'wx-gale': 1.8 },
   island_accel: { 'wx-fresh': 2.5, 'wx-strong': 2 },
+  // The positional inverse of island_accel: the race is decided in the shadow,
+  // so calms and light patches dominate and heavy weather is rare.
+  island_lee: { 'wx-calm': 2, 'wx-light': 2.5, 'wx-moderate': 1.5, 'wx-strong': 0.5, 'wx-gale': 0.2 },
   bass_strait: { 'wx-strong': 2.5, 'wx-gale': 2.5, 'wx-calm': 0.3 },
   doldrums: { 'wx-calm': 2.5, 'wx-light': 2, 'wx-fresh': 1.5 },
   tidal_rapids: { 'wx-calm': 1.5, 'wx-light': 2.5, 'wx-moderate': 2, 'wx-gale': 0.4 },
+  // NSW coastal running: honest sea-breeze sailing, current-dominated tactics.
+  eac_coastal: { 'wx-light': 1.5, 'wx-moderate': 2, 'wx-fresh': 1.5, 'wx-gale': 0.5 },
+  // A confined strait under fog: light, patchy and grey far more often than fresh.
+  strait_fog: { 'wx-calm': 2, 'wx-light': 2.5, 'wx-moderate': 2, 'wx-strong': 0.6, 'wx-gale': 0.3 },
 };
 
 function weightedPick(weights: Record<string, number>): WeatherCondition {

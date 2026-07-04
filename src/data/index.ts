@@ -16,6 +16,8 @@ export {
   WEATHER_EVENTS,
   MOB_EVENTS,
   HAZARD_EVENTS,
+  HAZARD_RACE_EVENTS,
+  hazardEventForRace,
   pickEvent,
   pickEventForRace,
   conditionBand,

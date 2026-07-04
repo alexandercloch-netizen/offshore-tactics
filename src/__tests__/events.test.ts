@@ -5,18 +5,23 @@ import {
   EventContext,
   RACE_REGION,
   HAZARD_EVENTS,
+  HAZARD_RACE_EVENTS,
+  hazardEventForRace,
   MOB_EVENTS,
   GENERIC_EVENTS,
   WEATHER_EVENTS,
   MORALE_EVENTS,
   FOLLOWON_EVENTS,
 } from '../data/events';
+import { RACES, getRaceById } from '../data';
 import { GameEvent, PointOfSail, TacticalChoice } from '../types';
 import { mulberry32, resetRng, rnd, rndPick, setRng } from '../engine/rng';
 
 afterEach(() => resetRng());
 
-const HAZARD_IDS = new Set(Object.values(HAZARD_EVENTS).map((e) => e.id));
+const HAZARD_IDS = new Set(
+  [...Object.values(HAZARD_EVENTS), ...Object.values(HAZARD_RACE_EVENTS)].map((e) => e.id)
+);
 
 // Every authored decision, across every pool (incl. the follow-on chains), for
 // the invariants below.
@@ -27,6 +32,7 @@ const ALL_EVENTS: GameEvent[] = [
   ...FOLLOWON_EVENTS,
   ...MOB_EVENTS,
   ...Object.values(HAZARD_EVENTS),
+  ...Object.values(HAZARD_RACE_EVENTS),
 ];
 
 // Drive a whole race's worth of everyday decisions through the picker, threading
@@ -318,6 +324,50 @@ describe('pickEventForRace — follow-on chains', () => {
         });
       });
     });
+  });
+});
+
+// The per-race signature override: HAZARD_EVENTS is site-locked prose per
+// hazard key, so a race reusing a key over different water carries its own
+// authored event in HAZARD_RACE_EVENTS. The lookup must return that override —
+// and be byte-identical (the very same object) for every race without one.
+describe('hazardEventForRace', () => {
+  it('returns the shared hazard event, identically, for races without an override', () => {
+    const overridden = new Set(Object.keys(HAZARD_RACE_EVENTS));
+    const plain = RACES.filter((r) => !overridden.has(r.id));
+    expect(plain.length).toBeGreaterThan(0);
+    for (const race of plain) {
+      // Same object, not just same content — the fallback path adds nothing.
+      expect(hazardEventForRace(race)).toBe(HAZARD_EVENTS[race.hazard]);
+    }
+  });
+
+  it('returns the per-race override where one is authored', () => {
+    expect(Object.keys(HAZARD_RACE_EVENTS).length).toBeGreaterThan(0);
+    for (const [raceId, event] of Object.entries(HAZARD_RACE_EVENTS)) {
+      const race = getRaceById(raceId)!;
+      expect(race).toBeDefined();
+      expect(hazardEventForRace(race)).toBe(event);
+      // The override must not echo the shared event — that's the whole point.
+      expect(event.id).not.toBe(HAZARD_EVENTS[race.hazard].id);
+    }
+  });
+
+  it('every override keeps its race hazard key and pins to a mark on its own course', () => {
+    for (const [raceId, event] of Object.entries(HAZARD_RACE_EVENTS)) {
+      const race = getRaceById(raceId)!;
+      expect(event.hazard).toBe(race.hazard);
+      expect(event.kind).toBe('hazard');
+      expect(event.storyBeat).toBe(raceId);
+      expect(race.waypoints.map((w) => w.name)).toContain(event.pinToWaypoint);
+    }
+  });
+
+  it('override ids are unique across the shared and per-race pools', () => {
+    const ids = [...Object.values(HAZARD_EVENTS), ...Object.values(HAZARD_RACE_EVENTS)].map(
+      (e) => e.id
+    );
+    expect(new Set(ids).size).toBe(ids.length);
   });
 });
 

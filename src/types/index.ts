@@ -22,9 +22,12 @@ export type HazardKey =
   | 'gulf_stream'
   | 'celtic_weather'
   | 'island_accel'
+  | 'island_lee'
   | 'bass_strait'
   | 'doldrums'
-  | 'tidal_rapids';
+  | 'tidal_rapids'
+  | 'eac_coastal'
+  | 'strait_fog';
 
 export type WaypointType = 'start' | 'turn' | 'island' | 'mark' | 'finish';
 
@@ -283,6 +286,20 @@ export type SailingGoal = 'destress' | 'tactics' | 'routing' | 'compete';
 
 export type ExperienceLevel = 'novice' | 'club' | 'seasoned' | 'pro';
 
+// The player's home port — one real harbour per sailing region, each with a
+// local fleet of races (an accessible home-waters classic plus the region's
+// crown jewel). Optional and back-compatible: old profiles simply have none,
+// and a default is derived from the onboarding region.
+export type PortId =
+  | 'cowes'
+  | 'valletta'
+  | 'antigua'
+  | 'newportRI'
+  | 'sanPedro'
+  | 'portTownsend'
+  | 'chicago'
+  | 'sydney';
+
 export interface PlayerProfile {
   region: SailingRegion;
   goal: SailingGoal;
@@ -290,6 +307,7 @@ export interface PlayerProfile {
   role?: SailorRole; // optional; not asked in the quick quiz
   boatType?: BoatType; // the class they sail, if any
   currency?: Currency; // preferred money symbol; auto-detected, overridable
+  homePort?: PortId; // home harbour; defaulted from the region, optional
   onboardedAt: number; // epoch ms the quiz was completed
 }
 
