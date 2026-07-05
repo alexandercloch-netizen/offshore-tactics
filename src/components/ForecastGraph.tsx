@@ -9,6 +9,7 @@ export interface ForecastPoint {
   speedKn: number;
   fromDeg: number;
   confidence: number; // 0–1, fades the trace as it grows uncertain
+  gustKn?: number; // what the puffs top out at — drawn as a light band above the line
 }
 
 interface ForecastGraphProps {
@@ -32,7 +33,10 @@ export const ForecastGraph: React.FC<ForecastGraphProps> = ({ series, hour, maxH
   const [w, setW] = React.useState(width);
   const plotW = Math.max(1, w - PAD_L - PAD_R);
   const plotH = HEIGHT - PAD_T - PAD_B;
-  const yMax = Math.max(20, Math.ceil(Math.max(...series.map((p) => p.speedKn), 0) / 5) * 5);
+  const yMax = Math.max(
+    20,
+    Math.ceil(Math.max(...series.map((p) => Math.max(p.speedKn, p.gustKn ?? 0)), 0) / 5) * 5
+  );
 
   const x = (h: number) => PAD_L + (maxHour > 0 ? h / maxHour : 0) * plotW;
   const y = (s: number) => PAD_T + plotH - (s / yMax) * plotH;
@@ -44,6 +48,22 @@ export const ForecastGraph: React.FC<ForecastGraphProps> = ({ series, hour, maxH
     series.length > 1
       ? `${line} L ${x(series[series.length - 1].hour).toFixed(1)} ${(PAD_T + plotH).toFixed(1)} ` +
         `L ${x(series[0].hour).toFixed(1)} ${(PAD_T + plotH).toFixed(1)} Z`
+      : '';
+
+  // The gust envelope: a light band from the wind line up to the gust line
+  // (forward along the gusts, back along the wind — a closed ribbon).
+  const gusts = series.filter((p) => p.gustKn != null);
+  const gustBand =
+    gusts.length === series.length && series.length > 1
+      ? series
+          .map((p, i) => `${i === 0 ? 'M' : 'L'} ${x(p.hour).toFixed(1)} ${y(p.gustKn!).toFixed(1)}`)
+          .join(' ') +
+        ' ' +
+        [...series]
+          .reverse()
+          .map((p) => `L ${x(p.hour).toFixed(1)} ${y(p.speedKn).toFixed(1)}`)
+          .join(' ') +
+        ' Z'
       : '';
 
   const onLayout = (e: LayoutChangeEvent) => setW(e.nativeEvent.layout.width);
@@ -69,6 +89,9 @@ export const ForecastGraph: React.FC<ForecastGraphProps> = ({ series, hour, maxH
             {s}
           </SvgText>
         ))}
+
+        {/* Gust envelope: what the puffs top out at, kept subtle. */}
+        {gustBand ? <Path d={gustBand} fill={colors.steel} opacity={0.14} /> : null}
 
         {/* Strength trace. */}
         {area ? <Path d={area} fill={colors.brass} opacity={0.1} /> : null}

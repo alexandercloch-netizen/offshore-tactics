@@ -2,9 +2,14 @@ import {
   createWindField,
   sampleWind,
   sampleWindGrid,
+  sampleForecastGrid,
+  sampleForecastSpread,
+  sampleForecastSpreadGrid,
   weatherFromWind,
   weatherOutlook,
   featureState,
+  featureStates,
+  gustRatioFor,
 } from '../engine/wind';
 import { mulberry32, resetRng, setRng } from '../engine/rng';
 import { getRaceById, RACES } from '../data';
@@ -241,5 +246,105 @@ describe('featureState', () => {
       feature: { lat: 1, lon: 2, radiusNm: 20, deltaKn: -8, driftDir: 90, driftKn: 0 },
     });
     expect(featureState(f, 0).puff).toBe(false);
+  });
+});
+
+describe('featureStates (all drifting systems)', () => {
+  it('lists every system, the headline first, each drifted to the hour', () => {
+    const headline = { lat: 0, lon: 0, radiusNm: 40, deltaKn: 12, driftDir: 0, driftKn: 6 };
+    const hole = { lat: 1, lon: 1, radiusNm: 25, deltaKn: -6, driftDir: 90, driftKn: 3 };
+    const f = field({ feature: headline, features: [headline, hole] });
+    const states = featureStates(f, 2);
+    expect(states).toHaveLength(2);
+    expect(states[0]).toEqual(featureState(f, 2)); // headline agrees with the singular read
+    expect(states[1].puff).toBe(false);
+    expect(states[1].lon).toBeGreaterThan(1); // drifted east
+  });
+
+  it('falls back to the lone headline on a hand-built field', () => {
+    const f = field();
+    expect(featureStates(f, 0)).toHaveLength(1);
+  });
+});
+
+describe('gustRatioFor', () => {
+  it('reads the scenario gust series when one is sailing', () => {
+    const f = field({
+      scenarioBase: [
+        {
+          lat: 0,
+          lon: 0,
+          hours: [0, 1, 2],
+          fromDeg: [0, 0, 0],
+          speedKn: [10, 10, 10],
+          gustKn: [13, 13, 13],
+        },
+      ],
+    });
+    expect(gustRatioFor(f)).toBeCloseTo(1.3, 5);
+  });
+
+  it('caps a squally scenario at 1.4', () => {
+    const f = field({
+      scenarioBase: [
+        { lat: 0, lon: 0, hours: [0], fromDeg: [0], speedKn: [10], gustKn: [20] },
+      ],
+    });
+    expect(gustRatioFor(f)).toBe(1.4);
+  });
+
+  it('falls back to the baked climatology, then a sane default', () => {
+    const f = field();
+    const raceId = Object.keys(WEATHER_CLIMATOLOGY)[0];
+    const expected = Math.min(1 + Math.max(0, WEATHER_CLIMATOLOGY[raceId].gustFactor), 1.4);
+    expect(gustRatioFor(f, raceId)).toBeCloseTo(expected, 5);
+    expect(gustRatioFor(f)).toBe(1.2);
+    expect(gustRatioFor(f)).toBeGreaterThan(1);
+  });
+});
+
+describe('forecast spread (the uncertainty envelope)', () => {
+  it('is zero now and grows with the lookahead', () => {
+    const f = field();
+    expect(sampleForecastSpread(f, 0, 0, 0, 70)).toBe(0);
+    const near = sampleForecastSpread(f, 0.3, 0.3, 6, 70);
+    const far = sampleForecastSpread(f, 0.3, 0.3, 36, 70);
+    expect(near).toBeGreaterThanOrEqual(0);
+    expect(far).toBeGreaterThan(near);
+  });
+
+  it('narrows for a sharper Navigator', () => {
+    const f = field();
+    const green = sampleForecastSpread(f, 0.2, 0.2, 24, 30);
+    const sharp = sampleForecastSpread(f, 0.2, 0.2, 24, 95);
+    expect(sharp).toBeLessThan(green);
+  });
+
+  it('is deterministic and does NOT trace the displayed forecast blur', () => {
+    const f = field();
+    // Deterministic: no rng — two reads agree exactly.
+    expect(sampleForecastSpread(f, 0.5, 0.5, 20, 60)).toBe(
+      sampleForecastSpread(f, 0.5, 0.5, 20, 60)
+    );
+    // Fresh salts: the spread field's spatial shape differs from the blurred
+    // forecast's deviation from truth (they'd correlate perfectly if the same
+    // noise were reused). Compare sign patterns across a spread of points.
+    const bounds = { minLat: 0, maxLat: 2, minLon: 0, maxLon: 2 };
+    const truth = sampleWindGrid(f, bounds, 5, 5, 24);
+    const shown = sampleForecastGrid(f, bounds, 5, 5, 24, 50);
+    const spread = sampleForecastSpreadGrid(f, bounds, 5, 5, 24, 50);
+    let matches = 0;
+    for (let i = 0; i < truth.length; i += 1) {
+      const blurErr = Math.abs(shown[i].speedKn - truth[i].speedKn) / Math.max(truth[i].speedKn, 1);
+      const wide = spread[i].speedKn / Math.max(truth[i].speedKn, 1);
+      // "Big blur error where the band is wide" — count coincidences.
+      if ((blurErr > 0.15) === (wide > 0.15)) matches += 1;
+    }
+    expect(matches).toBeLessThan(truth.length); // not in lockstep
+    // And the grid mirrors the pointwise read.
+    expect(spread[0].speedKn).toBeCloseTo(
+      sampleForecastSpread(f, bounds.minLat, bounds.minLon, 24, 50),
+      10
+    );
   });
 });

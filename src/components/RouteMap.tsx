@@ -43,7 +43,10 @@ interface RouteMapProps {
   field?: FlowField; // dense field for the active layer: colour heatmap + flow animation
   layer?: FlowLayer; // 'wind' (speed ramp) or 'tide' (rate ramp); default 'wind'
   animate?: boolean; // run the particle flow (default true); off for the static debrief
-  windFeature?: { lat: number; lon: number; radiusNm: number; puff: boolean }; // puff/hole to shade
+  windFeature?: { lat: number; lon: number; radiusNm: number; puff: boolean }; // headline puff/hole to shade
+  // The remaining drifting systems (the headline excluded): quiet, unlabelled
+  // dashed rings so the whole synoptic picture reads without stealing the chart.
+  windFeatures?: { lat: number; lon: number; radiusNm: number; puff: boolean }[];
   nextMarkIndex?: number; // for shading rounded marks
   land?: LandPolygon[];
   width?: number;
@@ -80,6 +83,7 @@ export const RouteMap: React.FC<RouteMapProps> = ({
   layer = 'wind',
   animate = true,
   windFeature,
+  windFeatures,
   nextMarkIndex = 0,
   land,
   width = 320,
@@ -258,13 +262,19 @@ export const RouteMap: React.FC<RouteMapProps> = ({
   const competitorXY = (competitors ?? []).map((c) => project(c.lat, c.lon));
 
   // The drifting puff/hole (refreshed each tick — just a couple of circles).
-  const feature = windFeature
-    ? (() => {
-        const c = project(windFeature.lat, windFeature.lon);
-        const edge = project(windFeature.lat + windFeature.radiusNm / 60, windFeature.lon);
-        return { c, rPx: Math.max(8, Math.hypot(edge.x - c.x, edge.y - c.y)), puff: windFeature.puff };
-      })()
-    : null;
+  const projectFeature = (f: { lat: number; lon: number; radiusNm: number; puff: boolean }) => {
+    const c = project(f.lat, f.lon);
+    const edge = project(f.lat + f.radiusNm / 60, f.lon);
+    return { c, rPx: Math.max(8, Math.hypot(edge.x - c.x, edge.y - c.y)), puff: f.puff };
+  };
+  const feature = windFeature ? projectFeature(windFeature) : null;
+  // The lesser systems: rendered smaller and quieter than the headline, capped
+  // so a big offshore system can't ring the whole chart at small sizes.
+  const secondaryRadiusCap = Math.min(width, height) * 0.35;
+  const secondaryFeatures = (windFeatures ?? []).map((f) => {
+    const p = projectFeature(f);
+    return { ...p, rPx: Math.min(p.rPx, secondaryRadiusCap) };
+  });
 
   // Enough particles to read as a field, scaled to the drawable area and capped so
   // even a big web chart stays light (one Path per fade tier, so this is cheap).
@@ -313,6 +323,25 @@ export const RouteMap: React.FC<RouteMapProps> = ({
           ) : null}
 
           {landLayer}
+
+          {/* The other drifting systems (wind layer only): quiet dashed rings,
+              no fill, no label — enough to read the synoptic picture without
+              competing with the headline feature or the route. */}
+          {layer === 'wind'
+            ? secondaryFeatures.map((f, i) => (
+                <Circle
+                  key={`feat-${i}`}
+                  cx={f.c.x}
+                  cy={f.c.y}
+                  r={f.rPx}
+                  stroke={f.puff ? colors.signalGreen : colors.foam}
+                  strokeWidth={1}
+                  strokeDasharray="2 6"
+                  fill="none"
+                  opacity={0.3}
+                />
+              ))
+            : null}
 
           {/* Drifting pressure system (wind layer only): a puff or a hole. */}
           {feature && layer === 'wind' ? (

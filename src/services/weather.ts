@@ -40,9 +40,17 @@ export function scenarioStamp(s: WeatherScenario): WeatherScenarioStamp {
   };
 }
 
-// One legible line for results & the logbook: "Today's forecast — ECMWF 2026-07-04".
+// One legible line for results & the logbook: "Today's forecast — ECMWF
+// 2026-07-04" for a live run; "2017 — the record run · ERA5" for a historic
+// edition (its label already carries the year, so no date is repeated).
 export function scenarioTagLine(s: WeatherScenarioStamp): string {
-  const model = s.model.toLowerCase().startsWith('ecmwf') ? WEATHER_MODEL_LABEL : s.model;
+  const lower = s.model.toLowerCase();
+  const model = lower.startsWith('ecmwf')
+    ? WEATHER_MODEL_LABEL
+    : lower.startsWith('era5')
+      ? 'ERA5'
+      : s.model;
+  if (s.kind === 'historic') return `${s.label} · ${model}`;
   const dated = s.year != null ? String(s.year) : s.issuedAt.slice(0, 10);
   return `${s.label} — ${model} ${dated}`;
 }
