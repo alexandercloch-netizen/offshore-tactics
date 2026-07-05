@@ -30,16 +30,19 @@ import { planRoute, WindSampler } from '../engine/router';
 import { courseAspect } from '../engine/geo';
 import {
   featureState,
+  featureStates,
   forecastConfidence,
+  gustRatioFor,
   pressureHint,
   sampleForecast,
   sampleForecastGrid,
+  sampleForecastSpreadGrid,
   weatherOutlook,
 } from '../engine/wind';
 import { sampleTideField } from '../engine/current';
 import RouteMap, { chartViewportBounds, FlowField } from '../components/RouteMap';
-import { FlowLayer, windCells, tideCells, fieldResolution } from '../components/flowField';
-import MapLayerToggle from '../components/MapLayerToggle';
+import { FlowLayer, windCells, tideCells, gustCells, fieldResolution } from '../components/flowField';
+import MapLayerToggle, { MapLayerOption } from '../components/MapLayerToggle';
 import WindIndicator from '../components/WindIndicator';
 import NauticalButton from '../components/NauticalButton';
 import ForecastScrubber from '../components/ForecastScrubber';
@@ -47,12 +50,15 @@ import WindScaleLegend from '../components/WindScaleLegend';
 import ForecastGraph, { ForecastGraphReadout, ForecastPoint } from '../components/ForecastGraph';
 import ErrorBoundary from '../components/ErrorBoundary';
 import { fetchCourseSnapshot, liveWeatherEnabled } from '../services/weather';
+import { editionsForRace } from '../data/weatherEditions';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Briefing'>;
 
-// Which conditions the race sails: the seasonal default, or today's real
-// forecast (behind the EXPO_PUBLIC_LIVE_WEATHER flag; falls back to seasonal).
-type ConditionsMode = 'seasonal' | 'live';
+// Which conditions the race sails: the seasonal default, today's real forecast
+// (behind the EXPO_PUBLIC_LIVE_WEATHER flag; falls back to seasonal), or a
+// curated historic edition from the Archive (bundled data — no flag, no
+// network, works for guests). `edition:<year>` keys the race's edition list.
+type ConditionsMode = 'seasonal' | 'live' | `edition:${number}`;
 type SnapshotState = 'idle' | 'fetching' | 'ready' | 'failed';
 
 // The pre-start briefing: a calm beat before the gun to read the course and the
@@ -64,8 +70,9 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
   const { state, beginRace, reseedWeather, setStrategy } = useGame();
   // Forecast offset (hours from the start) the player is scrubbing through.
   const [forecastHour, setForecastHour] = useState(0);
-  // Which overlay the chart shows — the breeze or, where the course runs a tide,
-  // the stream. Stays on wind for tide-less courses (the toggle is hidden).
+  // Which overlay the chart shows — the breeze, its gusts, the stream where the
+  // course runs a tide, or the forecast-spread envelope. A segment only appears
+  // when its layer is live for the course.
   const [mapLayer, setMapLayer] = useState<FlowLayer>('wind');
   // Live-weather conditions (flag-gated). The snapshot resolves in the
   // background while the briefing is read; picking "Today's forecast" reseeds
@@ -77,6 +84,12 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
 
   const race = getRaceById(state.selectedRaceId);
   const boat = resolveBoatById(state, state.selectedBoatId);
+  // The race's Archive: curated historic editions, if any are baked for it.
+  // Bundled data, so this is a plain lookup — no fetch, no flag, guests too.
+  const editions = editionsForRace(race?.id);
+  const selectedEdition = conditions.startsWith('edition:')
+    ? editions.find((e) => `edition:${e.year}` === conditions) ?? null
+    : null;
   // The race's storyline, if one is authored (text-only briefing additions).
   const story = storylineForRace(state.selectedRaceId);
   const briefingBeat = story?.beats.find((b) => b.kind === 'briefing');
@@ -139,24 +152,33 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveEnabled, raceId]);
 
-  // Apply the chosen conditions once both the race world and the snapshot
-  // exist. Idempotent on the state's scenario stamp, and RESEED_WEATHER swaps
-  // the world atomically — `progress` is never nulled, so the beginRace mount
-  // effect above can't re-fire. Only while this screen is focused: the Briefing
-  // stays mounted under the pushed StartSequence, and a slow fetch must never
-  // swap the conditions out from under the start (applyReseed also locks once
-  // the start outcome is baked in).
+  // Apply the chosen conditions once both the race world and the scenario
+  // exist (an edition is bundled, so it's ready the moment it's picked; the
+  // live snapshot waits for its fetch). Idempotent on the state's scenario
+  // stamp, and RESEED_WEATHER swaps the world atomically — `progress` is never
+  // nulled, so the beginRace mount effect above can't re-fire. Only while this
+  // screen is focused: the Briefing stays mounted under the pushed
+  // StartSequence, and a slow fetch must never swap the conditions out from
+  // under the start (applyReseed also locks once the start outcome is baked in).
   const isFocused = useIsFocused();
   const scenarioActive = !!state.scenario;
+  const scenarioStampKey = state.scenario ? `${state.scenario.kind}|${state.scenario.label}|${state.scenario.year ?? ''}` : '';
   useEffect(() => {
-    if (!liveEnabled || !isFocused || !state.progress) return;
-    if (conditions === 'live' && snapState === 'ready' && snapshot && !scenarioActive) {
-      reseedWeather(snapshot);
-    } else if (conditions === 'seasonal' && scenarioActive) {
-      reseedWeather(null);
+    if (!isFocused || !state.progress) return;
+    if (selectedEdition) {
+      const key = `historic|${selectedEdition.label}|${selectedEdition.year ?? ''}`;
+      if (scenarioStampKey !== key) reseedWeather(selectedEdition);
+      return;
     }
+    if (conditions === 'live') {
+      if (liveEnabled && snapState === 'ready' && snapshot && state.scenario?.kind !== 'live') {
+        reseedWeather(snapshot);
+      }
+      return;
+    }
+    if (scenarioActive) reseedWeather(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [liveEnabled, isFocused, conditions, snapState, snapshot, scenarioActive, !!state.progress, reseedWeather]);
+  }, [liveEnabled, isFocused, conditions, selectedEdition, snapState, snapshot, scenarioActive, scenarioStampKey, !!state.progress, reseedWeather]);
 
   if (!race || !boat || !state.progress || !state.weather || !state.windField) {
     return (
@@ -197,7 +219,17 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
   // from the tables, so it's sampled true.
   const hasTide =
     !!state.tidalField && (state.tidalField.peakRateKn > 0 || state.tidalField.driftKn > 0);
-  const activeLayer: FlowLayer = mapLayer === 'tide' && hasTide ? 'tide' : 'wind';
+  const activeLayer: FlowLayer = mapLayer === 'tide' && !hasTide ? 'wind' : mapLayer;
+  const layerOptions: MapLayerOption[] = [
+    { key: 'wind', label: 'Wind' },
+    { key: 'gust', label: 'Gust' },
+    ...(hasTide ? [{ key: 'tide' as FlowLayer, label: 'Tide' }] : []),
+    // Opt-in: how far the forecast could be wrong, growing with the lookahead.
+    { key: 'spread', label: 'Spread' },
+  ];
+  // The course's gust character — the scenario's own gusts when one is sailing,
+  // else the baked climatology. One capped multiplier over the mean field.
+  const gustRatio = gustRatioFor(windField, race.id);
   const flowField: FlowField =
     activeLayer === 'tide' && state.tidalField
       ? {
@@ -205,12 +237,24 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
           cols: fieldCols,
           rows: fieldRows,
         }
-      : {
-          cells: windCells(sampleForecastGrid(windField, bounds, fieldCols, fieldRows, forecastHour, navSkill)),
-          cols: fieldCols,
-          rows: fieldRows,
-        };
+      : activeLayer === 'spread'
+        ? {
+            cells: windCells(
+              sampleForecastSpreadGrid(windField, bounds, fieldCols, fieldRows, forecastHour, navSkill)
+            ),
+            cols: fieldCols,
+            rows: fieldRows,
+          }
+        : (() => {
+            const grid = sampleForecastGrid(windField, bounds, fieldCols, fieldRows, forecastHour, navSkill);
+            return {
+              cells: activeLayer === 'gust' ? gustCells(grid, gustRatio) : windCells(grid),
+              cols: fieldCols,
+              rows: fieldRows,
+            };
+          })();
   const feature = featureState(windField, forecastHour);
+  const otherFeatures = featureStates(windField, forecastHour).slice(1);
   const navigator = state.selectedCrewIds
     .map((id) => getCrewById(id))
     .find((c) => c?.role === 'Navigator');
@@ -225,7 +269,15 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
   const forecastSeries: ForecastPoint[] = Array.from({ length: GRAPH_SAMPLES }, (_, i) => {
     const h = (i / (GRAPH_SAMPLES - 1)) * maxForecastHour;
     const s = sampleForecast(windField, progress.lat, progress.lon, h, navSkill);
-    return { hour: h, speedKn: s.speedKn, fromDeg: s.fromDeg, confidence: forecastConfidence(navSkill, h) };
+    return {
+      hour: h,
+      speedKn: s.speedKn,
+      fromDeg: s.fromDeg,
+      confidence: forecastConfidence(navSkill, h),
+      // The gust envelope over the passage, from the same gust character the
+      // chart's Gust layer shows.
+      gustKn: s.speedKn * gustRatio,
+    };
   });
   const cursorSample = sampleForecast(windField, progress.lat, progress.lon, forecastHour, navSkill);
   const cursorPoint: ForecastPoint = {
@@ -272,16 +324,17 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
                 boat={{ lat: progress.lat, lon: progress.lon }}
                 field={flowField}
                 layer={activeLayer}
+                // The spread layer is a stillness — uncertainty doesn't flow.
+                animate={activeLayer !== 'spread'}
                 windFeature={feature}
+                windFeatures={otherFeatures}
                 land={LANDMASSES[race.id]}
                 width={mapWidth}
                 height={mapHeight}
               />
-              {hasTide ? (
-                <View style={styles.layerToggle}>
-                  <MapLayerToggle layer={activeLayer} onChange={setMapLayer} />
-                </View>
-              ) : null}
+              <View style={styles.layerToggle}>
+                <MapLayerToggle layer={activeLayer} options={layerOptions} onChange={setMapLayer} />
+              </View>
             </View>
             <View style={{ width: mapWidth }}>
               <WindScaleLegend layer={activeLayer} />
@@ -299,18 +352,20 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
             </View>
           </View>
 
-          {liveEnabled ? (
+          {liveEnabled || editions.length > 0 ? (
             <View style={styles.panel} testID="conditions-selector">
               <Text style={styles.panelTitle}>Conditions</Text>
               <Segmented<ConditionsMode>
                 value={conditions}
                 options={[
                   { value: 'seasonal', label: 'Seasonal' },
-                  { value: 'live', label: "Today's forecast" },
+                  ...(liveEnabled
+                    ? [{ value: 'live' as ConditionsMode, label: "Today's forecast" }]
+                    : []),
                 ]}
                 onSelect={setConditions}
               />
-              {conditions === 'live' ? (
+              {liveEnabled && conditions === 'live' ? (
                 <View testID="conditions-live-note">
                   {snapState === 'fetching' || snapState === 'idle' ? (
                     <Text style={styles.liveNote}>Fetching today's forecast…</Text>
@@ -327,6 +382,39 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
                       <Text style={styles.liveDisclaimer}>Simulation — not for navigation.</Text>
                     </>
                   )}
+                </View>
+              ) : null}
+              {editions.length > 0 ? (
+                <View testID="conditions-archive" style={styles.archive}>
+                  <Text style={styles.archiveLabel}>Archive</Text>
+                  {editions.map((e) => {
+                    const key = `edition:${e.year ?? 0}` as ConditionsMode;
+                    const active = conditions === key;
+                    return (
+                      <Pressable
+                        key={key}
+                        testID={`edition-chip-${e.year}`}
+                        onPress={() => setConditions(active ? 'seasonal' : key)}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: active }}
+                        style={[styles.editionChip, active && styles.editionChipActive]}
+                      >
+                        <Text style={[styles.editionLabel, active && styles.editionLabelActive]}>
+                          {e.label}
+                        </Text>
+                        {e.blurb ? <Text style={styles.editionBlurb}>{e.blurb}</Text> : null}
+                      </Pressable>
+                    );
+                  })}
+                  {selectedEdition ? (
+                    <Text style={styles.liveNote}>
+                      Practice run — doesn't post to the global leaderboard.
+                    </Text>
+                  ) : null}
+                  <Text style={styles.archiveNote}>Reconstructed from ERA5 reanalysis.</Text>
+                  <Text style={styles.archiveNote}>
+                    Editions are chosen from storied, safely-sailed races.
+                  </Text>
                 </View>
               ) : null}
             </View>
@@ -624,6 +712,27 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   planHint: { color: colors.slate, fontSize: fontSize.xs, marginTop: spacing.sm },
+  archive: { marginTop: spacing.md },
+  archiveLabel: {
+    color: colors.slate,
+    fontSize: fontSize.xs,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: spacing.xs,
+  },
+  editionChip: {
+    backgroundColor: colors.navy,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.hull,
+    padding: spacing.md,
+    marginBottom: spacing.xs,
+  },
+  editionChipActive: { borderColor: colors.brassLight, backgroundColor: colors.hull },
+  editionLabel: { color: colors.foam, fontSize: fontSize.sm, fontWeight: fontWeight.bold },
+  editionLabelActive: { color: colors.brassLight },
+  editionBlurb: { color: colors.mist, fontSize: fontSize.xs, lineHeight: 16, marginTop: 2 },
+  archiveNote: { color: colors.slate, fontSize: fontSize.xs, marginTop: spacing.xs, fontStyle: 'italic' },
   liveNote: { color: colors.mist, fontSize: fontSize.xs, marginTop: spacing.sm, lineHeight: 16 },
   liveNoteWarn: { color: colors.warning, fontSize: fontSize.xs, marginTop: spacing.sm, lineHeight: 16 },
   liveDisclaimer: { color: colors.slate, fontSize: fontSize.xs, marginTop: spacing.xs, fontStyle: 'italic' },

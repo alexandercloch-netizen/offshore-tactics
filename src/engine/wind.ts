@@ -390,6 +390,39 @@ export function sampleWindGrid(
   return arrows;
 }
 
+// ---- Gusts ----
+//
+// The gust layer is the mean field scaled by the course's gust character: the
+// scenario's own gust series when the race sails real model output, else the
+// baked climatology's gustFactor. One honest multiplier — the chart shows what
+// the puffs top out at, not a second invented wind field.
+
+const GUST_RATIO_CAP = 1.4; // a 40% overshoot is a squally day; beyond that lies storm-chasing
+const GUST_RATIO_DEFAULT = 1.2;
+
+// The field's gust ratio (gust ÷ mean wind), capped. Under a scenario the mean
+// of the model's gust series sets it; otherwise the climatology's gustFactor.
+export function gustRatioFor(field: WindField, raceId?: string): number {
+  const points = field.scenarioBase;
+  if (points?.length) {
+    let sum = 0;
+    let n = 0;
+    for (const p of points) {
+      if (!p.gustKn) continue;
+      for (let i = 0; i < p.gustKn.length; i += 1) {
+        if (p.speedKn[i] > 0) {
+          sum += p.gustKn[i] / p.speedKn[i];
+          n += 1;
+        }
+      }
+    }
+    if (n > 0) return clamp(sum / n, 1, GUST_RATIO_CAP);
+  }
+  const climate = raceId ? WEATHER_CLIMATOLOGY[raceId] : undefined;
+  if (climate) return clamp(1 + Math.max(0, climate.gustFactor), 1, GUST_RATIO_CAP);
+  return GUST_RATIO_DEFAULT;
+}
+
 const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 
 // ---- Forecast model ----
@@ -437,6 +470,61 @@ export function sampleForecast(
   const dir = truth.fromDeg + FORECAST_DIR_ERR * err * forecastNoise(lat, lon, hours, 1);
   const speed = truth.speedKn * (1 + FORECAST_SPD_ERR * err * forecastNoise(lat, lon, hours, 2));
   return { fromDeg: norm360(dir), speedKn: Math.max(2, Math.min(50, speed)) };
+}
+
+// ---- Forecast spread (uncertainty) ----
+//
+// How far the forecast could plausibly be wrong at each point, in knots — the
+// envelope's width, not another forecast. Built from the same error model the
+// display blur uses, but with its OWN noise salts: the blur (salts 1 & 2) is
+// the one plausible-but-wrong field the crew sees; the spread samples fresh
+// noise so it reads the error model's breadth rather than tracing that field.
+const SPREAD_SALT = 7;
+
+// The forecast-spread magnitude at a point: the speed-error envelope width,
+// scaled by (1 − confidence) so it grows with the lookahead and shrinks with a
+// sharp Navigator. Deterministic — no rng — so the chart never flickers.
+export function sampleForecastSpread(
+  field: WindField,
+  lat: number,
+  lon: number,
+  hours: number,
+  navSkill: number
+): number {
+  const truth = sampleWind(field, lat, lon, hours);
+  const err = 1 - forecastConfidence(navSkill, hours);
+  if (err <= 0) return 0;
+  const breadth = 0.5 + 0.5 * Math.abs(forecastNoise(lat, lon, hours, SPREAD_SALT));
+  return truth.speedKn * FORECAST_SPD_ERR * err * breadth;
+}
+
+// Forecast-spread field on a grid, mirroring sampleWindGrid: `speedKn` carries
+// the spread magnitude (kn) and `fromDeg` the true direction, so the chart's
+// existing field plumbing can paint it unchanged.
+export function sampleForecastSpreadGrid(
+  field: WindField,
+  bounds: CourseBounds,
+  cols: number,
+  rows: number,
+  hours: number,
+  navSkill: number
+): WindArrow[] {
+  const arrows: WindArrow[] = [];
+  const latStep = rows > 1 ? (bounds.maxLat - bounds.minLat) / (rows - 1) : 0;
+  const lonStep = cols > 1 ? (bounds.maxLon - bounds.minLon) / (cols - 1) : 0;
+  for (let r = 0; r < rows; r += 1) {
+    for (let c = 0; c < cols; c += 1) {
+      const lat = bounds.minLat + latStep * r;
+      const lon = bounds.minLon + lonStep * c;
+      arrows.push({
+        lat,
+        lon,
+        fromDeg: sampleWind(field, lat, lon, hours).fromDeg,
+        speedKn: sampleForecastSpread(field, lat, lon, hours, navSkill),
+      });
+    }
+  }
+  return arrows;
 }
 
 // Forecast field on a grid (the chart's heatmap/arrows), mirroring sampleWindGrid.
@@ -516,6 +604,23 @@ export function featureState(field: WindField, hours: number): WindFeatureState 
     puff: f.deltaKn > 0,
     deltaKn: f.deltaKn,
   };
+}
+
+// Every drifting system at a given time, the headline first (it matches
+// `featureState`). The chart labels the headline and sketches the rest as
+// quiet, unlabelled rings — the whole synoptic picture, minus the clutter.
+export function featureStates(field: WindField, hours: number): WindFeatureState[] {
+  const feats = field.features ?? [field.feature];
+  return feats.map((f) => {
+    const pos = movePoint(f.lat, f.lon, f.driftDir, f.driftKn * hours);
+    return {
+      lat: pos.lat,
+      lon: pos.lon,
+      radiusNm: f.radiusNm,
+      puff: f.deltaKn > 0,
+      deltaKn: f.deltaKn,
+    };
+  });
 }
 
 export interface WeatherOutlook {

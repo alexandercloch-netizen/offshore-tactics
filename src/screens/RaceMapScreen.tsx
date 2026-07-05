@@ -37,13 +37,20 @@ import {
 import type { TacticalRead } from '../engine/gameEngine';
 import { competitorPoints } from '../engine/fleet';
 import { courseAspect } from '../engine/geo';
-import { featureState, pressureHint, sampleWindGrid, weatherOutlook } from '../engine/wind';
+import {
+  featureState,
+  featureStates,
+  gustRatioFor,
+  pressureHint,
+  sampleWindGrid,
+  weatherOutlook,
+} from '../engine/wind';
 import { sampleTideField } from '../engine/current';
 import { buildInstrumentReport, InstrumentReport } from '../engine/instruments';
 import { EffortMode, RoutingBias } from '../types';
 import RouteMap, { chartViewportBounds, FlowField } from '../components/RouteMap';
-import { FlowLayer, windCells, tideCells, fieldResolution } from '../components/flowField';
-import MapLayerToggle from '../components/MapLayerToggle';
+import { FlowLayer, windCells, tideCells, gustCells, fieldResolution } from '../components/flowField';
+import MapLayerToggle, { MapLayerOption } from '../components/MapLayerToggle';
 import WindScaleLegend from '../components/WindScaleLegend';
 import TutorialOverlay from '../components/TutorialOverlay';
 import WindIndicator from '../components/WindIndicator';
@@ -87,13 +94,23 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
     Math.min(Math.round(mapWidth * mapAspect), Math.round(height * 0.6))
   );
 
-  // Which overlay the chart is showing: the breeze, or — where the course has a
-  // running stream — the tide. Tide-less courses stay on wind (the toggle hides).
+  // Which overlay the chart is showing: the breeze, what its gusts top out at,
+  // or — where the course has a running stream — the tide. A layer that isn't
+  // live for the course falls back to wind (its toggle segment is never shown).
   const windField = state.windField;
   const tidalField = state.tidalField;
   const hasTide = !!tidalField && (tidalField.peakRateKn > 0 || tidalField.driftKn > 0);
   const [mapLayer, setMapLayer] = useState<FlowLayer>('wind');
-  const activeLayer: FlowLayer = mapLayer === 'tide' && hasTide ? 'tide' : 'wind';
+  const activeLayer: FlowLayer =
+    (mapLayer === 'tide' && !hasTide) || mapLayer === 'spread' ? 'wind' : mapLayer;
+  const layerOptions: MapLayerOption[] = [
+    { key: 'wind', label: 'Wind' },
+    { key: 'gust', label: 'Gust' },
+    ...(hasTide ? [{ key: 'tide' as FlowLayer, label: 'Tide' }] : []),
+  ];
+  // The course's gust character (scenario gusts if the race sails one, else the
+  // baked climatology) — one honest multiplier over the sampled mean field.
+  const gustRatio = windField ? gustRatioFor(windField, race?.id) : 1;
 
   const elapsedHourBucket = state.progress ? Math.floor(state.progress.elapsedHours) : 0;
 
@@ -113,8 +130,12 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
     }
     if (!windField) return undefined;
     const grid = sampleWindGrid(windField, bounds, fieldCols, fieldRows, elapsedHourBucket);
-    return { cells: windCells(grid), cols: fieldCols, rows: fieldRows };
-  }, [race, activeLayer, windField, tidalField, fieldRows, elapsedHourBucket, mapWidth, mapHeight]);
+    return {
+      cells: activeLayer === 'gust' ? gustCells(grid, gustRatio) : windCells(grid),
+      cols: fieldCols,
+      rows: fieldRows,
+    };
+  }, [race, activeLayer, windField, tidalField, fieldRows, elapsedHourBucket, mapWidth, mapHeight, gustRatio]);
 
   // Competitor map positions — recomputed only when the fleet advances (each tick),
   // memoised so the value is stable for any render that isn't a fleet update.
@@ -258,7 +279,12 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
         if (activeLayer === 'tide' && tidalField) {
           field = { cells: tideCells(sampleTideField(tidalField, bounds, cols, rows, elapsedHourBucket)), cols, rows };
         } else if (windField) {
-          field = { cells: windCells(sampleWindGrid(windField, bounds, cols, rows, elapsedHourBucket)), cols, rows };
+          const grid = sampleWindGrid(windField, bounds, cols, rows, elapsedHourBucket);
+          field = {
+            cells: activeLayer === 'gust' ? gustCells(grid, gustRatio) : windCells(grid),
+            cols,
+            rows,
+          };
         }
         if (field) cockpitFieldCache.current = { key: cacheKey, field };
       }
@@ -275,6 +301,9 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
           windFeature={
             windField ? featureState(windField, cockpitProgress.elapsedHours) : undefined
           }
+          windFeatures={
+            windField ? featureStates(windField, cockpitProgress.elapsedHours).slice(1) : undefined
+          }
           nextMarkIndex={cockpitProgress.nextMarkIndex}
           land={LANDMASSES[race.id]}
           width={w}
@@ -282,7 +311,7 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
         />
       );
     },
-    [race, cockpitProgress, competitors, cockpitLayPaths, activeLayer, windField, tidalField, elapsedHourBucket]
+    [race, cockpitProgress, competitors, cockpitLayPaths, activeLayer, windField, tidalField, elapsedHourBucket, gustRatio]
   );
 
   const confirmRetire = useCallback(() => {
@@ -389,16 +418,19 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
             windFeature={
               state.windField ? featureState(state.windField, progress.elapsedHours) : undefined
             }
+            windFeatures={
+              state.windField
+                ? featureStates(state.windField, progress.elapsedHours).slice(1)
+                : undefined
+            }
             nextMarkIndex={progress.nextMarkIndex}
             land={LANDMASSES[race.id]}
             width={mapWidth}
             height={mapHeight}
           />
-          {hasTide ? (
-            <View style={styles.layerToggle}>
-              <MapLayerToggle layer={activeLayer} onChange={setMapLayer} />
-            </View>
-          ) : null}
+          <View style={styles.layerToggle}>
+            <MapLayerToggle layer={activeLayer} options={layerOptions} onChange={setMapLayer} />
+          </View>
         </View>
         <View style={{ width: mapWidth, alignSelf: 'center' }}>
           <WindScaleLegend layer={activeLayer} />

@@ -4,21 +4,24 @@ import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
 import type { FlowLayer } from './flowField';
 
 // The PredictWind-style layer switch that sits over the chart: flip the colour
-// field + flow animation between the breeze and the tidal stream. Only mounted
-// when the course actually has a running tide, so it's never a dead control.
+// field + flow animation between the layers the screen offers (Wind · Gust,
+// plus Tide where the course runs a stream, plus Forecast spread on the
+// briefing). The screen passes only the layers that are live here, so a
+// segment is never a dead control.
+export interface MapLayerOption {
+  key: FlowLayer;
+  label: string;
+}
+
 interface MapLayerToggleProps {
   layer: FlowLayer;
+  options: MapLayerOption[];
   onChange: (layer: FlowLayer) => void;
 }
 
-const OPTIONS: { key: FlowLayer; label: string }[] = [
-  { key: 'wind', label: 'Wind' },
-  { key: 'tide', label: 'Tide' },
-];
-
-export const MapLayerToggle: React.FC<MapLayerToggleProps> = ({ layer, onChange }) => (
+export const MapLayerToggle: React.FC<MapLayerToggleProps> = ({ layer, options, onChange }) => (
   <View style={styles.wrap}>
-    {OPTIONS.map((opt) => {
+    {options.map((opt) => {
       const active = opt.key === layer;
       return (
         <Pressable

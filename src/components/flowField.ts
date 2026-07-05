@@ -12,7 +12,10 @@ const IS_WEB = typeof document !== 'undefined';
 // unit-testable without a JSX transform. Builds a pixel-space velocity grid from
 // a sampled field and bilinear-samples it; no React, no engine rng.
 
-export type FlowLayer = 'wind' | 'tide';
+// The chart's colour-field layers: the breeze, the gusts it tops out at, the
+// tidal stream, and the forecast's uncertainty envelope. Gust and spread are
+// wind-shaped (named by origin, kn, the wind ramp); only tide differs.
+export type FlowLayer = 'wind' | 'gust' | 'tide' | 'spread';
 
 // One sample of the active field: a direction (named by origin for wind, by set
 // for tide — buildFlowField resolves which) and a magnitude in knots.
@@ -171,4 +174,15 @@ export function windCells(arrows: WindArrow[]): FlowCell[] {
 
 export function tideCells(arrows: CurrentArrow[]): FlowCell[] {
   return arrows.map((a) => ({ lat: a.lat, lon: a.lon, dirDeg: a.setDeg, speedKn: a.rateKn }));
+}
+
+// The gust field: the sampled mean wind scaled by the course's (capped) gust
+// ratio — see engine/wind's gustRatioFor. Same grid, same ramp, hotter reading.
+export function gustCells(arrows: WindArrow[], gustRatio: number): FlowCell[] {
+  return arrows.map((a) => ({
+    lat: a.lat,
+    lon: a.lon,
+    dirDeg: a.fromDeg,
+    speedKn: a.speedKn * gustRatio,
+  }));
 }
