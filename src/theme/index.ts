@@ -60,12 +60,45 @@ export const fontWeight: Record<'regular' | 'medium' | 'bold', TextStyle['fontWe
   bold: '700',
 };
 
+// Numeric typography for instruments: tabular lining figures so a live value
+// never reflows as its digits change. Spread into any Text style that shows a
+// racing number.
+export const numeric: Pick<TextStyle, 'fontVariant'> = {
+  fontVariant: ['tabular-nums'],
+};
+
+// Semantic status aliases — the meaning, not the pigment. All reuse existing
+// palette values; no new colours. `labelOnPanel` is the micro-label tint on
+// card/panel surfaces, lifted from `slate` (≈3.2:1 on card) to `mist` so
+// uppercase 11pt labels clear 4.5:1.
+export const status = {
+  good: colors.signalGreen,
+  warn: colors.warning,
+  bad: colors.signalRed,
+  info: colors.tide,
+  labelOnPanel: colors.mist,
+};
+
+// Surface materials: which existing colour plays which structural role, so
+// panels/cards/hairlines stay consistent across the cockpit.
+export const surface = {
+  screen: colors.abyss,
+  panel: colors.navy,
+  card: colors.card,
+  raised: colors.hull,
+  hairline: colors.hull,
+  accentBorder: colors.cardBorder,
+};
+
 export const theme = {
   colors,
   spacing,
   radius,
   fontSize,
   fontWeight,
+  numeric,
+  status,
+  surface,
 };
 
 export default theme;

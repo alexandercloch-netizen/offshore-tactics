@@ -48,7 +48,19 @@ The simulation is a **pure, deterministic engine** with a thin React UI on top.
     field, so it stays fair and deterministic.
   - `polar.ts` / `polarTable.ts` / `polarImport.ts` — boat speed from polar
     diagrams (parametric for catalogue boats, real tables for custom boats).
-  - `sails.ts` — specialist-sail wardrobe → effective polar.
+  - `sails.ts` — the wardrobe: `effectivePolar` (base lifted by every owned
+    sail — the *planner's* boat: routing, targets, the fleet benchmark) and the
+    **flown-sail spine** (`flownSailMul`/`raceWardrobe`): the ONE sail actually
+    flying multiplies the BASE polar — a specialist earns its boost in its
+    envelope and bites *below* base grossly outside it; the working set is
+    exactly 1.0 and indestructible. Catalogue boats carry their class wardrobe
+    free (`Boat.boatType`); custom boats their purchased sails. Manual changes
+    go through `resolveSailChange` (gameEngine): time cost + a Bowman-weighted
+    seeded bungle + a heavy-air blow-out roll — **exactly two RNG draws, only
+    on a committed distinct change**, so a zero-change race is byte-identical
+    to the pre-wardrobe game (pinned by `goldenRace.test.ts` — never re-bless
+    those pins; fix the code instead). Event choices write the same
+    `progress.activeSailId` via `TacticalChoice.setsSail`.
   - `router.ts` — isochrone-ish weather routing along the course. Takes an
     optional `WindSampler`; the briefing passes a forecast sampler (blurred by
     Navigator skill) so the *planned* route/ETA reflect the believed forecast,
@@ -103,10 +115,20 @@ The simulation is a **pure, deterministic engine** with a thin React UI on top.
   RaceMap. The `ResultsScreen` debrief contrasts the sailed track with the optimal
   line (`RaceResult.trail`/`optimalRoute`/`optimalHours`, captured in `buildResult`).
 - **`src/components/`** — `RouteMap` (the SVG chart, incl. the wind-speed
-  heatmap), `PolarViewer`, `WindIndicator`, `TacticalDecisionModal`,
-  `ForecastScrubber` (briefing forecast timeline), `ForecastGraph` (the
-  briefing meteogram — wind over the passage), `WindScaleLegend`,
-  `windScale.ts` (the shared kn→colour ramp), etc.
+  heatmap), `PolarViewer`, `WindIndicator`, `ForecastScrubber` (briefing
+  forecast timeline), `ForecastGraph` (the briefing meteogram — wind over the
+  passage), `WindScaleLegend`, `windScale.ts` (the shared kn→colour ramp), etc.
+  **`components/cockpit/`** is the racing screen's fixed frame: `RaceCockpit`
+  (the flex contract — chart floor 260/300, the 2-D rail rule `width ≥ 900 OR
+  usableHeight < 640`), `StatusRibbon` (elapsed + corrected standing/gap),
+  `InstrumentBand`/`InstrumentCell` + `cells.ts` (exactly six cells; the pure
+  cell builders + tint rules), `ControlDock`/`OverflowSheet`, and
+  `DecisionDock` — the ONE docked lane decisions, the sail picker and the
+  debrief ribbon all render through (the sim HOLDS while it's open; the
+  ribbon's auto-continue is an independent `setTimeout`, never tick-driven).
+  There is no racing Modal: `TutorialOverlay` is an inline coach strip.
+  Motion comes from `lib/motion.ts` + `lib/useReducedMotion.ts` (core RN
+  `Animated` only).
 - **`src/services/`** — Supabase I/O (`cloudSave`, `leaderboard`, `profile`).
 - **`src/navigation/AppNavigator.tsx`** — the navigator + the auth gate.
 - **`supabase/schema.sql`** — the backend schema (tables, RLS, RPCs). Idempotent.
@@ -134,6 +156,14 @@ signature hazard is a set-piece tied to its mark (`Race.hazardWaypoint`).
 
 - Unit tests live in `src/__tests__/`, one file per engine/data module. Prefer
   testing the pure engine over the UI; seed the RNG for determinism.
+- **`goldenRace.test.ts` is the determinism contract**: three seeded headless
+  playthroughs of the real `stepRace` loop pinned to exact outcomes AND the
+  exact RNG draw count. If a pin moves, the change broke stream neutrality —
+  fix it, don't re-bless.
+- Cockpit **render tests** (`*.test.tsx`) run under the same node jest against
+  the lightweight react-native mock in `src/testing/` (mapped via
+  `jest.config.js` moduleNameMapper) — they assert the TREE (no Modal
+  mid-race, the chart outside every scroller, six cells), not pixels.
 - The **e2e** (`e2e/playthrough.spec.ts`) plays a full race in the web build.
   Note: the dev sandbox often **cannot download the Playwright browser**
   (network policy), so e2e is validated by **CI**, not locally. Keep its

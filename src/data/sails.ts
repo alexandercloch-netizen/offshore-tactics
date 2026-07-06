@@ -99,12 +99,49 @@ const AVAILABILITY: Record<BoatType, string[]> = {
   ],
 };
 
+// The standard working set every boat carries — the canvas the base polar was
+// measured under. Always selectable, exactly a 1.0 multiplier everywhere
+// (boost 0, an envelope wider than any race sails in), free, and indestructible:
+// a boat is never bare-headed, whatever blows out. Two entries so the picker's
+// headsail/downwind slots both have their fallback.
+export const WORKING_SAILS: Sail[] = [
+  {
+    id: 'working-jib',
+    name: 'Working Sails',
+    category: 'headsail',
+    blurb: 'Main and working jib — the boat as rated',
+    twaMin: 0,
+    twaMax: 180,
+    twsMin: 0,
+    twsMax: 99,
+    boost: 0,
+    baseCost: 0,
+  },
+  {
+    id: 'working-kite',
+    name: 'All-round Kite',
+    category: 'spinnaker',
+    blurb: 'The standard all-round runner — the boat as rated',
+    twaMin: 0,
+    twaMax: 180,
+    twsMin: 0,
+    twsMax: 99,
+    boost: 0,
+    baseCost: 0,
+  },
+];
+
+// The working set never blows out and never bites: it IS the base polar.
+export function isWorkingSail(id?: string): boolean {
+  return !id || id.startsWith('working-');
+}
+
 // Cruiser-racer price anchors the sail-cost scale; bigger, faster boats carry
 // proportionally pricier sails.
 const COST_ANCHOR = 16000;
 
 export function getSailById(id: string): Sail | undefined {
-  return SAILS.find((s) => s.id === id);
+  return SAILS.find((s) => s.id === id) ?? WORKING_SAILS.find((s) => s.id === id);
 }
 
 // The sails a given class is allowed to add, in catalogue order.

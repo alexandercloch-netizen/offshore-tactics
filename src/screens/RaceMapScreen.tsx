@@ -1,102 +1,97 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  useWindowDimensions,
-  View,
-} from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  GameEvent,
-  GameState,
-  RootStackParamList,
-  TacticalChoice,
-  VmgPreview,
-} from '../types';
+import { GameEvent, GameState, GeoPoint, RootStackParamList, TacticalChoice, VmgPreview } from '../types';
 import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
 import { getRaceById } from '../data';
 import { LANDMASSES } from '../data/landmasses';
+import { storylineForRace, signatureBeat } from '../data/storylines';
 import { useGame } from '../store/GameContext';
 import {
+  availableWardrobe,
   currentSpeed,
+  flownSpecialist,
   formatDuration,
+  formatGap,
   laylines,
   polarTargetSpeed,
   raceDivision,
   ratingTccFor,
+  recommendedSail,
   resolveBoatById,
+  sailChangeMinutes,
+  sailCoverageAtMark,
+  sailReadout,
   speedMadeGood,
   tacticalRead,
   tideRead,
   vmgPreview,
 } from '../engine/gameEngine';
 import type { TacticalRead } from '../engine/gameEngine';
-import { competitorPoints } from '../engine/fleet';
-import { courseAspect } from '../engine/geo';
-import {
-  featureState,
-  featureStates,
-  gustRatioFor,
-  pressureHint,
-  sampleWindGrid,
-  weatherOutlook,
-} from '../engine/wind';
+import { competitorPoints, correctedStandings } from '../engine/fleet';
+import { bearing, haversineNm } from '../engine/geo';
+import { featureState, featureStates, gustRatioFor, sampleWindGrid, weatherOutlook } from '../engine/wind';
 import { sampleTideField } from '../engine/current';
-import { buildInstrumentReport, InstrumentReport } from '../engine/instruments';
-import { EffortMode, RoutingBias } from '../types';
+import { buildInstrumentReport } from '../engine/instruments';
 import RouteMap, { chartViewportBounds, FlowField } from '../components/RouteMap';
 import { FlowLayer, windCells, tideCells, gustCells, fieldResolution } from '../components/flowField';
 import MapLayerToggle, { MapLayerOption } from '../components/MapLayerToggle';
 import WindScaleLegend from '../components/WindScaleLegend';
 import TutorialOverlay from '../components/TutorialOverlay';
-import WindIndicator from '../components/WindIndicator';
-import StatBar from '../components/StatBar';
-import NauticalButton from '../components/NauticalButton';
-import DecisionCockpit from '../components/DecisionCockpit';
 import LiveStandings from '../components/LiveStandings';
+import RaceCockpit, { cockpitLayout } from '../components/cockpit/RaceCockpit';
+import StatusRibbon from '../components/cockpit/StatusRibbon';
+import InstrumentBand from '../components/cockpit/InstrumentBand';
+import ControlDock from '../components/cockpit/ControlDock';
+import OverflowSheet, { SecondaryMetric } from '../components/cockpit/OverflowSheet';
+import DecisionDock, { DebriefInfo, DockMode, SailOption } from '../components/cockpit/DecisionDock';
+import { buildPrimaryCells, healthTint } from '../components/cockpit/cells';
 import { WarningIcon } from '../components/icons';
+import { useReducedMotion } from '../lib/useReducedMotion';
 import { confirmAction } from '../lib/confirm';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RaceMap'>;
 
 const TICK_MS = 150;
+// RouteMap draws its own padded, bordered frame; reserve it so the chart lands
+// flush inside the measured stage.
+const MAP_FRAME = 18;
+// How long the colour-scale legend lingers after the layer toggle is touched.
+const LEGEND_MS = 4000;
+
+function ordinal(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
 
 export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
-  const { state, beginRace, tick, decide, retireRace, setStrategy, markTutorialSeen } = useGame();
+  const reducedMotion = useReducedMotion();
+  const { state, beginRace, tick, decide, changeSail, retireRace, setStrategy, markTutorialSeen } =
+    useGame();
+
+  // The one docked lane's state machine: what the bottom region shows beyond
+  // the control console. While ANY mode is open the sim is held (eventActiveRef).
+  const [dockMode, setDockMode] = useState<DockMode | null>(null);
   const [activeEvent, setActiveEvent] = useState<GameEvent | null>(null);
   const [activeVmg, setActiveVmg] = useState<VmgPreview | null>(null);
-  const [activeInstruments, setActiveInstruments] = useState<InstrumentReport | null>(null);
   const [activeRead, setActiveRead] = useState<TacticalRead | null>(null);
+  const [debrief, setDebrief] = useState<DebriefInfo | null>(null);
+  const [mobPos, setMobPos] = useState<GeoPoint | null>(null);
+  const [overflowOpen, setOverflowOpen] = useState(false);
   const [paused, setPaused] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
-  // The live-standings strip updates on a calm cadence (~2s), not every 150ms
-  // tick, so it reads like a navigator's glance rather than a twitchy ticker.
+  const [legendUntil, setLegendUntil] = useState(0);
+  // The live-standings strip and the ribbon's corrected gap update on a calm
+  // cadence (~2s), not every 150ms tick — a navigator's glance, not a ticker.
   const [standingsBeat, setStandingsBeat] = useState(0);
 
   const race = getRaceById(state.selectedRaceId);
   const boat = resolveBoatById(state, state.selectedBoatId);
 
-  // Chart dimensions — sized to the course shape and the viewport. Declared up
-  // here (not just before the <RouteMap/>) so the overlay grids below can be
-  // sampled to the whole chart, filling the map rather than the course box.
-  const CONTENT_MAX = 760;
-  const columnWidth = Math.min(width - spacing.lg * 2, CONTENT_MAX);
-  const mapWidth = columnWidth - spacing.sm * 2;
-  const mapAspect = race ? Math.max(0.55, Math.min(courseAspect(race.waypoints), 1.3)) : 1;
-  const mapHeight = Math.max(
-    300,
-    Math.min(Math.round(mapWidth * mapAspect), Math.round(height * 0.6))
-  );
-
-  // Which overlay the chart is showing: the breeze, what its gusts top out at,
-  // or — where the course has a running stream — the tide. A layer that isn't
-  // live for the course falls back to wind (its toggle segment is never shown).
   const windField = state.windField;
   const tidalField = state.tidalField;
   const hasTide = !!tidalField && (tidalField.peakRateKn > 0 || tidalField.driftKn > 0);
@@ -108,37 +103,9 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
     { key: 'gust', label: 'Gust' },
     ...(hasTide ? [{ key: 'tide' as FlowLayer, label: 'Tide' }] : []),
   ];
-  // The course's gust character (scenario gusts if the race sails one, else the
-  // baked climatology) — one honest multiplier over the sampled mean field.
   const gustRatio = windField ? gustRatioFor(windField, race?.id) : 1;
-
   const elapsedHourBucket = state.progress ? Math.floor(state.progress.elapsedHours) : 0;
 
-  // One dense, full grid drives both the smooth colour field and the flow
-  // animation. Density is sized to the chart pixels (fieldResolution) so the field
-  // reads as a continuous gradient on any course — a coarse fixed grid tiles on a
-  // long passage. Sampling is pure analytic maths, so density is cheap; the SVG
-  // node count is the only cost, and it's memoised to change on the hour, not every
-  // tick.
-  const { cols: fieldCols, rows: fieldRows } = fieldResolution(mapWidth, mapHeight);
-  const flowField = useMemo<FlowField | undefined>(() => {
-    if (!race) return undefined;
-    const bounds = chartViewportBounds(race.waypoints, mapWidth, mapHeight);
-    if (activeLayer === 'tide' && tidalField) {
-      const grid = sampleTideField(tidalField, bounds, fieldCols, fieldRows, elapsedHourBucket);
-      return { cells: tideCells(grid), cols: fieldCols, rows: fieldRows };
-    }
-    if (!windField) return undefined;
-    const grid = sampleWindGrid(windField, bounds, fieldCols, fieldRows, elapsedHourBucket);
-    return {
-      cells: activeLayer === 'gust' ? gustCells(grid, gustRatio) : windCells(grid),
-      cols: fieldCols,
-      rows: fieldRows,
-    };
-  }, [race, activeLayer, windField, tidalField, fieldRows, elapsedHourBucket, mapWidth, mapHeight, gustRatio]);
-
-  // Competitor map positions — recomputed only when the fleet advances (each tick),
-  // memoised so the value is stable for any render that isn't a fleet update.
   const competitors = useMemo(
     () => (race && state.fleet ? competitorPoints(state.fleet, race) : []),
     [race, state.fleet]
@@ -154,19 +121,18 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
   // Keep imperative helpers fresh for the auto-play interval.
   const tickRef = useRef(tick);
   tickRef.current = tick;
-  // Scroll the chart back into view when a decision docks over the screen, so
-  // the player can read their position behind the sheet/panel.
-  const scrollRef = useRef<ScrollView>(null);
   const stateRef = useRef<GameState>(state);
   stateRef.current = state;
   const eventActiveRef = useRef(false);
   const helpRef = useRef(false);
   helpRef.current = showHelp;
-  // Counts ticks so the standings strip can refresh on a calm cadence (~2s).
   const standingsTickRef = useRef(0);
-  // Caches the cockpit chart's flow field by its inputs so the decision cockpit
-  // doesn't reseed the particle swarm on every layout/render pass.
-  const cockpitFieldCache = useRef<{ key: string; field: FlowField } | null>(null);
+  // The position when the current interruption docked, so the debrief ribbon
+  // can report places gained/lost across the call.
+  const positionBeforeRef = useRef(0);
+  // The single chart's field cache: the swarm reseeds if the cells array
+  // identity changes, so rebuild only when size/layer/hour actually move.
+  const fieldCache = useRef<{ key: string; field: FlowField } | null>(null);
 
   const goToResults = useCallback(() => {
     navigation.reset({ index: 0, routes: [{ name: 'Results' }] });
@@ -174,7 +140,7 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
 
   const started = !!state.progress;
 
-  // Show the how-to-play overlay automatically on the player's first race.
+  // Show the coaching strip automatically on the player's first race.
   useEffect(() => {
     if (started && !state.tutorialSeen) setShowHelp(true);
   }, [started, state.tutorialSeen]);
@@ -185,16 +151,18 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
   }, [markTutorialSeen]);
 
   // The auto-play loop: tick the simulation forward until a decision or finish.
+  // Held while any dock is open (eventActiveRef), while the coach strip shows
+  // (helpRef) and while paused — exactly the pre-cockpit semantics.
   useEffect(() => {
     if (!started) return undefined;
     const id = setInterval(() => {
       if (paused || eventActiveRef.current || helpRef.current) return;
       const outcome = tickRef.current();
-      // Calm cadence: nudge the standings strip about every 2s (~13 ticks).
       standingsTickRef.current += 1;
       if (standingsTickRef.current % 13 === 0) setStandingsBeat((b) => b + 1);
       if (outcome.event) {
         eventActiveRef.current = true;
+        positionBeforeRef.current = outcome.progress.position;
         const tempState: GameState = {
           ...stateRef.current,
           progress: outcome.progress,
@@ -203,22 +171,15 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
         };
         setActiveVmg(vmgPreview(tempState, outcome.event));
         setActiveRead(tacticalRead(tempState));
-        // Instruments + this-leg trend, to inform the call.
-        const wf = stateRef.current.windField;
-        if (wf && race) {
-          const fleetSz = raceDivision(race, stateRef.current.selectedDivision).fleetSize;
-          const outlook = weatherOutlook(
-            wf,
-            outcome.progress.lat,
-            outcome.progress.lon,
-            outcome.progress.elapsedHours
-          );
-          setActiveInstruments(
-            buildInstrumentReport(outcome.progress, outcome.condition, fleetSz, outlook)
-          );
+        if (outcome.event.kind === 'mob') {
+          // Drop the swimmer a trail-point astern: the boat swept past before
+          // the shout went up, so the steer-to read is a real turn-back.
+          const trail = outcome.progress.trail;
+          const p = trail.length > 1 ? trail[trail.length - 2] : trail[trail.length - 1];
+          setMobPos(p ? { lat: p.lat, lon: p.lon } : null);
         }
         setActiveEvent(outcome.event);
-        scrollRef.current?.scrollTo({ y: 0, animated: true });
+        setDockMode('decision');
       }
       if (outcome.finished || outcome.retired) {
         clearInterval(id);
@@ -228,90 +189,75 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
     return () => clearInterval(id);
   }, [started, paused, goToResults]);
 
+  // Everything docked is resolved or dismissed through here: the lane closes,
+  // the hold lifts, the race sails on.
+  const closeDock = useCallback(() => {
+    setDockMode(null);
+    setActiveEvent(null);
+    setActiveVmg(null);
+    setActiveRead(null);
+    setDebrief(null);
+    setMobPos(null);
+    eventActiveRef.current = false;
+  }, []);
+
   const handleChoice = useCallback(
     (choice: TacticalChoice) => {
-      setActiveEvent(null);
-      setActiveVmg(null);
-      setActiveInstruments(null);
-      setActiveRead(null);
-      eventActiveRef.current = false;
       const outcome = decide(choice);
       if (outcome.finished || outcome.retired) {
+        // Retirement / hull-zero skips the ribbon and hands straight to the
+        // Results ceremony.
+        closeDock();
         goToResults();
+        return;
       }
+      // The dock morphs into the debrief ribbon; the sim stays held until the
+      // ribbon is acknowledged (tap, or its independent timeout).
+      setActiveEvent(null);
+      setActiveVmg(null);
+      setActiveRead(null);
+      const res = outcome.resolution;
+      setDebrief(
+        res
+          ? {
+              summary: res.summary,
+              glyph: res.bungled ? '✕' : res.paidOff === false ? '~' : '✓',
+              placesDelta: positionBeforeRef.current - outcome.progress.position,
+              lostMinutes: res.lostHours >= 1 / 60 ? Math.round(res.lostHours * 60) : undefined,
+            }
+          : null
+      );
+      setDockMode('debrief');
     },
-    [decide, goToResults]
+    [decide, closeDock, goToResults]
   );
 
-  // The cockpit owns the chart's size and asks for it via renderMap; memoised so a
-  // re-render that didn't move the race or fleet reuses the same closure. Reads the
-  // live progress/laylines off state so it can sit above the loadout guard.
-  const cockpitProgress = state.progress;
-  const cockpitLayPaths = useMemo(() => {
-    const l = state.windField ? laylines(state) : null;
-    return l ? [[l.mark, l.ends[0]], [l.mark, l.ends[1]]] : undefined;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.windField, cockpitProgress]);
-  const renderCockpitMap = useCallback(
-    (w: number, h: number) => {
-      if (!race || !cockpitProgress) return null;
-      // Sample the colour/flow field for the cockpit chart's OWN viewport — the
-      // race-screen flowField is sized to that map's aspect, so reusing it here
-      // would leave the sea short of the edges (dark gaps). Grid rows track the
-      // viewport aspect so the cells stay roughly square.
-      // Same pixel-sized density as the race/briefing charts so the cockpit field
-      // reads as a smooth gradient (guarding a pre-layout zero size).
-      const { cols, rows } = fieldResolution(
-        w > 1 ? w : 1,
-        Number.isFinite(h) && h > 1 ? h : w > 1 ? w : 1
-      );
-      // Memoise the field by its inputs (size/layer/hour): the cockpit re-renders
-      // as the modal animates in and on every measured layout pass, and rebuilding
-      // the cells array each time hands WindParticles a new reference that reseeds
-      // the whole swarm — a visible flicker. A stable object keeps the particles
-      // flowing continuously while the decision is up.
-      const cacheKey = `${w}x${h}|${cols}x${rows}|${activeLayer}|${elapsedHourBucket}`;
-      let field: FlowField | undefined;
-      if (cockpitFieldCache.current?.key === cacheKey) {
-        field = cockpitFieldCache.current.field;
-      } else {
-        const bounds = chartViewportBounds(race.waypoints, w, h);
-        if (activeLayer === 'tide' && tidalField) {
-          field = { cells: tideCells(sampleTideField(tidalField, bounds, cols, rows, elapsedHourBucket)), cols, rows };
-        } else if (windField) {
-          const grid = sampleWindGrid(windField, bounds, cols, rows, elapsedHourBucket);
-          field = {
-            cells: activeLayer === 'gust' ? gustCells(grid, gustRatio) : windCells(grid),
-            cols,
-            rows,
-          };
-        }
-        if (field) cockpitFieldCache.current = { key: cacheKey, field };
+  const openSailPicker = useCallback(() => {
+    if (eventActiveRef.current || !stateRef.current.progress) return;
+    eventActiveRef.current = true;
+    positionBeforeRef.current = stateRef.current.progress.position;
+    setOverflowOpen(false);
+    setDockMode('sail');
+  }, []);
+
+  const handleSailPick = useCallback(
+    (sailId: string) => {
+      const outcome = changeSail(sailId);
+      if (!outcome) {
+        // A no-op (same sail / blown) — retract, nothing happened, no draw.
+        closeDock();
+        return;
       }
-      return (
-        <RouteMap
-          waypoints={race.waypoints}
-          route={cockpitProgress.route}
-          trail={cockpitProgress.trail}
-          boat={{ lat: cockpitProgress.lat, lon: cockpitProgress.lon }}
-          competitors={competitors}
-          laylines={cockpitLayPaths}
-          field={field}
-          layer={activeLayer}
-          windFeature={
-            windField ? featureState(windField, cockpitProgress.elapsedHours) : undefined
-          }
-          windFeatures={
-            windField ? featureStates(windField, cockpitProgress.elapsedHours).slice(1) : undefined
-          }
-          nextMarkIndex={cockpitProgress.nextMarkIndex}
-          land={LANDMASSES[race.id]}
-          width={w}
-          height={h}
-        />
-      );
+      const res = outcome.resolution!;
+      setDebrief({
+        summary: res.summary,
+        glyph: res.bungled ? '✕' : '✓',
+        placesDelta: positionBeforeRef.current - outcome.progress.position,
+        lostMinutes: Math.round(res.lostHours * 60),
+      });
+      setDockMode('debrief');
     },
-    [race, cockpitProgress, competitors, cockpitLayPaths, activeLayer, windField, tidalField, elapsedHourBucket, gustRatio]
+    [changeSail, closeDock]
   );
 
   const confirmRetire = useCallback(() => {
@@ -327,6 +273,66 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
     });
   }, [retireRace, goToResults]);
 
+  const touchLayer = useCallback((layer: FlowLayer) => {
+    setMapLayer(layer);
+    setLegendUntil(Date.now() + LEGEND_MS);
+  }, []);
+  // Let the legend's linger expire (wall-clock, presentation only).
+  const [, forceLegendTick] = useState(0);
+  useEffect(() => {
+    if (legendUntil <= Date.now()) return undefined;
+    const id = setTimeout(() => forceLegendTick((n) => n + 1), legendUntil - Date.now() + 20);
+    return () => clearTimeout(id);
+  }, [legendUntil]);
+
+  // %TGT is smoothed over the last few ticks so the hero number reads as a
+  // trend, not a strobe. Keyed to elapsed time so a held sim holds the number.
+  const pctWindow = useRef<number[]>([]);
+  const progressElapsed = state.progress?.elapsedHours;
+  useEffect(() => {
+    if (progressElapsed === undefined) return;
+    const target = polarTargetSpeed(stateRef.current);
+    const speed = currentSpeed(stateRef.current);
+    if (target > 0) {
+      pctWindow.current.push((speed / target) * 100);
+      if (pctWindow.current.length > 8) pctWindow.current.shift();
+    }
+  }, [progressElapsed]);
+
+  // The ribbon's corrected standing + gap to the nearest rival, on the calm
+  // standings cadence — the honest handicap readout, top of screen. Hooks stay
+  // above the loading guard; the memo simply returns undefined pre-race.
+  const standingLabel = useMemo(() => {
+    const current = stateRef.current;
+    const r = getRaceById(current.selectedRaceId);
+    const b = resolveBoatById(current, current.selectedBoatId);
+    if (!r || !b || !current.progress || !current.fleet || current.fleet.length === 0) {
+      return undefined;
+    }
+    const rows = correctedStandings(
+      current.fleet,
+      r.distanceNm,
+      current.progress.elapsedHours,
+      ratingTccFor(b),
+      b.name
+    );
+    const idx = rows.findIndex((row) => row.isPlayer);
+    if (idx < 0) return undefined;
+    const mine = rows[idx].correctedHours;
+    let best: { name: string; gap: number; ahead: boolean } | undefined;
+    rows.forEach((row, i) => {
+      if (i === idx) return;
+      const gap = Math.abs(row.correctedHours - mine);
+      if (!best || gap < best.gap) best = { name: row.name, gap, ahead: row.correctedHours < mine };
+    });
+    const place = ordinal(idx + 1);
+    if (!best) return place;
+    const sign = best.ahead ? '+' : '−';
+    return `${place} · ${sign}${formatGap(best.gap * 3600)} to ${best.name}`;
+    // The cadence key IS the dependency: recompute on the calm beat only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [standingsBeat, started]);
+
   if (!race || !boat || !state.progress || !state.weather) {
     return (
       <View style={styles.loading}>
@@ -336,295 +342,266 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
     );
   }
 
-  const { progress, condition, weather } = state;
+  const { progress, condition } = state;
   const total = progress.totalDistanceNm;
   const covered = progress.distanceCoveredNm;
   const remaining = Math.max(total - covered, 0);
-  const pct = total > 0 ? Math.round((covered / total) * 100) : 0;
+  const pct = total > 0 ? (covered / total) * 100 : 0;
   const fleetSize = raceDivision(race, state.selectedDivision).fleetSize;
-  const speed = currentSpeed(state);
-  const currentVmg = speedMadeGood(state);
-  const etaHours = remaining / Math.max(currentVmg, 0.2);
-  // Tactical instruments: polar target (and how close we're sailing to it), the
-  // laylines to the next mark, and where the breeze is trending.
+  const vmc = speedMadeGood(state);
+  const etaHours = remaining / Math.max(vmc, 0.2);
   const target = polarTargetSpeed(state);
-  const polarPct = target > 0 ? Math.round((speed / target) * 100) : 0;
+  const tide = tideRead(state);
+  const sail = sailReadout(state);
   const lay = laylines(state);
   const layPaths = lay ? [[lay.mark, lay.ends[0]], [lay.mark, lay.ends[1]]] : undefined;
-  const read = state.windField ? tacticalRead(state) : null;
-  const tide = tideRead(state);
-  const recentLog = state.eventLog.slice(-4).reverse();
-  const strategy = state.strategy;
-  const hint =
-    state.windField !== undefined
-      ? pressureHint(state.windField, progress.lat, progress.lon, progress.elapsedHours)
-      : null;
-  // What the breeze is about to do — drives the on-chart weather warning.
   const outlook =
-    state.windField !== undefined
-      ? weatherOutlook(state.windField, progress.lat, progress.lon, progress.elapsedHours)
+    windField !== undefined
+      ? weatherOutlook(windField, progress.lat, progress.lon, progress.elapsedHours)
       : null;
 
-  return (
-    <View style={styles.screen}>
-      <ScrollView
-        ref={scrollRef}
-        contentContainerStyle={[styles.content, { paddingBottom: spacing.xxl }]}
-      >
-        <View style={{ width: columnWidth }}>
-        <View style={styles.headerRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.raceName}>{race.name}</Text>
-            <Text style={styles.boatName}>aboard {boat.name}</Text>
-          </View>
-          <View style={styles.positionBox}>
-            <Text style={styles.positionValue}>{progress.position}</Text>
-            <Text style={styles.positionLabel}>of {fleetSize}</Text>
-          </View>
-        </View>
+  // The band: exactly six cells, one home per number, identical idle & docked.
+  const report = buildInstrumentReport(
+    progress,
+    condition,
+    fleetSize,
+    outlook ?? {
+      nowKn: progress.windSpeedKn,
+      soonKn: progress.windSpeedKn,
+      peakKn: progress.windSpeedKn,
+      trend: 'steady',
+      warn: false,
+      headline: '',
+      lookaheadH: 2,
+    },
+    { targetKn: target, vmcKn: vmc, tide, activeSail: sail }
+  );
+  const smoothedPct =
+    pctWindow.current.length > 0
+      ? pctWindow.current.reduce((a, b) => a + b, 0) / pctWindow.current.length
+      : report.now.polarPct;
+  const cells = buildPrimaryCells(report, smoothedPct);
+  const health = healthTint(condition.hullIntegrity, condition.crewStamina, condition.crewMorale);
 
-        {outlook?.warn ? (
-          <View
-            style={[
-              styles.weatherWarning,
-              outlook.peakKn >= 34 && styles.weatherWarningSevere,
-            ]}
-          >
-            <WarningIcon
-              size={15}
-              color={outlook.peakKn >= 34 ? colors.signalRed : colors.warning}
-            />
-            <Text style={styles.weatherWarningText}>
-              {outlook.headline} · {Math.round(outlook.peakKn)} kn
-              {outlook.trend === 'building' ? ` within ${outlook.lookaheadH}h` : ''}
-            </Text>
-          </View>
-        ) : null}
+  // The single live chart, drawn to the measured stage. The colour/flow field
+  // is cached by its inputs so a layout pass doesn't reseed the particle swarm.
+  const renderChart = (w: number, h: number): React.ReactNode => {
+    const innerW = Math.max(w - MAP_FRAME, 50);
+    const innerH = Math.max(h - MAP_FRAME, 50);
+    const { cols, rows } = fieldResolution(innerW, innerH);
+    const cacheKey = `${innerW}x${innerH}|${cols}x${rows}|${activeLayer}|${elapsedHourBucket}|${gustRatio}`;
+    let field: FlowField | undefined;
+    if (fieldCache.current?.key === cacheKey) {
+      field = fieldCache.current.field;
+    } else {
+      const bounds = chartViewportBounds(race.waypoints, innerW, innerH);
+      if (activeLayer === 'tide' && tidalField) {
+        field = {
+          cells: tideCells(sampleTideField(tidalField, bounds, cols, rows, elapsedHourBucket)),
+          cols,
+          rows,
+        };
+      } else if (windField) {
+        const grid = sampleWindGrid(windField, bounds, cols, rows, elapsedHourBucket);
+        field = {
+          cells: activeLayer === 'gust' ? gustCells(grid, gustRatio) : windCells(grid),
+          cols,
+          rows,
+        };
+      }
+      if (field) fieldCache.current = { key: cacheKey, field };
+    }
+    return (
+      <RouteMap
+        waypoints={race.waypoints}
+        route={progress.route}
+        trail={progress.trail}
+        boat={{ lat: progress.lat, lon: progress.lon }}
+        competitors={competitors}
+        laylines={layPaths}
+        field={field}
+        layer={activeLayer}
+        windFeature={windField ? featureState(windField, progress.elapsedHours) : undefined}
+        windFeatures={
+          windField ? featureStates(windField, progress.elapsedHours).slice(1) : undefined
+        }
+        nextMarkIndex={progress.nextMarkIndex}
+        land={LANDMASSES[race.id]}
+        mobMarker={mobPos ?? undefined}
+        testID="race-chart"
+        width={innerW}
+        height={innerH}
+      />
+    );
+  };
 
-        <View style={{ width: mapWidth, alignSelf: 'center' }}>
-          <RouteMap
-            waypoints={race.waypoints}
-            route={progress.route}
-            trail={progress.trail}
-            boat={{ lat: progress.lat, lon: progress.lon }}
-            competitors={competitors}
-            laylines={layPaths}
-            field={flowField}
-            layer={activeLayer}
-            // Pause the background particle loop while the decision cockpit is
-            // up — it renders its own live chart, so two RAF loops would run at
-            // once behind the modal.
-            animate={!activeEvent}
-            windFeature={
-              state.windField ? featureState(state.windField, progress.elapsedHours) : undefined
-            }
-            windFeatures={
-              state.windField
-                ? featureStates(state.windField, progress.elapsedHours).slice(1)
-                : undefined
-            }
-            nextMarkIndex={progress.nextMarkIndex}
-            land={LANDMASSES[race.id]}
-            width={mapWidth}
-            height={mapHeight}
+  const chartOverlays = (
+    <>
+      {state.fleet && state.fleet.length > 0 ? (
+        <View style={styles.standingsOverlay}>
+          <LiveStandings
+            fleet={state.fleet}
+            totalNm={race.distanceNm}
+            playerElapsedHours={progress.elapsedHours}
+            playerTcc={ratingTccFor(boat)}
+            playerName={boat.name}
+            cadenceKey={standingsBeat}
           />
-          <View style={styles.layerToggle}>
-            <MapLayerToggle layer={activeLayer} options={layerOptions} onChange={setMapLayer} />
-          </View>
         </View>
-        <View style={{ width: mapWidth, alignSelf: 'center' }}>
+      ) : null}
+      <View style={styles.layerToggle}>
+        <MapLayerToggle layer={activeLayer} options={layerOptions} onChange={touchLayer} />
+      </View>
+      {outlook?.warn && dockMode === null ? (
+        <View
+          style={[styles.weatherBanner, outlook.peakKn >= 34 && styles.weatherBannerSevere]}
+          testID="weather-banner"
+        >
+          <WarningIcon size={14} color={outlook.peakKn >= 34 ? colors.signalRed : colors.warning} />
+          <Text style={styles.weatherBannerText} numberOfLines={1}>
+            {outlook.headline} · {Math.round(outlook.peakKn)} kn
+            {outlook.trend === 'building' ? ` within ${outlook.lookaheadH}h` : ''}
+          </Text>
+        </View>
+      ) : null}
+      {legendUntil > Date.now() ? (
+        <View style={styles.legendOverlay}>
           <WindScaleLegend layer={activeLayer} />
         </View>
+      ) : null}
+    </>
+  );
 
-        {state.fleet && state.fleet.length > 0 ? (
-          <View style={{ width: mapWidth, alignSelf: 'center', marginTop: spacing.md }}>
-            <LiveStandings
-              fleet={state.fleet}
-              totalNm={race.distanceNm}
-              playerElapsedHours={progress.elapsedHours}
-              playerTcc={ratingTccFor(boat)}
-              playerName={boat.name}
-              cadenceKey={standingsBeat}
-            />
-          </View>
-        ) : null}
+  // The sail picker's rows: the Navigator's call first, then the rest of the
+  // wardrobe by category, working fallbacks in place — never bare-headed.
+  const buildSailOptions = (): SailOption[] => {
+    const rec = recommendedSail(state);
+    const flying = flownSpecialist(progress);
+    const order: Record<string, number> = { headsail: 0, reacher: 1, spinnaker: 2, stormsail: 3 };
+    const rows = availableWardrobe(state).map((s) => ({
+      sail: s,
+      current: s.boost > 0 ? s.id === flying?.id : !flying && s.id === 'working-jib',
+      recommended: rec?.id === s.id,
+      coverage: sailCoverageAtMark(state, s),
+      minutes: sailChangeMinutes(s.boost > 0 ? s : undefined),
+    }));
+    rows.sort(
+      (a, b) =>
+        Number(b.recommended) - Number(a.recommended) ||
+        (order[a.sail.category] ?? 9) - (order[b.sail.category] ?? 9) ||
+        Number(b.sail.boost > 0) - Number(a.sail.boost > 0)
+    );
+    return rows;
+  };
 
-        <View style={styles.progressTrack}>
-          <View style={[styles.progressFill, { width: `${pct}%` }]} />
-        </View>
+  // The signature decision's narrative framing, when this event carries one.
+  const story = activeEvent?.storyBeat ? storylineForRace(race.id) : undefined;
+  const beatBody = story ? signatureBeat(story)?.body : undefined;
 
-        <View style={styles.metricsRow}>
-          <Metric label="Sailed" value={`${Math.round(covered)} nm`} />
-          <Metric label="To go" value={`${Math.round(remaining)} nm`} />
-          <Metric label="Done" value={`${pct}%`} />
-        </View>
-        <View style={styles.metricsRow}>
-          <Metric label="Elapsed" value={formatDuration(progress.elapsedHours)} />
-          <Metric label="Speed" value={`${speed.toFixed(1)} kn`} />
-          <Metric label="ETA" value={remaining <= 0 ? '—' : formatDuration(etaHours)} />
-        </View>
-        <View style={styles.metricsRow}>
-          <Metric label="VMG" value={`${currentVmg.toFixed(1)} kn`} />
-          <Metric label="Target" value={`${target.toFixed(1)} kn`} />
-          <Metric label="% Polar" value={`${polarPct}%`} />
-        </View>
+  // MOB steer-to read: bearing + range from the held boat to the swimmer.
+  const mobInfo = mobPos
+    ? {
+        bearingDeg: bearing(progress.lat, progress.lon, mobPos.lat, mobPos.lon),
+        rangeNm: haversineNm(progress.lat, progress.lon, mobPos.lat, mobPos.lon),
+      }
+    : undefined;
 
-        <View style={styles.panel}>
-          <View style={styles.windRow}>
-            <WindIndicator weather={weather} size={110} />
-            <View style={styles.windInfo}>
-              <Text style={styles.nextLeg}>Point of sail</Text>
-              <Text style={styles.pointOfSail}>{progress.pointOfSail}</Text>
-              <Text style={styles.vmgLine}>VMG {currentVmg.toFixed(1)} kn</Text>
-              <Text style={styles.weatherDesc}>{weather.description}</Text>
-              {tide ? (
-                <Text style={styles.tideLine}>
-                  Tide {tide.rateKn.toFixed(1)} kn ·{' '}
-                  {Math.abs(tide.along) < 0.1
-                    ? 'across'
-                    : tide.along > 0
-                      ? `fair +${tide.along.toFixed(1)}`
-                      : `foul ${tide.along.toFixed(1)}`}
-                </Text>
-              ) : null}
-            </View>
-          </View>
-        </View>
+  const usableHeight = Math.max(height - insets.top - insets.bottom, 320);
+  const docked = dockMode !== null;
+  const layout = cockpitLayout(width, usableHeight, docked);
 
-        <View style={styles.panel}>
-          <View style={styles.tacticsHeader}>
-            <Text style={styles.panelTitle}>Tactics</Text>
-            {hint ? (
-              <Text style={styles.hint}>
-                {hint.strong ? 'More breeze' : 'Slightly more breeze'} to the {hint.compass}
-              </Text>
-            ) : null}
-          </View>
-          {read ? (
-            <Text style={styles.trendLine}>
-              Ahead: {trendShift(read.shiftDeg)} · {trendBuild(read.buildKn)}
-            </Text>
-          ) : null}
+  const secondaryMetrics: SecondaryMetric[] = [
+    { label: 'HDG', value: `${Math.round(progress.heading)}°` },
+    { label: 'TWD', value: `${Math.round(progress.windDir)}°` },
+    { label: 'To go', value: `${Math.round(remaining)} nm` },
+    { label: 'Sailed', value: `${Math.round(covered)} nm` },
+    { label: 'ETA', value: remaining <= 0 ? '—' : formatDuration(etaHours) },
+    ...(tide
+      ? [
+          {
+            label: 'Tide',
+            value: `${tide.rateKn.toFixed(1)} kn ${
+              Math.abs(tide.along) < 0.1 ? 'across' : tide.along > 0 ? 'fair' : 'foul'
+            }`,
+          },
+        ]
+      : []),
+  ];
 
-          <Text style={styles.tacticsLabel}>Effort</Text>
-          <Segmented<EffortMode>
-            value={strategy.effort}
-            options={[
-              { value: 'conserve', label: 'Conserve' },
-              { value: 'cruise', label: 'Cruise' },
-              { value: 'push', label: 'Push' },
-            ]}
-            onSelect={(effort) => setStrategy({ effort })}
-          />
-
-          <Text style={[styles.tacticsLabel, { marginTop: spacing.sm }]}>Routing</Text>
-          <Segmented<RoutingBias>
-            value={strategy.bias}
-            options={[
-              { value: -1, label: 'Bank Left' },
-              { value: 0, label: 'Optimal' },
-              { value: 1, label: 'Bank Right' },
-            ]}
-            onSelect={(bias) => setStrategy({ bias })}
-          />
-        </View>
-
-        <View style={styles.panel}>
-          <Text style={styles.panelTitle}>Boat & Crew</Text>
-          <StatBar label="Hull Integrity" value={condition.hullIntegrity} />
-          <StatBar label="Crew Stamina" value={condition.crewStamina} />
-          <StatBar label="Crew Morale" value={condition.crewMorale} />
-        </View>
-
-        {recentLog.length > 0 ? (
-          <View style={styles.panel}>
-            <Text style={styles.panelTitle}>Ship's Log</Text>
-            {recentLog.map((entry, i) => (
-              <Text key={`${entry}-${i}`} style={styles.logEntry}>
-                • {entry}
-              </Text>
-            ))}
-          </View>
-        ) : null}
-        </View>
-      </ScrollView>
-
-      <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
-        <NauticalButton
-          label={paused ? 'Resume' : 'Pause'}
-          variant={paused ? 'primary' : 'secondary'}
-          onPress={() => setPaused((p) => !p)}
-        />
-        <View style={styles.footerRow}>
-          <View style={{ flex: 1 }}>
-            <NauticalButton label="How to Race" variant="ghost" onPress={() => setShowHelp(true)} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <NauticalButton label="Retire" variant="ghost" onPress={confirmRetire} />
-          </View>
-        </View>
-      </View>
-
+  const controls = (
+    <View>
       <TutorialOverlay visible={showHelp} onClose={closeHelp} />
+      <ControlDock
+        strategy={state.strategy}
+        onStrategy={setStrategy}
+        onCallSailChange={openSailPicker}
+        onHelp={() => setShowHelp(true)}
+        onOverflow={() => setOverflowOpen(true)}
+        healthTint={health}
+        compact={!layout.rail}
+      />
+      <View style={{ height: insets.bottom + spacing.sm, backgroundColor: colors.deepSea }} />
+    </View>
+  );
 
-      <DecisionCockpit
-        visible={!!activeEvent}
+  const dock = docked ? (
+    <View>
+      <DecisionDock
+        mode={dockMode!}
+        hold
+        reducedMotion={reducedMotion}
+        maxHeight={layout.dockMaxHeight}
         event={activeEvent}
         vmg={activeVmg}
-        instruments={activeInstruments}
         read={activeRead}
-        onSelect={handleChoice}
-        renderMap={renderCockpitMap}
+        storyBeat={beatBody}
+        mobInfo={mobInfo}
+        onChoice={handleChoice}
+        sailOptions={dockMode === 'sail' ? buildSailOptions() : undefined}
+        onSailPick={handleSailPick}
+        debrief={debrief ?? undefined}
+        onDismiss={dockMode === 'decision' ? undefined : closeDock}
+      />
+      <View style={{ height: insets.bottom + spacing.sm, backgroundColor: colors.deepSea }} />
+    </View>
+  ) : undefined;
+
+  const sheet = overflowOpen ? (
+    <OverflowSheet
+      condition={condition}
+      metrics={secondaryMetrics}
+      log={state.eventLog.slice(-6).reverse()}
+      paused={paused}
+      onPause={() => setPaused((p) => !p)}
+      onRetire={confirmRetire}
+      onClose={() => setOverflowOpen(false)}
+      maxHeight={layout.dockMaxHeight + 120}
+    />
+  ) : undefined;
+
+  return (
+    <View style={[styles.screen, { paddingTop: insets.top }]}>
+      <RaceCockpit
+        layout={layout}
+        ribbon={
+          <StatusRibbon
+            raceName={race.name}
+            elapsed={formatDuration(progress.elapsedHours)}
+            standing={standingLabel}
+          />
+        }
+        chart={renderChart}
+        chartOverlays={chartOverlays}
+        band={<InstrumentBand cells={cells} onSailPress={openSailPicker} reducedMotion={reducedMotion} />}
+        controls={controls}
+        dock={dock}
+        sheet={sheet}
+        progressPct={pct}
+        held={docked}
       />
     </View>
   );
 };
-
-// Short descriptions of the forecast shift/build over the next ~hour, for the HUD.
-const trendShift = (deg: number): string => {
-  const r = Math.round(deg);
-  if (r > 3) return `veering ${r}°`;
-  if (r < -3) return `backing ${Math.abs(r)}°`;
-  return 'steady wind';
-};
-const trendBuild = (kn: number): string => {
-  const r = Math.round(kn);
-  if (r > 1) return `building +${r} kn`;
-  if (r < -1) return `easing ${r} kn`;
-  return 'holding';
-};
-
-const Metric: React.FC<{ label: string; value: string }> = ({ label, value }) => (
-  <View style={styles.metric}>
-    <Text style={styles.metricValue}>{value}</Text>
-    <Text style={styles.metricLabel}>{label}</Text>
-  </View>
-);
-
-interface SegmentedProps<T> {
-  value: T;
-  options: { value: T; label: string }[];
-  onSelect: (value: T) => void;
-}
-
-function Segmented<T extends string | number>({ value, options, onSelect }: SegmentedProps<T>) {
-  return (
-    <View style={styles.segmented}>
-      {options.map((opt) => {
-        const active = opt.value === value;
-        return (
-          <Pressable
-            key={String(opt.value)}
-            onPress={() => onSelect(opt.value)}
-            style={[styles.segment, active && styles.segmentActive]}
-          >
-            <Text style={[styles.segmentLabel, active && styles.segmentLabelActive]}>{opt.label}</Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
 
 const styles = StyleSheet.create({
   screen: {
@@ -641,224 +618,45 @@ const styles = StyleSheet.create({
     color: colors.mist,
     fontSize: fontSize.md,
   },
-  content: {
-    padding: spacing.lg,
-    alignItems: 'center',
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.md,
-  },
-  raceName: {
-    color: colors.foam,
-    fontSize: fontSize.xl,
-    fontWeight: fontWeight.bold,
-  },
-  boatName: {
-    color: colors.mist,
-    fontSize: fontSize.sm,
-  },
-  positionBox: {
-    alignItems: 'center',
-    backgroundColor: colors.navy,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-  },
-  positionValue: {
-    color: colors.brassLight,
-    fontSize: fontSize.xxl,
-    fontWeight: fontWeight.bold,
-  },
-  positionLabel: {
-    color: colors.mist,
-    fontSize: fontSize.xs,
+  standingsOverlay: {
+    position: 'absolute',
+    top: spacing.sm,
+    left: spacing.sm,
+    maxWidth: 240,
   },
   layerToggle: {
     position: 'absolute',
-    top: spacing.md,
-    right: spacing.md,
+    top: spacing.sm,
+    right: spacing.sm,
   },
-  weatherWarning: {
+  weatherBanner: {
+    position: 'absolute',
+    top: spacing.sm + 44,
+    alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     gap: spacing.sm,
     backgroundColor: 'rgba(201, 162, 39, 0.18)',
     borderColor: colors.warning,
     borderWidth: 1,
     borderRadius: radius.md,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.xs,
     paddingHorizontal: spacing.md,
-    marginBottom: spacing.md,
+    maxWidth: '80%',
   },
-  weatherWarningSevere: {
+  weatherBannerSevere: {
     backgroundColor: 'rgba(215, 38, 61, 0.18)',
     borderColor: colors.signalRed,
   },
-  weatherWarningText: {
+  weatherBannerText: {
     color: colors.foam,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.bold,
-    textAlign: 'center',
-  },
-  progressTrack: {
-    height: 8,
-    borderRadius: radius.pill,
-    backgroundColor: colors.navy,
-    borderWidth: 1,
-    borderColor: colors.hull,
-    overflow: 'hidden',
-    marginTop: spacing.md,
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: colors.brassLight,
-  },
-  metricsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: spacing.md,
-  },
-  metric: {
-    flex: 1,
-    alignItems: 'center',
-    backgroundColor: colors.card,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.hull,
-    paddingVertical: spacing.sm,
-    marginHorizontal: spacing.xs,
-  },
-  metricValue: {
-    color: colors.foam,
-    fontSize: fontSize.md,
-    fontWeight: fontWeight.bold,
-  },
-  metricLabel: {
-    color: colors.slate,
-    fontSize: fontSize.xs,
-    textTransform: 'uppercase',
-  },
-  panel: {
-    backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.hull,
-    padding: spacing.lg,
-    marginTop: spacing.md,
-  },
-  panelTitle: {
-    color: colors.foam,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.bold,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: spacing.sm,
-  },
-  windRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  windInfo: {
-    flex: 1,
-    marginLeft: spacing.lg,
-  },
-  nextLeg: {
-    color: colors.slate,
-    fontSize: fontSize.xs,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  pointOfSail: {
-    color: colors.brassLight,
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.bold,
-  },
-  vmgLine: {
-    color: colors.signalGreen,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.bold,
-    marginTop: 2,
-  },
-  weatherDesc: {
-    color: colors.mist,
-    fontSize: fontSize.sm,
-    marginTop: spacing.xs,
-    lineHeight: 18,
-  },
-  tideLine: {
-    color: colors.tide,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.bold,
-    marginTop: 2,
-  },
-  logEntry: {
-    color: colors.mist,
-    fontSize: fontSize.sm,
-    lineHeight: 20,
-  },
-  tacticsHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.sm,
-  },
-  hint: {
-    color: colors.signalGreen,
     fontSize: fontSize.xs,
     fontWeight: fontWeight.bold,
   },
-  trendLine: {
-    color: colors.mist,
-    fontSize: fontSize.xs,
-    marginBottom: spacing.sm,
-  },
-  tacticsLabel: {
-    color: colors.slate,
-    fontSize: fontSize.xs,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: spacing.xs,
-  },
-  segmented: {
-    flexDirection: 'row',
-    backgroundColor: colors.navy,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.hull,
-    overflow: 'hidden',
-  },
-  segment: {
-    flex: 1,
-    paddingVertical: spacing.sm,
-    alignItems: 'center',
-  },
-  segmentActive: {
-    backgroundColor: colors.hull,
-  },
-  segmentLabel: {
-    color: colors.mist,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
-  },
-  segmentLabelActive: {
-    color: colors.brassLight,
-    fontWeight: fontWeight.bold,
-  },
-  footer: {
-    padding: spacing.lg,
-    gap: spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: colors.hull,
-    backgroundColor: colors.deepSea,
-  },
-  footerRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
+  legendOverlay: {
+    position: 'absolute',
+    bottom: spacing.sm + 3,
+    alignSelf: 'center',
   },
 });
 

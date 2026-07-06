@@ -49,6 +49,10 @@ interface RouteMapProps {
   windFeatures?: { lat: number; lon: number; radiusNm: number; puff: boolean }[];
   nextMarkIndex?: number; // for shading rounded marks
   land?: LandPolygon[];
+  // Man-overboard marker: dropped at the incident-tick position while the MOB
+  // dock is live. Inert when absent.
+  mobMarker?: GeoPoint;
+  testID?: string;
   width?: number;
   height?: number;
 }
@@ -86,6 +90,8 @@ export const RouteMap: React.FC<RouteMapProps> = ({
   windFeatures,
   nextMarkIndex = 0,
   land,
+  mobMarker,
+  testID,
   width = 320,
   height = 200,
 }) => {
@@ -249,7 +255,7 @@ export const RouteMap: React.FC<RouteMapProps> = ({
   }, [project, waypoints, nextMarkIndex, loopCourse]);
 
   if (!ready || !project) {
-    return <View style={[styles.container, { width, height }]} />;
+    return <View style={[styles.container, { width, height }]} testID={testID} />;
   }
 
   // --- Dynamic layers (recomputed each tick — all cheap: a few path strings and
@@ -281,8 +287,10 @@ export const RouteMap: React.FC<RouteMapProps> = ({
   const particleCount = Math.max(70, Math.min(220, Math.round((width * height) / 2600)));
   const flowColor = layer === 'tide' ? colors.tideFlow : colors.foam;
 
+  const mobXY = mobMarker ? project(mobMarker.lat, mobMarker.lon) : null;
+
   return (
-    <View style={styles.container}>
+    <View style={styles.container} testID={testID}>
       <Svg width={width} height={height}>
         <Defs>
           <LinearGradient id={landId} x1="0" y1="0" x2="0" y2="1">
@@ -400,6 +408,15 @@ export const RouteMap: React.FC<RouteMapProps> = ({
         ))}
 
         {boatXY ? <Circle cx={boatXY.x} cy={boatXY.y} r={5} fill={colors.white} stroke={colors.signalGreen} strokeWidth={3} /> : null}
+
+        {/* The swimmer: a red ringed marker at the incident-tick position. The
+            steer-to numbers (bearing + range) live in the MOB dock header. */}
+        {mobXY ? (
+          <>
+            <Circle cx={mobXY.x} cy={mobXY.y} r={9} stroke={colors.signalRed} strokeWidth={2} fill="none" />
+            <Circle cx={mobXY.x} cy={mobXY.y} r={3.5} fill={colors.signalRed} stroke={colors.white} strokeWidth={1} />
+          </>
+        ) : null}
       </Svg>
     </View>
   );

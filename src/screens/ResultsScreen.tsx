@@ -143,6 +143,19 @@ export const ResultsScreen: React.FC<Props> = ({ navigation }) => {
         <Text style={styles.summary}>{result.summary}</Text>
       </View>
 
+      {result.sailChanges !== undefined && result.sailChanges > 0 ? (
+        <View style={styles.finishLineCard} testID="sail-stats-line">
+          <Text style={styles.finishLineText}>
+            Sail changes: {result.sailChanges}
+            {result.sailChangesFumbled ? ` (${result.sailChangesFumbled} fumbled)` : ''}
+            {result.rightSailPct !== undefined
+              ? ` · ${result.rightSailPct}% of the race in the right sail`
+              : ''}
+            {result.blownSails?.length ? ` · blew out the ${result.blownSails.join(' and ')}` : ''}
+          </Text>
+        </View>
+      ) : null}
+
       {finishLine ? (
         <View style={styles.finishLineCard} testID="finish-debrief-line">
           <Text style={styles.finishLineText}>{finishLine}</Text>
