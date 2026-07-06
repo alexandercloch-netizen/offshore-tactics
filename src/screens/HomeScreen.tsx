@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { CompositeScreenProps } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -9,8 +9,12 @@ import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
 import { useGame } from '../store/GameContext';
 import { useAuth } from '../store/AuthContext';
 import { defaultDivision, goalHeadline, recommendedRace } from '../engine/recommend';
+import { BoardConditions, seasonalBoardConditions } from '../engine/sailNow';
+import { fetchBoardConditions, liveWeatherEnabled } from '../services/weather';
+import { RACES, getRaceById } from '../data';
 import { getClassOption } from '../data/polarLibrary';
 import NauticalButton from '../components/NauticalButton';
+import HarbourDashboard from '../components/harbour/HarbourDashboard';
 import { confirmAction } from '../lib/confirm';
 
 type Props = CompositeScreenProps<
@@ -18,8 +22,14 @@ type Props = CompositeScreenProps<
   NativeStackScreenProps<RootStackParamList>
 >;
 
+// The Harbour — the home screen as a sailing analytics dashboard. The screen
+// owns navigation, the CTAs and the conditions fetch; everything visual lives
+// in components/harbour. Charts stay readable, not vast, on a wide web window.
+const MAX_CONTENT_WIDTH = 680;
+
 export const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
   const { state, ready, prepareNextRace, selectRace } = useGame();
   const { user, displayName } = useAuth();
   const raceInProgress = !!state.progress;
@@ -32,6 +42,29 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
       navigation.navigate('Onboarding');
     }
   }, [ready, player, raceInProgress, navigation]);
+
+  // The dashboard's conditions: live when the flag allows and the fetch lands,
+  // the baked seasonal climatology otherwise — one shape, honestly labelled.
+  // Flag off (CI, guests by default) means the fetch code path never runs.
+  const [liveConditions, setLiveConditions] = useState<BoardConditions | null>(null);
+  useEffect(() => {
+    if (!liveWeatherEnabled()) return;
+    let cancelled = false;
+    fetchBoardConditions(RACES).then((board) => {
+      if (!cancelled && board) setLiveConditions(board);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const conditions = useMemo(
+    () => liveConditions ?? seasonalBoardConditions(RACES),
+    [liveConditions]
+  );
+
+  // The dashboard's clock: frozen per mount — the board shouldn't reshuffle
+  // under the player's thumb mid-session.
+  const now = useMemo(() => Date.now(), []);
 
   const recommended = recommendedRace(player, state.history);
   const suggestedClass =
@@ -59,78 +92,112 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
     navigation.navigate('RaceSelect');
   };
 
-  // Jump straight into the recommended race's setup with a sensible division.
+  // Enter a race straight from the dashboard (a pin, a board card, a season
+  // chip) — the same funnel the race list's Enter uses, with the same guard
+  // against scuttling a race underway. Can't cover the entry fee? Land on the
+  // race list instead, where the fees are laid out.
+  const enterRace = (raceId: string) => {
+    const race = getRaceById(raceId);
+    if (!race) return;
+    const division = defaultDivision(player?.experience);
+    const affordable = state.funds >= race.divisions[division].entryFee;
+    const go = () => {
+      prepareNextRace();
+      if (affordable) {
+        selectRace(raceId, division);
+        navigation.navigate('BoatSelect');
+      } else {
+        navigation.navigate('RaceSelect');
+      }
+    };
+    if (raceInProgress) {
+      confirmAction({
+        title: 'Discard race in progress?',
+        message: 'You have a race underway. Starting a new one abandons it.',
+        confirmLabel: 'Discard & Continue',
+        cancelLabel: 'Keep Racing',
+        onConfirm: go,
+      });
+      return;
+    }
+    go();
+  };
+
   const sailRecommended = () => {
     if (!recommended) {
       startNewCampaign();
       return;
     }
-    prepareNextRace();
-    selectRace(recommended.id, defaultDivision(player?.experience));
-    navigation.navigate('BoatSelect');
+    enterRace(recommended.id);
   };
+
+  const contentWidth = Math.min(windowWidth, MAX_CONTENT_WIDTH);
+  const chartWidth = contentWidth - spacing.xl * 2;
 
   return (
     <ScrollView
       style={styles.screen}
       contentContainerStyle={[
         styles.content,
-        { paddingTop: insets.top + spacing.xxl, paddingBottom: insets.bottom + spacing.xl },
+        { paddingTop: insets.top + spacing.xl, paddingBottom: insets.bottom + spacing.xl },
       ]}
     >
-      <View style={styles.hero}>
-        <Text style={styles.kicker}>
-          {user ? `Welcome aboard, ${displayName}` : 'A Sailing Strategy Game'}
-        </Text>
-        <Text style={styles.title}>OFFSHORE</Text>
-        <Text style={styles.title}>TACTICS</Text>
-        <Text style={styles.tagline}>{goalHeadline(player?.goal)}</Text>
-      </View>
-
-      {raceInProgress ? (
-        <View style={styles.resumeCard}>
-          <Text style={styles.resumeLabel}>Race underway</Text>
-          <Text style={styles.resumeHint}>Pick up where you left off.</Text>
-        </View>
-      ) : recommended ? (
-        <View style={styles.recCard}>
-          <Text style={styles.recLabel}>Recommended for you</Text>
-          <Text style={styles.recRace}>{recommended.name}</Text>
-          <Text style={styles.recMeta}>
-            {recommended.location} · {recommended.difficulty}
+      <View style={[styles.column, { width: contentWidth }]}>
+        <View style={styles.hero}>
+          <Text style={styles.kicker}>
+            {user ? `Welcome aboard, ${displayName}` : 'Offshore Tactics'}
           </Text>
+          <Text style={styles.title}>THE HARBOUR</Text>
+          <Text style={styles.tagline}>{goalHeadline(player?.goal)}</Text>
         </View>
-      ) : null}
 
-      <View style={styles.actions}>
+        {/* A race underway outranks every dashboard card — resume sits on top. */}
         {raceInProgress ? (
-          <>
+          <View style={styles.resumeBlock}>
+            <View style={styles.resumeCard}>
+              <Text style={styles.resumeLabel}>Race underway</Text>
+              <Text style={styles.resumeHint}>Pick up where you left off.</Text>
+            </View>
             <NauticalButton
               label="Resume Race"
               subtitle="You have a race underway"
               onPress={() => navigation.navigate('RaceMap')}
             />
-            {/* Same action as the idle state's browse CTA, so the same label —
-                the confirm guard covers the race underway. */}
-            <NauticalButton label="Browse All Races" variant="secondary" onPress={startNewCampaign} />
-          </>
-        ) : (
-          <>
-            <NauticalButton
-              label={recommended ? `Race the ${recommended.name}` : 'Start Racing'}
-              onPress={sailRecommended}
-            />
-            <NauticalButton label="Browse All Races" variant="secondary" onPress={startNewCampaign} />
-          </>
-        )}
-        {suggestedClass ? (
-          <NauticalButton
-            label={`Build your ${suggestedClass.name}`}
-            subtitle="Set up the boat you sail"
-            variant="secondary"
-            onPress={() => navigation.navigate('BoatBuilder')}
-          />
+          </View>
         ) : null}
+
+        <HarbourDashboard
+          player={player}
+          history={state.history}
+          conditions={conditions}
+          now={now}
+          recommendedId={recommended?.id}
+          onEnterRace={enterRace}
+          width={chartWidth}
+        >
+          {/* The standing CTAs, anchored right under the world chart. */}
+          <View style={styles.actions}>
+            {!raceInProgress && recommended ? (
+              <NauticalButton
+                label={`Race the ${recommended.name}`}
+                onPress={sailRecommended}
+              />
+            ) : null}
+            <NauticalButton
+              label="Browse All Races"
+              variant="secondary"
+              onPress={startNewCampaign}
+            />
+            {suggestedClass ? (
+              <NauticalButton
+                label={`Build your ${suggestedClass.name}`}
+                subtitle="Set up the boat you sail"
+                variant="secondary"
+                onPress={() => navigation.navigate('BoatBuilder')}
+              />
+            ) : null}
+          </View>
+        </HarbourDashboard>
       </View>
     </ScrollView>
   );
@@ -138,7 +205,8 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.abyss },
-  content: { paddingHorizontal: spacing.xl },
+  content: { alignItems: 'center' },
+  column: { paddingHorizontal: spacing.xl },
   hero: { marginBottom: spacing.xl },
   kicker: {
     color: colors.brassLight,
@@ -150,45 +218,27 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.foam,
-    fontSize: fontSize.display,
+    fontSize: fontSize.xxl,
     fontWeight: fontWeight.bold,
     letterSpacing: 4,
-    lineHeight: 40,
+    lineHeight: 34,
   },
   tagline: {
     color: colors.mist,
     fontSize: fontSize.md,
     lineHeight: 22,
-    marginTop: spacing.md,
+    marginTop: spacing.sm,
   },
-  recCard: {
-    backgroundColor: colors.navy,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    padding: spacing.lg,
-    marginBottom: spacing.lg,
+  resumeBlock: {
+    gap: spacing.md,
+    marginBottom: spacing.xl,
   },
-  recLabel: {
-    color: colors.brassLight,
-    fontSize: fontSize.xs,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  recRace: {
-    color: colors.foam,
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.bold,
-    marginTop: spacing.xs,
-  },
-  recMeta: { color: colors.mist, fontSize: fontSize.sm, marginTop: 2 },
   resumeCard: {
     backgroundColor: colors.card,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.brassLight,
     padding: spacing.lg,
-    marginBottom: spacing.lg,
   },
   resumeLabel: {
     color: colors.brassLight,

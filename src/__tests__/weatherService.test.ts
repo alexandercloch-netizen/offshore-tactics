@@ -1,4 +1,5 @@
 import {
+  fetchBoardConditions,
   fetchCourseSnapshot,
   liveWeatherEnabled,
   scenarioStamp,
@@ -146,5 +147,62 @@ describe('scenario provenance', () => {
 
   it('writes the honest one-line tag', () => {
     expect(scenarioTagLine(scenarioStamp(scenario))).toBe("Today's forecast — ECMWF 2026-07-04");
+  });
+});
+
+describe('fetchBoardConditions', () => {
+  const races = () => [getRaceById('race-fastnet')!, getRaceById('race-round-island')!];
+  const location = (speed: number, dir: number) => ({
+    current: { wind_speed_10m: speed, wind_direction_10m: dir },
+  });
+
+  it('never fetches with the flag off', async () => {
+    delete process.env.EXPO_PUBLIC_LIVE_WEATHER;
+    const spy = jest.fn();
+    global.fetch = spy as unknown as typeof fetch;
+    expect(await fetchBoardConditions(races())).toBeNull();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('fetches ALL races in one batched request and labels the result live', async () => {
+    const spy = jest.fn().mockResolvedValue(okResponse([location(14.2, 250), location(8.1, 270)]));
+    global.fetch = spy as unknown as typeof fetch;
+
+    const board = await fetchBoardConditions(races());
+    expect(board).not.toBeNull();
+    expect(board!.source).toBe('live');
+    expect(board!.samples['race-fastnet']).toEqual({ fromDeg: 250, speedKn: 14.2 });
+    expect(board!.samples['race-round-island']).toEqual({ fromDeg: 270, speedKn: 8.1 });
+
+    // ONE GET, comma-separated coordinate lists, current wind only, knots,
+    // the pinned model.
+    expect(spy).toHaveBeenCalledTimes(1);
+    const url = String(spy.mock.calls[0][0]);
+    expect(url).toContain('current=wind_speed_10m,wind_direction_10m');
+    expect(url).toContain(`models=${WEATHER_MODEL}`);
+    expect(url).toContain('wind_speed_unit=kn');
+    expect(url.match(/latitude=([-0-9.,]+)/)![1].split(',')).toHaveLength(2);
+    expect(url.match(/longitude=([-0-9.,]+)/)![1].split(',')).toHaveLength(2);
+  });
+
+  it('treats a partial or mismatched response as no response', async () => {
+    // One location for two races — a mixed live/seasonal board would lie.
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue(okResponse([location(14, 250)])) as unknown as typeof fetch;
+    expect(await fetchBoardConditions(races())).toBeNull();
+
+    // A location with the wind missing.
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue(okResponse([location(14, 250), { current: {} }])) as unknown as typeof fetch;
+    expect(await fetchBoardConditions(races())).toBeNull();
+  });
+
+  it('returns null on an HTTP error (after the one retry)', async () => {
+    const spy = jest.fn().mockResolvedValue(errorResponse(500));
+    global.fetch = spy as unknown as typeof fetch;
+    expect(await fetchBoardConditions(races())).toBeNull();
+    expect(spy).toHaveBeenCalledTimes(2);
   });
 });
