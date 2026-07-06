@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors, fontSize, fontWeight, spacing, status } from '../../theme';
+import { colors, fontSize, fontWeight, radius, spacing, status } from '../../theme';
 import { REGION_BOUNDS, REGION_LAND, WORLD_BOUNDS, WORLD_LAND } from '../../data/worldmap';
 import { BoardConditions } from '../../engine/sailNow';
 import WorldChart, { WorldPin } from '../WorldChart';
@@ -29,7 +29,10 @@ export const WorldSection: React.FC<WorldSectionProps> = ({
 }) => {
   const [region, setRegion] = useState<RegionKey | null>(null);
 
-  const worldPins: WorldPin[] = REGION_KEYS.map((key) => {
+  // World-view stations carry NO captions: seven labelled stations cannot pack
+  // honestly onto a 124px-tall strip (the declutter turns into a lottery), so
+  // the dots stay pure visual anchors and the chip row below carries the names.
+  const worldStations = REGION_KEYS.map((key) => {
     const races = regionRaces(key);
     const anchor = races[0];
     const meanKn =
@@ -37,15 +40,14 @@ export const WorldSection: React.FC<WorldSectionProps> = ({
         (s, r) => s + (conditions.samples[r.id]?.speedKn ?? r.prevailingWind.speedKn),
         0
       ) / Math.max(1, races.length);
-    return {
-      id: key,
-      lat: anchor.waypoints[0].lat,
-      lon: anchor.waypoints[0].lon,
-      color: windHeatColor(meanKn),
-      label: REGION_META[key].short,
-      sublabel: `${races.length} ${races.length === 1 ? 'course' : 'courses'}`,
-    };
+    return { key, races, meanKn, anchor };
   });
+  const worldPins: WorldPin[] = worldStations.map(({ key, meanKn, anchor }) => ({
+    id: key,
+    lat: anchor.waypoints[0].lat,
+    lon: anchor.waypoints[0].lon,
+    color: windHeatColor(meanKn),
+  }));
 
   const regionPins: WorldPin[] = region
     ? regionRaces(region).map((race) => {
@@ -93,15 +95,33 @@ export const WorldSection: React.FC<WorldSectionProps> = ({
           testID="region-chart"
         />
       ) : (
-        <WorldChart
-          bounds={WORLD_BOUNDS}
-          land={WORLD_LAND}
-          pins={worldPins}
-          onPinPress={(id) => setRegion(id as RegionKey)}
-          width={width}
-          height={200}
-          testID="world-chart"
-        />
+        <>
+          <WorldChart
+            bounds={WORLD_BOUNDS}
+            land={WORLD_LAND}
+            pins={worldPins}
+            onPinPress={(id) => setRegion(id as RegionKey)}
+            width={width}
+            height={200}
+            testID="world-chart"
+          />
+          <View style={styles.chipRow}>
+            {worldStations.map(({ key, races, meanKn }) => (
+              <Pressable
+                key={key}
+                onPress={() => setRegion(key)}
+                accessibilityRole="button"
+                accessibilityLabel={`${REGION_META[key].short}, ${races.length} courses`}
+                testID={`world-region-chip-${key}`}
+                style={styles.chip}
+              >
+                <View style={[styles.chipDot, { backgroundColor: windHeatColor(meanKn) }]} />
+                <Text style={styles.chipLabel}>{REGION_META[key].short}</Text>
+                <Text style={styles.chipCount}>{races.length}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </>
       )}
       <Text style={styles.hint}>
         {region
@@ -144,6 +164,36 @@ const styles = StyleSheet.create({
     color: colors.slate,
     fontSize: fontSize.xs,
     marginTop: spacing.xs,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.sm,
+    minHeight: 32,
+  },
+  chipDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  chipLabel: {
+    color: colors.foam,
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.medium,
+  },
+  chipCount: {
+    color: colors.slate,
+    fontSize: fontSize.xs,
   },
 });
 

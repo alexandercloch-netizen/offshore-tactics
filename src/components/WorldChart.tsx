@@ -36,6 +36,10 @@ interface WorldChartProps {
   windWash?: WindSample;
   width: number;
   height: number;
+  // Caption block width. The world view packs seven stations onto a short
+  // strip and needs the compact 84; region views carry long course names and
+  // keep the roomy default.
+  captionWidth?: number;
   testID?: string;
 }
 
@@ -44,7 +48,13 @@ interface XY {
   y: number;
 }
 
-const PAD = 10;
+// No margin outside the baked box: the bake clips continents at the box edge,
+// and any drawable past it renders that clip as a dead-straight coastline
+// floating in invented water (the Tasman hero showed Australia as a cut block
+// in open sea). A real chart's land runs under the frame — the box maps
+// EXACTLY onto the drawable, so a clip edge always lands ON the frame, never
+// inside it.
+const PAD = 0;
 
 // Fit the bounds box into the requested stage (same equirectangular maths as
 // components/projection.ts) and CLAMP the drawable to the box, so the chart
@@ -94,6 +104,7 @@ export const WorldChart: React.FC<WorldChartProps> = ({
   windWash,
   width,
   height,
+  captionWidth = 120,
   testID,
 }) => {
   const { width: w, height: h, project } = useMemo(
@@ -122,25 +133,87 @@ export const WorldChart: React.FC<WorldChartProps> = ({
     [land, project, landId]
   );
 
-  // Fan crowded pins downward (standard chart declutter for coincident
-  // markers): several classics share one start line — Cowes alone hosts three —
-  // and a hidden pin is an unreachable race. Deterministic, order-stable.
+  // Declutter crowded pins (several classics share one start line — Cowes
+  // alone hosts three; the Americas stations sit shoulder-to-shoulder on the
+  // short world view). Each pin takes the first free slot from a fixed ring of
+  // candidate offsets, every candidate CLAMPED inside the chart — the old
+  // fan-down-then-flip could hurl a pin clear off a short chart (Great Lakes
+  // once landed 80px above the world map, inside the hero). Deterministic,
+  // order-stable.
   const placed: XY[] = [];
-  const pinXY = pins.map((pin) => {
+  const CANDIDATES: XY[] = [
+    { x: 0, y: 0 },
+    { x: 0, y: 48 },
+    { x: 0, y: -48 },
+    { x: 48, y: 0 },
+    { x: -48, y: 0 },
+    { x: 48, y: 48 },
+    { x: -48, y: 48 },
+    { x: 48, y: -48 },
+    { x: -48, y: -48 },
+    { x: 0, y: 96 },
+    { x: 96, y: 0 },
+    { x: -96, y: 0 },
+  ];
+  // A station's footprint is the dot PLUS its caption (captions collide long
+  // before dots do — a 120px label on a 40px pin pitch), so the fan spreads
+  // whole stations, not just markers. A caption sits below its dot unless the
+  // frame's foot forces it above.
+  const clampXY = (p: XY): XY => ({
+    x: Math.min(Math.max(p.x, 12), w - 12),
+    y: Math.min(Math.max(p.y, 12), h - 12),
+  });
+  // Caption rectangles are 120×~28 with their left edge at the slid lx; a
+  // caption may sit below its dot or above it — a FREE choice per station, so
+  // two same-latitude neighbours interleave below/above instead of fighting
+  // for the same row (UK and the Med sit 15px apart on the world view).
+  const capLx = (p: XY) =>
+    Math.min(Math.max(p.x - captionWidth / 2, 4), w - captionWidth - 4);
+  const captionAt = (p: XY, above: boolean): XY => ({
+    x: capLx(p),
+    y: above ? p.y - 60 : p.y + 32,
+  });
+  const captionFits = (cap: XY) => cap.y >= 2 && cap.y + 28 <= h - 2;
+  const footprints: { dot: XY; cap: XY | null }[] = [];
+  const collides = (p: XY, cap: XY | null) =>
+    footprints.some(
+      (q) =>
+        // Dot separation must exceed the 44px tap target (+slop), or a later
+        // station's hit box silently shadows an earlier one's centre.
+        (Math.abs(q.dot.x - p.x) < 46 && Math.abs(q.dot.y - p.y) < 46) ||
+        (!!cap &&
+          !!q.cap &&
+          Math.abs(q.cap.x - cap.x) < captionWidth &&
+          Math.abs(q.cap.y - cap.y) < 28)
+    );
+  const labelled = pins.map((pin) => {
     const raw = project(pin.lat, pin.lon);
-    const at = { ...raw };
-    let guard = 0;
-    while (
-      guard < 12 &&
-      placed.some((q) => Math.abs(q.x - at.x) < 28 && Math.abs(q.y - at.y) < 34)
-    ) {
-      at.y += 36;
-      guard += 1;
+    let at = clampXY(raw);
+    let labelAbove = false;
+    outer: for (const c of CANDIDATES) {
+      const cand = clampXY({ x: raw.x + c.x, y: raw.y + c.y });
+      if (!pin.label) {
+        if (!collides(cand, null)) {
+          at = cand;
+          break;
+        }
+        continue;
+      }
+      for (const above of [false, true]) {
+        const cap = captionAt(cand, above);
+        if (!captionFits(cap)) continue;
+        if (!collides(cand, cap)) {
+          at = cand;
+          labelAbove = above;
+          break outer;
+        }
+      }
     }
-    // Ran off the chart's foot? Fan upward instead.
-    if (at.y > h - 12) at.y = raw.y - (at.y - raw.y);
-    placed.push(at);
-    return { pin, at };
+    footprints.push({
+      dot: at,
+      cap: pin.label ? captionAt(at, labelAbove) : null,
+    });
+    return { pin, at, labelAbove };
   });
 
   // The breeze arrow points the way the wind BLOWS (from + 180), drawn in the
@@ -191,7 +264,7 @@ export const WorldChart: React.FC<WorldChartProps> = ({
       </Svg>
 
       {/* The tappable pin layer. */}
-      {pinXY.map(({ pin, at }) => (
+      {labelled.map(({ pin, at, labelAbove }) => (
         <Pressable
           key={pin.id}
           onPress={onPinPress ? () => onPinPress(pin.id) : undefined}
@@ -213,10 +286,15 @@ export const WorldChart: React.FC<WorldChartProps> = ({
           {pin.label ? (
             // Keep the label block inside the frame: a pin near an edge slides
             // its caption sideways instead of clipping (pressable-local offset).
+            // The caption is display-only and MUST NOT eat touches — a long
+            // label reaching over a neighbouring station was swallowing that
+            // station's tap (US West's caption made the Caribbean untappable).
             <View
+              pointerEvents="none"
               style={[
                 styles.pinLabelBlock,
-                { left: Math.min(Math.max(at.x - 60, 4), w - 124) - (at.x - 22) },
+                { width: captionWidth, left: capLx(at) - (at.x - 22) },
+                labelAbove && styles.pinLabelAbove,
               ]}
             >
               <Text
@@ -275,6 +353,11 @@ const styles = StyleSheet.create({
     top: 32,
     width: 120,
     alignItems: 'center',
+  },
+  pinLabelAbove: {
+    // Flipped caption for a crowded station: sits over the dot instead.
+    top: undefined,
+    bottom: 32,
   },
   pinLabel: {
     textAlign: 'center',
