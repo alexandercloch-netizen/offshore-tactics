@@ -158,6 +158,14 @@ and run:
 node scripts/build-coastlines.mjs   # needs the polygon-clipping dev dependency
 ```
 
+The home screen's world chart (`src/data/worldmap.ts` — a coarse planet
+silhouette plus a medium-tolerance coastline per sailing region) is baked the
+same way, from the same sources:
+
+```bash
+node scripts/build-world.mjs
+```
+
 State is managed with a reducer in `src/store/GameContext.tsx` and persisted to
 device storage via `@react-native-async-storage/async-storage`.
 

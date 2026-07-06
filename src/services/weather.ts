@@ -1,4 +1,12 @@
-import { GeoPoint, Race, WeatherScenario, WeatherScenarioPoint, WeatherScenarioStamp } from '../types';
+import {
+  GeoPoint,
+  Race,
+  WeatherScenario,
+  WeatherScenarioPoint,
+  WeatherScenarioStamp,
+  WindSample,
+} from '../types';
+import { BoardConditions } from '../engine/sailNow';
 
 // Live weather scenarios ("sail today's forecast") from Open-Meteo's free
 // forecast API. Strictly optional and fail-soft: the fetch runs only behind the
@@ -135,6 +143,63 @@ function parsePoint(loc: OpenMeteoLocation, nowMs: number): WeatherScenarioPoint
   // Under six clean hours isn't a forecast worth racing on.
   if (hours.length < 6) return null;
   return { lat: loc.latitude, lon: loc.longitude, hours, fromDeg, speedKn, gustKn, pressureHpa };
+}
+
+// ---- The Harbour's conditions board ----------------------------------------
+
+// One representative point per race for the dashboard's "right now" board: the
+// course centroid (coordinates only, rounded — same privacy discipline as the
+// scenario fetch).
+function boardPoint(race: Race): GeoPoint {
+  const round2 = (v: number): number => Math.round(v * 100) / 100;
+  const lat = race.waypoints.reduce((s, w) => s + w.lat, 0) / race.waypoints.length;
+  const lon = race.waypoints.reduce((s, w) => s + w.lon, 0) / race.waypoints.length;
+  return { lat: round2(lat), lon: round2(lon) };
+}
+
+// The `current=` block of one Open-Meteo location.
+interface OpenMeteoCurrentLocation {
+  current?: {
+    wind_speed_10m?: number | null;
+    wind_direction_10m?: number | null;
+  };
+}
+
+// Fetch the current wind for EVERY race in one batched request (comma-separated
+// coordinate lists — a single GET, however many courses), for the Harbour's
+// conditions board. Same discipline as the scenario fetch: flag-gated, 4s
+// timeout, one retry, and null on ANY failure — the caller then simply shows
+// the seasonal outlook instead. A partial response is treated as no response:
+// a board that silently mixed live and seasonal rows would lie about its label.
+export async function fetchBoardConditions(races: Race[]): Promise<BoardConditions | null> {
+  if (!liveWeatherEnabled()) return null;
+  if (races.length === 0) return null;
+  try {
+    const points = races.map(boardPoint);
+    const url =
+      `${WEATHER_API}?latitude=${points.map((p) => p.lat).join(',')}` +
+      `&longitude=${points.map((p) => p.lon).join(',')}` +
+      `&current=wind_speed_10m,wind_direction_10m` +
+      `&wind_speed_unit=kn&models=${WEATHER_MODEL}&timeformat=unixtime`;
+
+    const json = await getJsonWithRetry(url);
+    if (!json || typeof json !== 'object') return null;
+    const locations = (Array.isArray(json) ? json : [json]) as OpenMeteoCurrentLocation[];
+    if (locations.length !== races.length) return null;
+
+    const samples: Record<string, WindSample> = {};
+    for (let i = 0; i < races.length; i += 1) {
+      const current = locations[i]?.current;
+      if (current?.wind_speed_10m == null || current.wind_direction_10m == null) return null;
+      samples[races[i].id] = {
+        fromDeg: current.wind_direction_10m,
+        speedKn: current.wind_speed_10m,
+      };
+    }
+    return { source: 'live', samples };
+  } catch {
+    return null;
+  }
 }
 
 // Fetch today's forecast for a course as a WeatherScenario, or null on ANY
