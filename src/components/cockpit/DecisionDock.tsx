@@ -16,10 +16,12 @@ import { CompassIcon } from '../icons';
 
 // The ONE docked lane every mid-race interruption arrives through: tactical
 // decisions, the sail picker and the post-call debrief ribbon all render here,
-// compressing (never covering) the chart above. The lane is LIVE: the sim
-// keeps ticking beneath a docked call (a spotted shift doesn't wait — its edge
-// drains, see `edgeFade`), and only a man overboard holds the race (the "HELD"
-// pill is MOB's alone). Only the dock translates/fades; the chart snaps
+// compressing (never covering) the chart above. A docked DECISION holds the
+// watch — thinking time is the player's — but holds nothing else: the sail
+// picker can borrow the lane over a held decision (which reclaims it on
+// close), and every instrument stays live. The picker and the ribbon alone
+// never hold. (`edgeFade` remains for any future sail-on mode; it cannot
+// drain under a held card.) Only the dock translates/fades; the chart snaps
 // between its idle/docked heights without animating its dimensions.
 
 export type DockMode = 'decision' | 'sail' | 'debrief';

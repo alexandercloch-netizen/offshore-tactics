@@ -128,7 +128,8 @@ interface MountOptions {
 
 // Assemble the cockpit exactly as the screen wires it (chart render-prop with
 // a real RouteMap, band from buildPrimaryCells, dock replacing controls). The
-// screen raises `held` — and withholds the dismiss — for a MOB only.
+// screen raises `held` for ANY docked decision (the watch stops while a call
+// is on the table) and withholds the dismiss for a MOB only.
 function mountCockpit({ width, height, docked, mob = false }: MountOptions): ReactTestRenderer {
   setMockWindowDimensions(width, height);
   const layout = cockpitLayout(width, height, docked);
@@ -162,14 +163,13 @@ function mountCockpit({ width, height, docked, mob = false }: MountOptions): Rea
               event={mob ? MOB_EVENT : EVENT}
               vmg={VMG}
               read={{ edge: 0.4, shiftDeg: 8, buildKn: 2, reliable: 0.9, hint: 'worth the risk.' }}
-              edgeFade={mob ? undefined : 0.8}
               onChoice={() => undefined}
               onDismiss={mob ? undefined : () => undefined}
             />
           ) : undefined
         }
         progressPct={33}
-        held={docked && mob}
+        held={docked}
       />
     );
   });
@@ -266,28 +266,28 @@ describe('the cockpit tree', () => {
     }
   });
 
-  it('raises the HELD pill for a man overboard ONLY — a docked decision keeps the race live', () => {
+  it('raises the HELD pill whenever a decision is docked — the watch stops for a key call', () => {
     const idle = mountCockpit({ width: 390, height: 844, docked: false });
     expect(idle.root.findAllByProps({ testID: 'held-pill' })).toHaveLength(0);
     idle.unmount();
-    // An everyday docked decision no longer holds the sim: no pill.
-    const live = mountCockpit({ width: 390, height: 844, docked: true });
-    expect(live.root.findAllByProps({ testID: 'held-pill' })).toHaveLength(0);
-    live.unmount();
-    // Only the MOB emergency closes the tick gate and says so.
+    // Any docked decision stops the watch and says so.
+    const held = mountCockpit({ width: 390, height: 844, docked: true });
+    expect(held.root.findAllByProps({ testID: 'held-pill' }).length).toBeGreaterThan(0);
+    held.unmount();
     const mob = mountCockpit({ width: 390, height: 844, docked: true, mob: true });
     expect(mob.root.findAllByProps({ testID: 'held-pill' }).length).toBeGreaterThan(0);
     mob.unmount();
   });
 
-  it('offers "hold course" on a live decision but never on a MOB, and drains the edge bar', () => {
-    // A docked everyday call is dismissable (the moment can be waved off) and
-    // carries the draining edge bar on its field choices.
-    const live = mountCockpit({ width: 390, height: 844, docked: true });
-    expect(live.root.findAllByProps({ testID: 'decision-dismiss' }).length).toBeGreaterThan(0);
-    expect(live.root.findAllByProps({ testID: 'edge-fade' }).length).toBeGreaterThan(0);
-    live.unmount();
-    // A MOB demands an answer: no dismiss, no fading edge.
+  it('offers "hold course" on a held decision but never on a MOB, and shows no edge bar', () => {
+    // A docked everyday call is dismissable (the moment can be waved off); the
+    // edge bar is gone — the watch stops under the cards, so the edge cannot
+    // drain and a static "fading" bar would lie.
+    const held = mountCockpit({ width: 390, height: 844, docked: true });
+    expect(held.root.findAllByProps({ testID: 'decision-dismiss' }).length).toBeGreaterThan(0);
+    expect(held.root.findAllByProps({ testID: 'edge-fade' })).toHaveLength(0);
+    held.unmount();
+    // A MOB demands an answer: no dismiss.
     const mob = mountCockpit({ width: 390, height: 844, docked: true, mob: true });
     expect(mob.root.findAllByProps({ testID: 'decision-dismiss' })).toHaveLength(0);
     expect(mob.root.findAllByProps({ testID: 'edge-fade' })).toHaveLength(0);
