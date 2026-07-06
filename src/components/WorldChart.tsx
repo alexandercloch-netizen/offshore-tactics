@@ -133,87 +133,58 @@ export const WorldChart: React.FC<WorldChartProps> = ({
     [land, project, landId]
   );
 
-  // Declutter crowded pins (several classics share one start line — Cowes
-  // alone hosts three; the Americas stations sit shoulder-to-shoulder on the
-  // short world view). Each pin takes the first free slot from a fixed ring of
-  // candidate offsets, every candidate CLAMPED inside the chart — the old
-  // fan-down-then-flip could hurl a pin clear off a short chart (Great Lakes
-  // once landed 80px above the world map, inside the hero). Deterministic,
-  // order-stable.
-  const placed: XY[] = [];
-  const CANDIDATES: XY[] = [
-    { x: 0, y: 0 },
-    { x: 0, y: 48 },
-    { x: 0, y: -48 },
-    { x: 48, y: 0 },
-    { x: -48, y: 0 },
-    { x: 48, y: 48 },
-    { x: -48, y: 48 },
-    { x: 48, y: -48 },
-    { x: -48, y: -48 },
-    { x: 0, y: 96 },
-    { x: 96, y: 0 },
-    { x: -96, y: 0 },
-  ];
-  // A station's footprint is the dot PLUS its caption (captions collide long
-  // before dots do — a 120px label on a 40px pin pitch), so the fan spreads
-  // whole stations, not just markers. A caption sits below its dot unless the
-  // frame's foot forces it above.
+  // A dot IS a position: it renders at its true projected spot, always — a
+  // player once caught Newport drawn in the Pacific because a declutter fan
+  // moved the marker itself (48px on a world strip is fifteen degrees of
+  // latitude). Only the CAPTIONS declutter: each takes the first frame-fitting,
+  // non-colliding rectangle from a fixed candidate ring around its dot, and
+  // the caption is the tap target — so coincident starts (Cowes hosts three)
+  // honestly share one dot with their captions stacked beside it.
   const clampXY = (p: XY): XY => ({
-    x: Math.min(Math.max(p.x, 12), w - 12),
-    y: Math.min(Math.max(p.y, 12), h - 12),
+    x: Math.min(Math.max(p.x, 6), w - 6),
+    y: Math.min(Math.max(p.y, 6), h - 6),
   });
-  // Caption rectangles are 120×~28 with their left edge at the slid lx; a
-  // caption may sit below its dot or above it — a FREE choice per station, so
-  // two same-latitude neighbours interleave below/above instead of fighting
-  // for the same row (UK and the Med sit 15px apart on the world view).
-  const capLx = (p: XY) =>
-    Math.min(Math.max(p.x - captionWidth / 2, 4), w - captionWidth - 4);
-  const captionAt = (p: XY, above: boolean): XY => ({
-    x: capLx(p),
-    y: above ? p.y - 60 : p.y + 32,
+  const CAP_H = 30;
+  const capClamp = (r: XY): XY => ({
+    x: Math.min(Math.max(r.x, 4), w - captionWidth - 4),
+    y: r.y,
   });
-  const captionFits = (cap: XY) => cap.y >= 2 && cap.y + 28 <= h - 2;
-  const footprints: { dot: XY; cap: XY | null }[] = [];
-  const collides = (p: XY, cap: XY | null) =>
-    footprints.some(
-      (q) =>
-        // Dot separation must exceed the 44px tap target (+slop), or a later
-        // station's hit box silently shadows an earlier one's centre.
-        (Math.abs(q.dot.x - p.x) < 46 && Math.abs(q.dot.y - p.y) < 46) ||
-        (!!cap &&
-          !!q.cap &&
-          Math.abs(q.cap.x - cap.x) < captionWidth &&
-          Math.abs(q.cap.y - cap.y) < 28)
+  // Candidate caption anchors (top-left of the block) relative to the dot:
+  // centred below, centred above, then side-slid and second-row variants.
+  const CAP_CANDIDATES = (p: XY): XY[] =>
+    [
+      { x: p.x - captionWidth / 2, y: p.y + 12 },
+      { x: p.x - captionWidth / 2, y: p.y - 12 - CAP_H },
+      { x: p.x + 10, y: p.y + 12 },
+      { x: p.x - captionWidth - 10, y: p.y + 12 },
+      { x: p.x + 10, y: p.y - 12 - CAP_H },
+      { x: p.x - captionWidth - 10, y: p.y - 12 - CAP_H },
+      { x: p.x - captionWidth / 2, y: p.y + 12 + CAP_H + 4 },
+      { x: p.x - captionWidth / 2, y: p.y - 12 - 2 * CAP_H - 4 },
+      { x: p.x - captionWidth / 2, y: p.y + 12 + 2 * (CAP_H + 4) },
+    ].map(capClamp);
+  const capFits = (r: XY) => r.y >= 2 && r.y + CAP_H <= h - 2;
+  const capRects: XY[] = [];
+  const capCollides = (r: XY) =>
+    capRects.some(
+      (q) => Math.abs(q.x - r.x) < captionWidth && Math.abs(q.y - r.y) < CAP_H
     );
   const labelled = pins.map((pin) => {
-    const raw = project(pin.lat, pin.lon);
-    let at = clampXY(raw);
-    let labelAbove = false;
-    outer: for (const c of CANDIDATES) {
-      const cand = clampXY({ x: raw.x + c.x, y: raw.y + c.y });
-      if (!pin.label) {
-        if (!collides(cand, null)) {
-          at = cand;
-          break;
-        }
-        continue;
-      }
-      for (const above of [false, true]) {
-        const cap = captionAt(cand, above);
-        if (!captionFits(cap)) continue;
-        if (!collides(cand, cap)) {
-          at = cand;
-          labelAbove = above;
-          break outer;
-        }
+    const at = clampXY(project(pin.lat, pin.lon));
+    if (!pin.label) return { pin, at, cap: null as XY | null };
+    let cap: XY | null = null;
+    for (const cand of CAP_CANDIDATES(at)) {
+      if (capFits(cand) && !capCollides(cand)) {
+        cap = cand;
+        break;
       }
     }
-    footprints.push({
-      dot: at,
-      cap: pin.label ? captionAt(at, labelAbove) : null,
-    });
-    return { pin, at, labelAbove };
+    // Every candidate taken (a pathologically crowded corner): fall back to
+    // centred-below so the caption still renders; the overlap is visible
+    // rather than the station vanishing.
+    if (!cap) cap = capClamp({ x: at.x - captionWidth / 2, y: at.y + 12 });
+    capRects.push(cap);
+    return { pin, at, cap };
   });
 
   // The breeze arrow points the way the wind BLOWS (from + 180), drawn in the
@@ -263,58 +234,84 @@ export const WorldChart: React.FC<WorldChartProps> = ({
         {arrow}
       </Svg>
 
-      {/* The tappable pin layer. */}
-      {labelled.map(({ pin, at, labelAbove }) => (
-        <Pressable
-          key={pin.id}
-          onPress={onPinPress ? () => onPinPress(pin.id) : undefined}
-          disabled={!onPinPress}
-          accessibilityRole="button"
-          accessibilityLabel={pin.label ?? pin.id}
-          accessibilityState={{ disabled: !onPinPress }}
-          testID={`${testID ?? 'chart'}-pin-${pin.id}`}
-          style={[styles.pinHit, { left: at.x - 22, top: at.y - 22 }]}
-          hitSlop={4}
-        >
+      {/* Dots first (pure position markers), then captions (the tap targets
+          for labelled pins — a caption is a ~120×30 block, a better thumb
+          target than an 11px dot, and it can declutter without lying about
+          where the harbour is). A caption-less pin keeps a small tappable box
+          on the dot itself. */}
+      {labelled.map(({ pin, at }) =>
+        pin.label ? (
           <View
+            key={`dot-${pin.id}`}
+            pointerEvents="none"
             style={[
-              styles.pinDot,
-              { backgroundColor: pin.color },
-              pin.locked && styles.pinLocked,
+              styles.pinDotAnchor,
+              { left: at.x - 7, top: at.y - 7 },
             ]}
-          />
-          {pin.label ? (
-            // Keep the label block inside the frame: a pin near an edge slides
-            // its caption sideways instead of clipping (pressable-local offset).
-            // The caption is display-only and MUST NOT eat touches — a long
-            // label reaching over a neighbouring station was swallowing that
-            // station's tap (US West's caption made the Caribbean untappable).
+          >
             <View
-              pointerEvents="none"
               style={[
-                styles.pinLabelBlock,
-                { width: captionWidth, left: capLx(at) - (at.x - 22) },
-                labelAbove && styles.pinLabelAbove,
+                styles.pinDot,
+                { backgroundColor: pin.color },
+                pin.locked && styles.pinLocked,
               ]}
+            />
+          </View>
+        ) : (
+          <Pressable
+            key={`dot-${pin.id}`}
+            onPress={onPinPress ? () => onPinPress(pin.id) : undefined}
+            disabled={!onPinPress}
+            accessibilityRole="button"
+            accessibilityLabel={pin.id}
+            accessibilityState={{ disabled: !onPinPress }}
+            testID={`${testID ?? 'chart'}-pin-${pin.id}`}
+            style={[styles.pinHit, { left: at.x - 22, top: at.y - 22 }]}
+            hitSlop={4}
+          >
+            <View
+              style={[
+                styles.pinDot,
+                { backgroundColor: pin.color },
+                pin.locked && styles.pinLocked,
+              ]}
+            />
+          </Pressable>
+        )
+      )}
+      {labelled.map(({ pin, cap }) =>
+        pin.label && cap ? (
+          <Pressable
+            key={`cap-${pin.id}`}
+            onPress={onPinPress ? () => onPinPress(pin.id) : undefined}
+            disabled={!onPinPress}
+            accessibilityRole="button"
+            accessibilityLabel={pin.label}
+            accessibilityState={{ disabled: !onPinPress }}
+            testID={`${testID ?? 'chart'}-pin-${pin.id}`}
+            style={[
+              styles.pinCaption,
+              { width: captionWidth, left: cap.x, top: cap.y },
+            ]}
+            hitSlop={6}
+          >
+            <Text
+              style={[styles.pinLabel, pin.locked && styles.pinLabelLocked]}
+              numberOfLines={1}
             >
+              {pin.label}
+            </Text>
+            {pin.sublabel ? (
               <Text
-                style={[styles.pinLabel, pin.locked && styles.pinLabelLocked]}
+                style={[styles.pinSublabel, pin.locked && styles.pinLabelLocked]}
                 numberOfLines={1}
               >
-                {pin.label}
+                {pin.sublabel}
               </Text>
-              {pin.sublabel ? (
-                <Text
-                  style={[styles.pinSublabel, pin.locked && styles.pinLabelLocked]}
-                  numberOfLines={1}
-                >
-                  {pin.sublabel}
-                </Text>
-              ) : null}
-            </View>
-          ) : null}
-        </Pressable>
-      ))}
+            ) : null}
+          </Pressable>
+        ) : null
+      )}
     </View>
   );
 };
@@ -348,16 +345,18 @@ const styles = StyleSheet.create({
     opacity: 0.45,
     borderColor: colors.slate,
   },
-  pinLabelBlock: {
+  pinDotAnchor: {
     position: 'absolute',
-    top: 32,
-    width: 120,
+    width: 14,
+    height: 14,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  pinLabelAbove: {
-    // Flipped caption for a crowded station: sits over the dot instead.
-    top: undefined,
-    bottom: 32,
+  pinCaption: {
+    position: 'absolute',
+    minHeight: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   pinLabel: {
     textAlign: 'center',
