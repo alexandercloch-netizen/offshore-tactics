@@ -10,12 +10,15 @@ import {
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BoatPolar, BoatType, FleetBoat, RootStackParamList } from '../types';
-import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
+import { colors, fontSize, fontWeight, radius, spacing, status } from '../theme';
 import { CLASS_LIBRARY, getClassOption } from '../data/polarLibrary';
 import { parsePolar } from '../engine/polarImport';
 import { useGame } from '../store/GameContext';
+import { LABEL_BY_TYPE } from '../lib/labels';
 import NauticalButton from '../components/NauticalButton';
 import PolarViewer from '../components/PolarViewer';
+import Segmented from '../components/Segmented';
+import SelectableCard from '../components/SelectableCard';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'BoatBuilder'>;
 
@@ -93,7 +96,7 @@ export const BoatBuilderScreen: React.FC<Props> = ({ navigation }) => {
   return (
     <View style={styles.screen}>
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 96 }]}>
-        <Segmented
+        <Segmented<'class' | 'import'>
           value={mode}
           options={[
             { value: 'class', label: 'From a Class' },
@@ -108,22 +111,23 @@ export const BoatBuilderScreen: React.FC<Props> = ({ navigation }) => {
         {mode === 'class' ? (
           <View style={styles.section}>
             <Text style={styles.label}>Starting class</Text>
-            {CLASS_LIBRARY.map((opt) => {
-              const active = opt.boatType === boatType;
-              return (
-                <Pressable
-                  key={opt.boatType}
-                  onPress={() => setBoatType(opt.boatType)}
-                  style={[styles.classCard, active && styles.classCardActive]}
-                >
+            {CLASS_LIBRARY.map((opt) => (
+              <SelectableCard
+                key={opt.boatType}
+                onPress={() => setBoatType(opt.boatType)}
+                selected={opt.boatType === boatType}
+                accessibilityLabel={`${opt.name}, ${money(opt.price)}`}
+                style={styles.classCard}
+              >
+                <View style={styles.classCardRow}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.classCardName}>{opt.name}</Text>
                     <Text style={styles.classCardDesc}>{opt.description}</Text>
                   </View>
                   <Text style={styles.classCardPrice}>{money(opt.price)}</Text>
-                </Pressable>
-              );
-            })}
+                </View>
+              </SelectableCard>
+            ))}
           </View>
         ) : (
           <View style={styles.section}>
@@ -147,9 +151,14 @@ export const BoatBuilderScreen: React.FC<Props> = ({ navigation }) => {
                   <Pressable
                     key={t}
                     onPress={() => setBoatType(t)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: boatType === t }}
+                    accessibilityLabel={LABEL_BY_TYPE[t]}
                     style={[styles.typeChip, boatType === t && styles.typeChipActive]}
                   >
-                    <Text style={[styles.typeChipText, boatType === t && styles.typeChipTextActive]}>{t}</Text>
+                    <Text style={[styles.typeChipText, boatType === t && styles.typeChipTextActive]}>
+                      {LABEL_BY_TYPE[t]}
+                    </Text>
                   </Pressable>
                 ))}
               </View>
@@ -203,33 +212,23 @@ function Stepper({ label, value, onChange }: { label: string; value: number; onC
   return (
     <View style={styles.stepper}>
       <Text style={styles.stepperLabel}>{label}</Text>
-      <Pressable style={styles.stepBtn} onPress={() => onChange(clamp(value - 5))}>
+      <Pressable
+        style={styles.stepBtn}
+        onPress={() => onChange(clamp(value - 5))}
+        accessibilityRole="button"
+        accessibilityLabel={`${label} down 5 percent`}
+      >
         <Text style={styles.stepBtnText}>–</Text>
       </Pressable>
       <Text style={styles.stepperValue}>{value}%</Text>
-      <Pressable style={styles.stepBtn} onPress={() => onChange(clamp(value + 5))}>
+      <Pressable
+        style={styles.stepBtn}
+        onPress={() => onChange(clamp(value + 5))}
+        accessibilityRole="button"
+        accessibilityLabel={`${label} up 5 percent`}
+      >
         <Text style={styles.stepBtnText}>+</Text>
       </Pressable>
-    </View>
-  );
-}
-
-interface SegProps<T extends string> {
-  value: T;
-  options: { value: T; label: string }[];
-  onSelect: (v: T) => void;
-}
-function Segmented<T extends string>({ value, options, onSelect }: SegProps<T>) {
-  return (
-    <View style={styles.segmented}>
-      {options.map((o) => {
-        const active = o.value === value;
-        return (
-          <Pressable key={o.value} onPress={() => onSelect(o.value)} style={[styles.segment, active && styles.segmentActive]}>
-            <Text style={[styles.segmentLabel, active && styles.segmentLabelActive]}>{o.label}</Text>
-          </Pressable>
-        );
-      })}
     </View>
   );
 }
@@ -239,7 +238,7 @@ const styles = StyleSheet.create({
   content: { padding: spacing.lg },
   section: { marginTop: spacing.lg },
   label: {
-    color: colors.slate,
+    color: status.labelOnPanel,
     fontSize: fontSize.xs,
     textTransform: 'uppercase',
     letterSpacing: 1,
@@ -269,16 +268,10 @@ const styles = StyleSheet.create({
   },
   error: { color: colors.signalRed, fontSize: fontSize.sm, marginTop: spacing.sm },
   classCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.card,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.hull,
     padding: spacing.md,
     marginBottom: spacing.sm,
   },
-  classCardActive: { borderColor: colors.brassLight, backgroundColor: colors.navy },
+  classCardRow: { flexDirection: 'row', alignItems: 'center' },
   classCardName: { color: colors.foam, fontSize: fontSize.md, fontWeight: fontWeight.bold },
   classCardDesc: { color: colors.mist, fontSize: fontSize.xs, marginTop: 2 },
   classCardPrice: { color: colors.brassLight, fontSize: fontSize.sm, fontWeight: fontWeight.bold, marginLeft: spacing.sm },
@@ -286,6 +279,8 @@ const styles = StyleSheet.create({
   typeChip: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
+    minHeight: 44,
+    justifyContent: 'center',
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: colors.hull,
@@ -298,8 +293,8 @@ const styles = StyleSheet.create({
   stepperLabel: { color: colors.foam, fontSize: fontSize.sm, flex: 1 },
   stepperValue: { color: colors.brassLight, fontSize: fontSize.md, fontWeight: fontWeight.bold, width: 56, textAlign: 'center' },
   stepBtn: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.steel,
@@ -308,18 +303,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.hull,
   },
   stepBtnText: { color: colors.foam, fontSize: fontSize.lg, fontWeight: fontWeight.bold },
-  segmented: {
-    flexDirection: 'row',
-    backgroundColor: colors.navy,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.hull,
-    overflow: 'hidden',
-  },
-  segment: { flex: 1, paddingVertical: spacing.md, alignItems: 'center' },
-  segmentActive: { backgroundColor: colors.hull },
-  segmentLabel: { color: colors.mist, fontSize: fontSize.sm, fontWeight: fontWeight.medium },
-  segmentLabelActive: { color: colors.brassLight, fontWeight: fontWeight.bold },
   footer: {
     padding: spacing.lg,
     borderTopWidth: 1,

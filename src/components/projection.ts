@@ -79,3 +79,45 @@ export function chartViewportBounds(
     maxLat: latAt(0),
   };
 }
+
+// The half-span (in projected units, either axis, about the course centre) of
+// the land data baked by scripts/build-coastlines.mjs — the SAME square-ish box
+// formula, so the two can't drift apart silently: change one, change both, and
+// re-run the bake. Beyond this box there simply is no coastline, and a viewport
+// that reaches past it paints inland terrain as open water.
+export function landCoverageHalfSpan(waypoints: { lat: number; lon: number }[]): number {
+  const lats = waypoints.map((w) => w.lat);
+  const lons = waypoints.map((w) => w.lon);
+  const meanLat = (Math.min(...lats) + Math.max(...lats)) / 2;
+  const k = Math.cos((meanLat * Math.PI) / 180) || 1;
+  const spanX = (Math.max(...lons) - Math.min(...lons)) * k;
+  const spanY = Math.max(...lats) - Math.min(...lats);
+  return Math.max((Math.max(spanX, spanY) / 2) * 1.45, 0.3);
+}
+
+// Shrink a chart's drawable size so its viewport never reaches past the baked
+// land coverage — the extreme-aspect fix. The course letterboxes on the looser
+// axis, so a wide (or very tall) stage can invert to bounds outside the bake box
+// and show bare "sea" over unmapped land; clamping the loose axis letterboxes
+// with the stage's own background instead, like the margin of a paper chart.
+// The tight axis always fits (pad 26 on a ≥260px floor keeps it under 1.45×),
+// so only the loose dimension ever shrinks. A short fixed-point loop absorbs
+// the scale feedback from shrinking; the final pass verifies.
+export function clampChartToCoverage(
+  waypoints: { lat: number; lon: number }[],
+  width: number,
+  height: number
+): { width: number; height: number } {
+  const half = landCoverageHalfSpan(waypoints);
+  let w = width;
+  let h = height;
+  for (let i = 0; i < 4; i += 1) {
+    const { scale } = projectionParams(waypoints, w, h);
+    const wantW = Math.min(w, 2 * half * scale);
+    const wantH = Math.min(h, 2 * half * scale);
+    if (Math.abs(wantW - w) < 0.5 && Math.abs(wantH - h) < 0.5) break;
+    w = wantW;
+    h = wantH;
+  }
+  return { width: Math.max(w, 50), height: Math.max(h, 50) };
+}

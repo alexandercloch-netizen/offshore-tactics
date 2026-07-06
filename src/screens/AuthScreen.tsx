@@ -337,7 +337,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   privacyLink: {
-    color: colors.slate,
+    color: colors.mist,
     fontSize: fontSize.sm,
     textDecorationLine: 'underline',
   },

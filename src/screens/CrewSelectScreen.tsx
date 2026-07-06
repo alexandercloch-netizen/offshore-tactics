@@ -3,7 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AutoCrewPreset, CrewMember, RootStackParamList } from '../types';
-import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
+import { colors, fontSize, fontWeight, radius, spacing, status } from '../theme';
 import { useGame } from '../store/GameContext';
 import {
   autoSelectCrew,
@@ -12,6 +12,8 @@ import {
   resolveBoatById,
 } from '../engine/gameEngine';
 import NauticalButton from '../components/NauticalButton';
+import FunnelSteps from '../components/FunnelSteps';
+import SelectableCard from '../components/SelectableCard';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CrewSelect'>;
 
@@ -37,11 +39,14 @@ export const CrewSelectScreen: React.FC<Props> = ({ navigation }) => {
   const selected = state.selectedCrewIds;
 
   // If the eligible pool changed (e.g. the player switched divisions), drop any
-  // signed sailor who is no longer eligible so the roster stays legal.
+  // signed sailor who is no longer eligible; and with back-navigation open, a
+  // smaller boat picked after signing must shed the surplus hands too — the
+  // roster stays legal whichever way the player walks the dock.
   useEffect(() => {
-    const legal = selected.filter((id) => pool.some((m) => m.id === id));
+    let legal = selected.filter((id) => pool.some((m) => m.id === id));
+    if (capacity > 0 && legal.length > capacity) legal = legal.slice(0, capacity);
     if (legal.length !== selected.length) setCrew(legal);
-  }, [pool, selected, setCrew]);
+  }, [pool, selected, setCrew, capacity]);
 
   const wages = crewWageForDivision(selected, division);
 
@@ -54,6 +59,7 @@ export const CrewSelectScreen: React.FC<Props> = ({ navigation }) => {
 
   return (
     <View style={styles.screen}>
+      <FunnelSteps stage="crew" />
       <View style={styles.banner}>
         <View>
           <Text style={styles.bannerText}>
@@ -77,6 +83,8 @@ export const CrewSelectScreen: React.FC<Props> = ({ navigation }) => {
               key={p.key}
               onPress={() => autoFill(p.key)}
               disabled={capacity === 0}
+              accessibilityRole="button"
+              accessibilityLabel={`Auto-crew: ${p.label}, ${p.hint}`}
               style={({ pressed }) => [styles.preset, { opacity: pressed ? 0.85 : 1 }]}
             >
               <Text style={styles.presetLabel}>{p.label}</Text>
@@ -85,7 +93,7 @@ export const CrewSelectScreen: React.FC<Props> = ({ navigation }) => {
           ))}
         </View>
         {selected.length > 0 ? (
-          <Pressable onPress={() => setCrew([])} hitSlop={8}>
+          <Pressable onPress={() => setCrew([])} hitSlop={8} accessibilityRole="button">
             <Text style={styles.clear}>Clear crew</Text>
           </Pressable>
         ) : null}
@@ -101,15 +109,14 @@ export const CrewSelectScreen: React.FC<Props> = ({ navigation }) => {
           const isSelected = selected.includes(member.id);
           const full = !isSelected && selected.length >= capacity;
           return (
-            <Pressable
+            <SelectableCard
               key={member.id}
               onPress={() => !full && toggleCrew(member.id)}
               disabled={full}
-              style={({ pressed }) => [
-                styles.card,
-                isSelected && styles.cardSelected,
-                { opacity: full ? 0.45 : pressed ? 0.92 : 1 },
-              ]}
+              dimmed={full}
+              selected={isSelected}
+              accessibilityLabel={`${member.name}, ${member.role}${isSelected ? ', signed' : ''}`}
+              style={styles.card}
             >
               <View style={styles.cardHeader}>
                 <View style={{ flex: 1 }}>
@@ -131,7 +138,7 @@ export const CrewSelectScreen: React.FC<Props> = ({ navigation }) => {
                 <Attr label="Stamina" value={member.stamina} />
                 <Attr label="Morale" value={member.morale} />
               </View>
-            </Pressable>
+            </SelectableCard>
           );
         })}
       </ScrollView>
@@ -180,7 +187,7 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.bold,
   },
   bannerSub: {
-    color: colors.slate,
+    color: status.labelOnPanel,
     fontSize: fontSize.xs,
     textTransform: 'uppercase',
     letterSpacing: 1,
@@ -194,7 +201,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.hull,
   },
   autoLabel: {
-    color: colors.slate,
+    color: status.labelOnPanel,
     fontSize: fontSize.xs,
     textTransform: 'uppercase',
     letterSpacing: 1,
@@ -221,7 +228,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   presetHint: {
-    color: colors.slate,
+    color: status.labelOnPanel,
     fontSize: fontSize.xs,
     textAlign: 'center',
     marginTop: 2,
@@ -244,16 +251,7 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
   card: {
-    backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.hull,
-    padding: spacing.lg,
     marginBottom: spacing.md,
-  },
-  cardSelected: {
-    borderColor: colors.brass,
-    borderWidth: 2,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -305,7 +303,7 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.bold,
   },
   attrLabel: {
-    color: colors.slate,
+    color: status.labelOnPanel,
     fontSize: fontSize.xs,
     textTransform: 'uppercase',
   },

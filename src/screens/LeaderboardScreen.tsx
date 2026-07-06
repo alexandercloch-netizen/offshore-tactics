@@ -1,12 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { CompositeScreenProps } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
@@ -17,6 +10,8 @@ import { RACES } from '../data';
 import { useAuth } from '../store/AuthContext';
 import { fetchLeaderboard } from '../services/leaderboard';
 import { formatDuration } from '../engine/gameEngine';
+import EmptyState from '../components/EmptyState';
+import LoadingState from '../components/LoadingState';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'Leaderboard'>,
@@ -53,14 +48,14 @@ export const LeaderboardScreen: React.FC<Props> = () => {
   }, [load]);
 
   if (!configured) {
+    // The guest/local build: an empty state, never an error — the game simply
+    // runs without a cloud.
     return (
-      <View style={styles.empty}>
-        <Text style={styles.emptyTitle}>Leaderboard unavailable</Text>
-        <Text style={styles.emptyBody}>
-          Supabase isn't configured for this build, so the global leaderboard is
-          turned off.
-        </Text>
-      </View>
+      <EmptyState
+        fill
+        title="Leaderboard unavailable"
+        body="Supabase isn't configured for this build, so the global leaderboard is turned off."
+      />
     );
   }
 
@@ -84,9 +79,7 @@ export const LeaderboardScreen: React.FC<Props> = () => {
       </ScrollView>
 
       {loading ? (
-        <View style={styles.loading}>
-          <ActivityIndicator color={colors.brassLight} />
-        </View>
+        <LoadingState />
       ) : (
         <ScrollView
           contentContainerStyle={[
@@ -95,19 +88,25 @@ export const LeaderboardScreen: React.FC<Props> = () => {
           ]}
         >
           {error ? (
-            <View style={styles.stateBlock}>
-              <Text style={styles.stateTitle}>Couldn't load the leaderboard</Text>
-              <Text style={styles.noEntries}>
-                Check your connection and try again.
-              </Text>
-              <Pressable style={styles.retryBtn} onPress={load} accessibilityRole="button">
-                <Text style={styles.retryText}>Retry</Text>
-              </Pressable>
+            // A failed fetch is the error template: same panel, plus a retry.
+            <View style={styles.stateWrap}>
+              <EmptyState
+                title="Couldn't load the leaderboard"
+                body="Check your connection and try again."
+                action={
+                  <Pressable style={styles.retryBtn} onPress={load} accessibilityRole="button">
+                    <Text style={styles.retryText}>Retry</Text>
+                  </Pressable>
+                }
+              />
             </View>
           ) : entries.length === 0 ? (
-            <Text style={styles.noEntries}>
-              No times posted yet. Be the first to finish and claim the top spot!
-            </Text>
+            <View style={styles.stateWrap}>
+              <EmptyState
+                title="No times posted yet"
+                body="Be the first to finish and claim the top spot!"
+              />
+            </View>
           ) : (
             entries.map((entry, index) => (
               <View key={entry.id ?? index} style={styles.row}>
@@ -135,6 +134,9 @@ const Chip: React.FC<{ label: string; active: boolean; onPress: () => void }> = 
 }) => (
   <Pressable
     onPress={onPress}
+    accessibilityRole="button"
+    accessibilityState={{ selected: active }}
+    accessibilityLabel={label}
     style={[styles.chip, active && styles.chipActive]}
   >
     <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
@@ -145,25 +147,6 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.abyss,
-  },
-  empty: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: spacing.xl,
-    backgroundColor: colors.abyss,
-  },
-  emptyTitle: {
-    color: colors.foam,
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.bold,
-    marginBottom: spacing.sm,
-  },
-  emptyBody: {
-    color: colors.mist,
-    fontSize: fontSize.md,
-    textAlign: 'center',
-    lineHeight: 22,
   },
   // The bar must hug its content height — without flexGrow:0 a horizontal
   // ScrollView grows to fill the column on web, and `alignItems: center` keeps the
@@ -183,6 +166,8 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
+    minHeight: 44,
+    justifyContent: 'center',
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: colors.hull,
@@ -202,33 +187,17 @@ const styles = StyleSheet.create({
     color: colors.abyss,
     fontWeight: fontWeight.bold,
   },
-  loading: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   list: {
     paddingHorizontal: spacing.lg,
   },
-  noEntries: {
-    color: colors.mist,
-    fontSize: fontSize.md,
-    textAlign: 'center',
+  stateWrap: {
     marginTop: spacing.xxl,
-    lineHeight: 22,
-  },
-  stateBlock: {
-    alignItems: 'center',
-    marginTop: spacing.xxl,
-    gap: spacing.md,
-  },
-  stateTitle: {
-    color: colors.foam,
-    fontSize: fontSize.md,
-    fontWeight: fontWeight.bold,
-    textAlign: 'center',
   },
   retryBtn: {
+    alignSelf: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
     borderWidth: 1,
     borderColor: colors.steel,
     borderRadius: radius.md,

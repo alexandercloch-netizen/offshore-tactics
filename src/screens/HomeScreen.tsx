@@ -110,7 +110,9 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
               subtitle="You have a race underway"
               onPress={() => navigation.navigate('RaceMap')}
             />
-            <NauticalButton label="New Race" variant="secondary" onPress={startNewCampaign} />
+            {/* Same action as the idle state's browse CTA, so the same label —
+                the confirm guard covers the race underway. */}
+            <NauticalButton label="Browse All Races" variant="secondary" onPress={startNewCampaign} />
           </>
         ) : (
           <>

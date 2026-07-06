@@ -70,13 +70,18 @@ export const numeric: Pick<TextStyle, 'fontVariant'> = {
 // Semantic status aliases — the meaning, not the pigment. All reuse existing
 // palette values; no new colours. `labelOnPanel` is the micro-label tint on
 // card/panel surfaces, lifted from `slate` (≈3.2:1 on card) to `mist` so
-// uppercase 11pt labels clear 4.5:1.
+// uppercase 11pt labels clear 4.5:1. The teal `good` is reserved for a good
+// STATE (on pace, covered, high confidence); a navigator's water/weather READ
+// is `info` cyan — keeping the two cool hues from meaning the same thing when
+// they sit side by side. `selected` is the chosen-control accent the shared
+// Segmented/SelectableCard announce with.
 export const status = {
   good: colors.signalGreen,
   warn: colors.warning,
   bad: colors.signalRed,
   info: colors.tide,
   labelOnPanel: colors.mist,
+  selected: colors.brassLight,
 };
 
 // Surface materials: which existing colour plays which structural role, so

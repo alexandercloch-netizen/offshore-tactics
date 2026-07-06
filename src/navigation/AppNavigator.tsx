@@ -1,5 +1,4 @@
 import React from 'react';
-import { ActivityIndicator, View } from 'react-native';
 import { DefaultTheme, NavigationContainer, Theme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -9,6 +8,7 @@ import { isSupabaseConfigured } from '../lib/supabase';
 import { useAuth } from '../store/AuthContext';
 import TabBarIcon from './TabBarIcon';
 import ErrorBoundary from '../components/ErrorBoundary';
+import LoadingState from '../components/LoadingState';
 import HomeScreen from '../screens/HomeScreen';
 import OnboardingScreen from '../screens/OnboardingScreen';
 import ProfileScreen from '../screens/ProfileScreen';
@@ -91,11 +91,7 @@ export const AppNavigator: React.FC = () => {
   // Hold on a splash until auth resolves, so the login wall doesn't flash for a
   // signed-in returning player.
   if (loading) {
-    return (
-      <View style={{ flex: 1, backgroundColor: colors.abyss, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator color={colors.brassLight} />
-      </View>
-    );
+    return <LoadingState />;
   }
 
   // Required-but-frictionless gate: when cloud is configured, login is required;

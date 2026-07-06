@@ -3,11 +3,13 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DivisionKey, Race, RootStackParamList } from '../types';
-import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
+import { colors, fontSize, fontWeight, radius, spacing, status, surface } from '../theme';
 import { RACES, getRaceById } from '../data';
 import { useGame } from '../store/GameContext';
 import { formatDuration, isRaceUnlocked } from '../engine/gameEngine';
+import { divisionName } from '../lib/labels';
 import NauticalButton from '../components/NauticalButton';
+import FunnelSteps from '../components/FunnelSteps';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RaceSelect'>;
 
@@ -32,13 +34,14 @@ export const RaceSelectScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={[
-        styles.content,
-        { paddingBottom: insets.bottom + spacing.xl },
-      ]}
-    >
+    <View style={styles.screen}>
+      <FunnelSteps stage="race" />
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: insets.bottom + spacing.xl },
+        ]}
+      >
       <Text style={styles.intro}>
         Funds available: {money(state.funds)}
       </Text>
@@ -110,7 +113,8 @@ export const RaceSelectScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         );
       })}
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 };
 
@@ -123,11 +127,10 @@ const DivisionRow: React.FC<{
   const { money } = useGame();
   const info = race.divisions[division];
   const affordable = funds >= info.entryFee;
-  const label = division === 'corinthian' ? 'Corinthian' : 'Pro';
   return (
     <View style={styles.divisionRow}>
       <View style={{ flex: 1 }}>
-        <Text style={styles.divisionName}>{label} Division</Text>
+        <Text style={styles.divisionName}>{divisionName(division)} Division</Text>
         <Text style={styles.divisionMeta}>
           Entry {money(info.entryFee)} • Purse {money(info.prizeMoney)} • {info.fleetSize} boats
         </Text>
@@ -168,7 +171,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: colors.hull,
+    // Content card, so the accent border — hull stays for hairline rules.
+    borderColor: surface.accentBorder,
     padding: spacing.lg,
     marginBottom: spacing.lg,
   },
@@ -240,7 +244,7 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.bold,
   },
   statLabel: {
-    color: colors.slate,
+    color: status.labelOnPanel,
     fontSize: fontSize.xs,
     textTransform: 'uppercase',
     marginTop: 2,
@@ -277,7 +281,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
   },
   lockText: {
-    color: colors.slate,
+    color: status.labelOnPanel,
     fontSize: fontSize.sm,
     fontWeight: fontWeight.medium,
   },

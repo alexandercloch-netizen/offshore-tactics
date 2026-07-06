@@ -21,7 +21,7 @@ import { buildProjector } from './projection';
 import { LandPolygon } from '../data/landmasses';
 
 // Re-exported so screens can keep importing it from RouteMap (its historical home).
-export { chartViewportBounds } from './projection';
+export { chartViewportBounds, clampChartToCoverage } from './projection';
 
 // The dense colour-field grid for the active layer (wind speed or tide rate),
 // row-major and full (no cells dropped) so the heatmap and the flow animation can

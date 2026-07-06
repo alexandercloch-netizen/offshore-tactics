@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { CompositeScreenProps } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -12,6 +12,8 @@ import { formatDuration } from '../engine/gameEngine';
 import { scenarioTagLine } from '../services/weather';
 import { defaultPortForRegion, getPortById } from '../data/onboarding';
 import NauticalButton from '../components/NauticalButton';
+import EmptyState from '../components/EmptyState';
+import Segmented from '../components/Segmented';
 import { confirmAction } from '../lib/confirm';
 
 type Props = CompositeScreenProps<
@@ -108,9 +110,11 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
           ))}
         </View>
       ) : (
-        <View style={styles.empty}>
-          <Text style={styles.emptyText}>No races sailed yet.</Text>
-          <Text style={styles.emptySub}>Your results and best finishes will appear here.</Text>
+        <View style={{ marginBottom: spacing.lg }}>
+          <EmptyState
+            title="No races sailed yet."
+            body="Your results and best finishes will appear here."
+          />
         </View>
       )}
 
@@ -123,21 +127,16 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
 
       <View style={styles.currencyRow}>
         <Text style={styles.currencyLabel}>Currency</Text>
-        <View style={styles.currencyToggle}>
-          {(['USD', 'EUR'] as const).map((c) => (
-            <Pressable
-              key={c}
-              onPress={() => setCurrency(c)}
-              style={[styles.currencyOption, currency === c && styles.currencyOptionActive]}
-            >
-              <Text
-                style={[styles.currencyText, currency === c && styles.currencyTextActive]}
-              >
-                {c === 'USD' ? '$ USD' : '€ EUR'}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
+        <Segmented<'USD' | 'EUR'>
+          value={currency}
+          options={[
+            { value: 'USD', label: '$ USD' },
+            { value: 'EUR', label: '€ EUR' },
+          ]}
+          onSelect={setCurrency}
+          stretch={false}
+          testID="currency-toggle"
+        />
       </View>
 
       <View style={styles.actions}>
@@ -245,17 +244,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: spacing.lg,
   },
-  empty: {
-    backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.hull,
-    padding: spacing.xl,
-    alignItems: 'center',
-    marginBottom: spacing.lg,
-  },
-  emptyText: { color: colors.foam, fontSize: fontSize.md, fontWeight: fontWeight.bold },
-  emptySub: { color: colors.mist, fontSize: fontSize.sm, marginTop: spacing.xs, textAlign: 'center' },
   actions: { gap: spacing.md },
   currencyRow: {
     flexDirection: 'row',
@@ -270,18 +258,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   homePortValue: { color: colors.foam, fontSize: fontSize.sm, fontWeight: fontWeight.medium },
-  currencyToggle: {
-    flexDirection: 'row',
-    backgroundColor: colors.navy,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.hull,
-    overflow: 'hidden',
-  },
-  currencyOption: { paddingVertical: spacing.sm, paddingHorizontal: spacing.lg },
-  currencyOptionActive: { backgroundColor: colors.hull },
-  currencyText: { color: colors.mist, fontSize: fontSize.sm, fontWeight: fontWeight.medium },
-  currencyTextActive: { color: colors.brassLight, fontWeight: fontWeight.bold },
 });
 
 export default ProfileScreen;

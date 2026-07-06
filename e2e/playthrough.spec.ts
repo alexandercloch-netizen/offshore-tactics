@@ -17,12 +17,11 @@ test('a full race can be played from start to finish in the cockpit', async ({ p
     throw e;
   });
 
-  // Destructive actions prompt via window.confirm on web. The retire probe
-  // below DISMISSES its confirm (we keep racing); anything else is accepted so
-  // a stray confirm can never hang the run.
+  // Destructive actions prompt via the themed ConfirmHost sheet on web (no
+  // browser dialogs anywhere) — declining must always be possible, so a stray
+  // native dialog appearing here would be a regression worth failing on.
   page.on('dialog', (d) => {
-    const keepRacing = d.message().includes('Abandon the race');
-    (keepRacing ? d.dismiss() : d.accept()).catch(() => undefined);
+    throw new Error(`Unexpected native dialog: ${d.message()}`);
   });
 
   await page.goto('/');
@@ -88,14 +87,15 @@ test('a full race can be played from start to finish in the cockpit', async ({ p
     )
     .toBe('live');
 
-  // Retire stays reachable from the overflow, and still surfaces the confirm
-  // dialog (dismissed by the handler above — we keep racing). Decisions fire on
+  // Retire stays reachable from the overflow, and still surfaces the themed
+  // confirm sheet — which can be DECLINED (we keep racing). Decisions fire on
   // a fast cadence, so each probe settles any dock first and retries.
   await withQuietCockpit(page, async () => {
     await page.getByTestId('overflow-button').click({ timeout: 2_000 });
-    const dialogSeen = page.waitForEvent('dialog', { timeout: 5_000 });
     await page.getByTestId('retire-button').click({ timeout: 2_000 });
-    await dialogSeen;
+    await expect(page.getByTestId('confirm-sheet')).toBeVisible({ timeout: 5_000 });
+    await page.getByTestId('confirm-cancel').click({ timeout: 2_000 });
+    await expect(page.getByTestId('confirm-sheet')).not.toBeVisible();
     await page.getByTestId('overflow-close').click({ timeout: 2_000 });
   });
 
@@ -161,7 +161,9 @@ test('phone portrait keeps the chart floor and the one-line band', async ({ page
   page.on('pageerror', (e) => {
     throw e;
   });
-  page.on('dialog', (d) => d.accept().catch(() => undefined));
+  page.on('dialog', (d) => {
+    throw new Error(`Unexpected native dialog: ${d.message()}`);
+  });
 
   await page.goto('/');
   await page.getByText('UK & Ireland', { exact: true }).first().click();
@@ -213,11 +215,12 @@ test('phone portrait keeps the chart floor and the one-line band', async ({ page
   expect(dockBox.y).toBeGreaterThanOrEqual(dockedBox.y + dockedBox.height - 1);
   expect(await page.getByTestId('instrument-cell').count()).toBe(6);
 
-  // Done probing — retire cleanly (the dialog handler accepts) so the run ends
-  // fast and proves the retire → results path end to end.
+  // Done probing — retire cleanly (accepting the themed confirm sheet) so the
+  // run ends fast and proves the retire → results path end to end.
   await withQuietCockpit(page, async () => {
     await page.getByTestId('overflow-button').click({ timeout: 2_000 });
     await page.getByTestId('retire-button').click({ timeout: 2_000 });
+    await page.getByTestId('confirm-accept').click({ timeout: 5_000 });
   });
   await expect(page.getByRole('button', { name: 'Enter Another Race' })).toBeVisible({
     timeout: 30_000,

@@ -52,6 +52,11 @@ const COURSES = loadCourses();
 
 // A square-ish box (in the map's projected space) padded around the course, so
 // the clipped land fills the viewport corners regardless of screen aspect.
+// MIRRORED by landCoverageHalfSpan in src/components/projection.ts (the chart
+// clamps its viewport to this box) — change the 1.45/0.3 there too, and beware:
+// widening this box changes the router's obstacle set and CAN move the golden
+// pins (a 2.4× box once doubled Fastnet's routed elapsed). Prefer clamping the
+// chart over widening the bake.
 function raceBbox(course) {
   const lats = course.map((c) => c[0]);
   const lons = course.map((c) => c[1]);
