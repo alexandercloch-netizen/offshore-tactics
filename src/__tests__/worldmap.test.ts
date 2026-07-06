@@ -2,6 +2,7 @@ import { REGION_BOUNDS, REGION_LAND, WORLD_BOUNDS, WORLD_LAND } from '../data/wo
 import { REGION_RACES } from '../data/onboarding';
 import { RACES, getRaceById } from '../data';
 import { REGION_KEYS, regionRaces } from '../components/harbour/regions';
+import { worldProjection } from '../components/WorldChart';
 
 // Coverage contract for the baked world chart: every race is chartable on the
 // world view, every region station has courses to pin and a coastline to draw,
@@ -70,5 +71,31 @@ describe('world chart coverage', () => {
       JSON.stringify(REGION_LAND).length +
       JSON.stringify(REGION_BOUNDS).length;
     expect(bytes).toBeLessThan(150_000);
+  });
+});
+
+describe('worldProjection frame honesty', () => {
+  // The bake clips continents at each box edge; if the drawable extends past
+  // the box, that clip renders as a straight coastline floating in invented
+  // water (the Tasman hero bug). The box must land EXACTLY on the frame.
+  it('maps every box exactly onto its drawable — no sea ring past the bake', () => {
+    const boxes = [WORLD_BOUNDS, ...Object.values(REGION_BOUNDS)];
+    for (const b of boxes) {
+      for (const [sw, sh] of [
+        [390, 200],
+        [200, 200],
+        [900, 420],
+      ]) {
+        const p = worldProjection(b, sw, sh);
+        const tl = p.project(b.maxLat, b.minLon);
+        const br = p.project(b.minLat, b.maxLon);
+        expect(tl.x).toBeCloseTo(0, 6);
+        expect(tl.y).toBeCloseTo(0, 6);
+        expect(br.x).toBeCloseTo(p.width, 6);
+        expect(br.y).toBeCloseTo(p.height, 6);
+        expect(p.width).toBeLessThanOrEqual(sw + 1e-6);
+        expect(p.height).toBeLessThanOrEqual(sh + 1e-6);
+      }
+    }
   });
 });
