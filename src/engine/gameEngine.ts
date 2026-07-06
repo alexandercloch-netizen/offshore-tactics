@@ -24,6 +24,8 @@ import {
   RaceProgress,
   RaceResult,
   RoutingBias,
+  Sail,
+  SailCategory,
   SignatureOutcome,
   StepResult,
   TacticalChoice,
@@ -55,7 +57,16 @@ import {
   pointOfSailFor,
 } from './geo';
 import { bestVmgAngles, polarSpeed } from './polar';
-import { effectivePolar } from './sails';
+import {
+  bestSailAt,
+  bestWardrobeMul,
+  effectivePolar,
+  flownSailMul,
+  isWorkingSail,
+  raceWardrobe,
+  sailCoverage,
+} from './sails';
+import { getSailById, WORKING_SAILS } from '../data/sails';
 import { createWindField, forecastConfidence, pressureHint, sampleWind, weatherFromWind } from './wind';
 import { clearPolyline, planRoute, WindSampler } from './router';
 import { currentAlong, sampleCurrent, tideAlong } from './current';
@@ -695,13 +706,117 @@ export function boatSpeedFor(
   heading: number,
   wind: WindSample,
   effortMul = 1,
-  skillMul = 1
+  skillMul = 1,
+  sailMul = 1
 ): number {
   const twa = angularDelta(heading, wind.fromDeg);
   return Math.max(
-    polarSpeed(boat, twa, wind.speedKn) * conditionFactor(condition) * effortMul * skillMul,
+    polarSpeed(boat, twa, wind.speedKn) * conditionFactor(condition) * effortMul * skillMul * sailMul,
     0.4
   );
+}
+
+// ---- The flown sail ----
+//
+// The wardrobe made real: the base polar is the boat under its working set, and
+// the ONE sail the crew currently flies multiplies it — a specialist earns its
+// boost inside its envelope and bites below base when grossly outside it
+// (`flownSailMul`). The default (no `activeSailId`) is the working set at
+// exactly 1.0, so a race that never touches the picker sails byte-identically
+// to the pre-wardrobe game.
+
+// The boat the player physically trims: the raw hull with its BASE polar. The
+// rigged `resolveBoatById` boat (base lifted by the whole wardrobe) remains the
+// planner's boat — routing, targets and the fleet benchmark all assume the
+// right canvas goes up — but live speed must start from base or a flown sail
+// would be counted twice.
+function speedBoatFor(state: GameState): Boat | undefined {
+  if (!state.selectedBoatId) return undefined;
+  return (
+    getBoatById(state.selectedBoatId) ??
+    state.profile?.fleet.find((b) => b.id === state.selectedBoatId)
+  );
+}
+
+// The specialist currently flying, or undefined for the working set (including
+// the explicit working entries — they multiply by exactly 1).
+export function flownSpecialist(progress?: RaceProgress): Sail | undefined {
+  const id = progress?.activeSailId;
+  if (!id || isWorkingSail(id)) return undefined;
+  return getSailById(id);
+}
+
+// Live sail multiplier at the boat's current heading and wind.
+export function liveSailMul(state: GameState): number {
+  const p = state.progress;
+  if (!p) return 1;
+  return flownSailMul(flownSpecialist(p), angularDelta(p.heading, p.windDir), p.windSpeedKn);
+}
+
+// What the SAIL instrument shows: the flown sail's name, how well it suits this
+// moment (coverage — 1 for the working set, which is never wrong, only slow),
+// and the ⇄N change count. Pure read; undefined only before a race exists.
+export interface SailReadout {
+  id?: string; // specialist id; undefined = working set
+  name: string;
+  isWorking: boolean;
+  coverage: number; // 0–1 fit to the moment (working set always 1)
+  changes: number;
+  fumbled: number;
+}
+export function sailReadout(state: GameState): SailReadout | undefined {
+  const p = state.progress;
+  if (!p) return undefined;
+  const sail = flownSpecialist(p);
+  const twa = angularDelta(p.heading, p.windDir);
+  return {
+    id: sail?.id,
+    name: sail ? sail.name : WORKING_SAILS[0].name,
+    isWorking: !sail,
+    coverage: sail ? sailCoverage(sail, twa, p.windSpeedKn) : 1,
+    changes: p.sailChanges ?? 0,
+    fumbled: p.sailChangesFumbled ?? 0,
+  };
+}
+
+// The sails the crew can call for right now: the boat's wardrobe minus anything
+// blown out this race. Working sails are indestructible, so this is never empty.
+export function availableWardrobe(state: GameState): Sail[] {
+  const boat = speedBoatFor(state);
+  if (!boat) return [...WORKING_SAILS];
+  const out = state.progress?.unavailableSails;
+  return raceWardrobe(boat).filter((s) => !out?.includes(s.id));
+}
+
+// The Navigator's sail recommendation for the APPROACH TO THE NEXT MARK (the
+// anticipatory read — the change you'd call now, not the angle you happen to be
+// on this second): the owned specialist doing the most work at the at-the-mark
+// TWA/TWS, or null when the working set is the honest call.
+export function recommendedSail(state: GameState): Sail | null {
+  const race = getRaceById(state.selectedRaceId);
+  const field = state.windField;
+  const p = state.progress;
+  if (!race || !field || !p) return null;
+  const mark = race.waypoints[Math.min(p.nextMarkIndex, race.waypoints.length - 1)];
+  const brgToMark = bearing(p.lat, p.lon, mark.lat, mark.lon);
+  const wind = sampleWind(field, p.lat, p.lon, p.elapsedHours);
+  const twa = angularDelta(brgToMark, wind.fromDeg);
+  const specialists = availableWardrobe(state).filter((s) => s.boost > 0);
+  return bestSailAt(specialists, twa, wind.speedKn);
+}
+
+// The coverage a candidate sail would have at the approach to the next mark —
+// the badge on each picker row (anticipatory, like the recommendation).
+export function sailCoverageAtMark(state: GameState, sail: Sail): number {
+  const race = getRaceById(state.selectedRaceId);
+  const field = state.windField;
+  const p = state.progress;
+  if (!race || !field || !p) return sail.boost > 0 ? 0 : 1;
+  if (sail.boost <= 0) return 1;
+  const mark = race.waypoints[Math.min(p.nextMarkIndex, race.waypoints.length - 1)];
+  const brgToMark = bearing(p.lat, p.lon, mark.lat, mark.lon);
+  const wind = sampleWind(field, p.lat, p.lon, p.elapsedHours);
+  return sailCoverage(sail, angularDelta(brgToMark, wind.fromDeg), wind.speedKn);
 }
 
 // Estimated time (hours) to sail a planned route under the evolving wind: walk
@@ -743,9 +858,10 @@ export function estimateRouteHours(
 }
 
 // Boat speed right now, from the live progress + condition + effort dial + the
-// edge a skilled crew brings.
+// edge a skilled crew brings + the sail actually flying (base polar × the
+// flown sail's multiplier — the same spine `stepRace` sails).
 export function currentSpeed(state: GameState): number {
-  const boat = resolveBoatById(state, state.selectedBoatId);
+  const boat = speedBoatFor(state) ?? resolveBoatById(state, state.selectedBoatId);
   if (!boat || !state.progress) return 0;
   const p = state.progress;
   return boatSpeedFor(
@@ -754,7 +870,8 @@ export function currentSpeed(state: GameState): number {
     p.heading,
     { fromDeg: p.windDir, speedKn: p.windSpeedKn },
     EFFORT_SPEED[strategyOf(state).effort],
-    crewSkillFactor(crewSkillAverage(state.selectedCrewIds))
+    crewSkillFactor(crewSkillAverage(state.selectedCrewIds)),
+    liveSailMul(state)
   );
 }
 
@@ -1149,13 +1266,23 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
 
   const wind = sampleWind(field, prev.lat, prev.lon, prev.elapsedHours);
   const skillMul = crewSkillFactor(crewSkillAverage(state.selectedCrewIds));
+  // The flown sail's live multiplier — computed off the same heading/wind the
+  // polar reads. With no specialist up it is exactly 1, and the speed maths is
+  // byte-identical to the pre-wardrobe engine. Speed starts from the BASE
+  // polar (`speedBoatFor`) — the rigged planner's boat would count the sail
+  // twice.
+  const flown = flownSpecialist(prev);
+  const twaNow = angularDelta(prev.heading, wind.fromDeg);
+  const sailMul = flownSailMul(flown, twaNow, wind.speedKn);
+  const speedBoat = speedBoatFor(state) ?? boat;
   const baseSpeed = boatSpeedFor(
-    boat,
+    speedBoat,
     state.condition,
     prev.heading,
     wind,
     EFFORT_SPEED[strategy.effort],
-    skillMul
+    skillMul,
+    sailMul
   );
   // The start's lasting bite: a clean-/dirty-air speed multiplier from the start
   // sequence, fading linearly back to neutral over the opening leg (`startFadeNm`).
@@ -1325,7 +1452,29 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
       prev.pendingSituation && distanceCoveredNm < prev.pendingSituation.expiresAtNm
         ? prev.pendingSituation
         : undefined,
+    // The flown sail rides along unchanged — only the picker and event choices
+    // write it.
+    activeSailId: prev.activeSailId,
+    sailChanges: prev.sailChanges,
+    sailChangesFumbled: prev.sailChangesFumbled,
+    unavailableSails: prev.unavailableSails,
+    sailFracTotal: prev.sailFracTotal,
+    sailFracRight: prev.sailFracRight,
   };
+
+  // Right-sail bookkeeping: was the best canvas aboard actually up this tick?
+  // Weighted by geometric progress like wear (sums toward ~1 over the race),
+  // and only measured when the boat carries specialists worth choosing. Pure
+  // arithmetic — no RNG, no speed effect — so the default path stays
+  // byte-identical.
+  const wardrobe = raceWardrobe(speedBoat).filter(
+    (s) => !prev.unavailableSails?.includes(s.id)
+  );
+  if (df > 0 && wardrobe.some((s) => s.boost > 0)) {
+    const best = bestWardrobeMul(wardrobe, twaNow, wind.speedKn);
+    progress.sailFracTotal = (prev.sailFracTotal ?? 0) + df;
+    progress.sailFracRight = (prev.sailFracRight ?? 0) + (sailMul >= best - 0.005 ? df : 0);
+  }
 
   // Advance the AI fleet through the same elapsed time, wind and tide, then rank.
   // The fleet feels the same stream as the player (paced off a tide-free
@@ -1500,6 +1649,23 @@ export function applyDecision(state: GameState, choice: TacticalChoice): StepRes
     throw new Error('Cannot apply a decision outside a race.');
   }
 
+  // An authored choice can leave a sail flying (the kite call, the storm-jib
+  // change): it writes the SAME `activeSailId` the manual picker does — one
+  // flown sail, one field, no divergence. Deterministic (no draw here; the
+  // manoeuvre's chance already lives in this decision's own bungle roll), and
+  // ignored if the boat doesn't carry the sail.
+  let nextSailId = state.progress.activeSailId;
+  let sailChanges = state.progress.sailChanges;
+  if (choice.setsSail) {
+    const targetId = isWorkingSail(choice.setsSail) ? undefined : choice.setsSail;
+    const carried =
+      targetId === undefined || availableWardrobe(state).some((s) => s.id === targetId);
+    if (carried && targetId !== (flownSpecialist(state.progress)?.id ?? undefined)) {
+      nextSailId = targetId;
+      sailChanges = (sailChanges ?? 0) + 1;
+    }
+  }
+
   let stamina = state.condition.crewStamina + choice.staminaDelta;
   let morale = state.condition.crewMorale + choice.moraleDelta;
   let hull = state.condition.hullIntegrity + choice.hullDelta;
@@ -1570,6 +1736,8 @@ export function applyDecision(state: GameState, choice: TacticalChoice): StepRes
             state.progress.totalDistanceNm * SITUATION_WINDOW_FRACTION,
         }
       : state.progress.pendingSituation,
+    activeSailId: nextSailId,
+    sailChanges,
   };
 
   // While the player handles the decision, the fleet sails on — a costly call
@@ -1601,6 +1769,156 @@ export function applyDecision(state: GameState, choice: TacticalChoice): StepRes
     log: resolution.summary,
     finished: false,
     retired,
+    resolution,
+  };
+}
+
+// ---- Sail changes ----
+
+// Manoeuvre time by the canvas going up (hours): a headsail peel is quick, a
+// kite set slower, storm canvas slowest of all. Dousing back to the working set
+// is a headsail-speed job. Tuned — with the wrong-sail penalty and the fumble
+// recovery below — to the balance target: a well-managed race podiums off the
+// wardrobe's edge; a mismanaged one bleeds places, not the boat.
+const SAIL_CHANGE_HOURS: Record<SailCategory, number> = {
+  headsail: 0.035,
+  reacher: 0.05,
+  spinnaker: 0.06,
+  stormsail: 0.07,
+};
+// The authored risk of any change (fed through `decisionBungleChance`, so the
+// Bowman's relief, the crew average, safety gear and the half-risk floor all
+// apply exactly as they do to a tagged decision — the bow owns the manoeuvre).
+const SAIL_CHANGE_BASE_RISK = 0.1;
+// A sharp Trimmer shortens the recovery from a fumbled change (they get shape
+// back on the new sail fast); capped like every other relief.
+const SAIL_RECOVERY_TRIMMER_MAX = 0.35;
+// A single change can cost minutes, never the race.
+const SAIL_CHANGE_CAP_H = 0.5;
+// Above this breeze a fumbled specialist hoist can destroy the sail outright.
+const HEAVY_AIR_KN = 25;
+const BLOWOUT_CHANCE = 0.5;
+
+// The picker's honest cost line: what this hoist takes in minutes, clean.
+export function sailChangeMinutes(sail?: Sail): number {
+  return Math.round(SAIL_CHANGE_HOURS[sail?.category ?? 'headsail'] * 60);
+}
+
+// Which sail categories keep a choice-opened situation honest: a manual change
+// away from the category contradicts the story (the big kite came down), so
+// the pending follow-on is quietly cleared rather than asked about a sail that
+// is no longer up.
+const SAIL_SITUATIONS: Record<string, SailCategory[]> = {
+  'big-kite': ['spinnaker', 'reacher'],
+};
+
+// Commit a manual sail change. Pure given the RNG; draws EXACTLY two seeded
+// rolls (the bungle, then the blow-out) and ONLY on a committed distinct
+// change — a re-select of the flying sail, an unknown id or a blown-out sail
+// returns null without touching the stream, so a zero-change race is
+// byte-identical to one with the picker never opened. No distance is sailed;
+// the manoeuvre costs time, the fleet sails on through it.
+export function resolveSailChange(state: GameState, sailId: string): StepResult | null {
+  const race = getRaceById(state.selectedRaceId);
+  if (!race || !state.progress || !state.weather) return null;
+  const prev = state.progress;
+
+  const hoisted = isWorkingSail(sailId) ? undefined : getSailById(sailId);
+  if (!isWorkingSail(sailId) && !hoisted) return null; // unknown sail
+  if (hoisted && !availableWardrobe(state).some((s) => s.id === hoisted.id)) return null;
+  const current = flownSpecialist(prev);
+  if ((hoisted?.id ?? undefined) === (current?.id ?? undefined)) return null; // same sail — no-op
+
+  // The two seeded rolls, in a fixed order so the stream shape never depends on
+  // the branch taken.
+  const synthetic: TacticalChoice = {
+    id: 'sail-change',
+    label: 'Sail change',
+    description: '',
+    timeDelta: 0,
+    staminaDelta: 0,
+    moraleDelta: 0,
+    hullDelta: 0,
+    risk: SAIL_CHANGE_BASE_RISK,
+    crewSkill: 'Bowman',
+  };
+  const bungled = rnd() < decisionBungleChance(state, synthetic);
+  const blowRoll = rnd();
+
+  const prov = provisioningPlan(state.provisions, state.selectedCrewIds.length, race);
+  const trimmer = roleRelief(state.selectedCrewIds, 'Trimmer', SAIL_RECOVERY_TRIMMER_MAX);
+  const cost = SAIL_CHANGE_HOURS[hoisted?.category ?? 'headsail'];
+  const recovery = bungled ? (0.15 + state.weather.riskModifier * 0.45) * (1 - trimmer) : 0;
+  const lostHours = Math.min(cost + recovery, SAIL_CHANGE_CAP_H);
+
+  const heavy = prev.windSpeedKn >= HEAVY_AIR_KN;
+  const blown = bungled && heavy && !!hoisted && blowRoll < BLOWOUT_CHANCE;
+
+  const condition: BoatCondition = {
+    crewStamina: clamp(state.condition.crewStamina - 2),
+    crewMorale: clamp(state.condition.crewMorale + (bungled ? -3 : 0)),
+    hullIntegrity: clamp(
+      state.condition.hullIntegrity - (bungled ? 2 * (1 - prov.hullWearResist) : 0)
+    ),
+  };
+
+  // A change that contradicts a live choice-opened situation clears it — the
+  // moment the story was about is over.
+  let pendingSituation = prev.pendingSituation;
+  if (pendingSituation) {
+    const wanted = SAIL_SITUATIONS[pendingSituation.key];
+    if (wanted && (!hoisted || !wanted.includes(hoisted.category))) {
+      pendingSituation = undefined;
+    }
+  }
+
+  const progress: RaceProgress = {
+    ...prev,
+    elapsedHours: prev.elapsedHours + lostHours,
+    activeSailId: blown ? undefined : hoisted?.id,
+    sailChanges: (prev.sailChanges ?? 0) + 1, // committed — even a fumble drops the old sail
+    sailChangesFumbled: (prev.sailChangesFumbled ?? 0) + (bungled ? 1 : 0),
+    unavailableSails: blown
+      ? [...(prev.unavailableSails ?? []), hoisted!.id]
+      : prev.unavailableSails,
+    pendingSituation,
+  };
+
+  // The fleet sails on while the crew wrestles canvas.
+  const fleet = state.windField
+    ? advanceFleet(state.fleet ?? [], race, state.windField, prev.elapsedHours, lostHours, state.tidalField)
+    : (state.fleet ?? []);
+  progress.position = livePosition(fleet, progress.distanceCoveredNm);
+
+  const minutes = Math.max(1, Math.round(lostHours * 60));
+  let summary: string;
+  if (blown) {
+    summary = `Sent up the ${hoisted!.name} in ${Math.round(prev.windSpeedKn)} knots and the bowman fumbled the change — it blew out. Working sails the rest of the way (~${minutes}m lost).`;
+  } else if (bungled) {
+    summary = hoisted
+      ? `Peeled to the ${hoisted.name} — the bowman fumbled the change (~${minutes}m lost).`
+      : `Doused back to working sails — a slow, messy drop (~${minutes}m lost).`;
+  } else {
+    summary = hoisted
+      ? `Peeled to the ${hoisted.name} — a clean change.`
+      : `Doused back to working sails.`;
+  }
+
+  const resolution: DecisionResolution = {
+    outcome: 'safe',
+    bungled,
+    lostHours,
+    summary,
+  };
+  return {
+    progress,
+    condition,
+    weather: state.weather,
+    fleet,
+    event: null,
+    log: summary,
+    finished: false,
+    retired: false,
     resolution,
   };
 }
@@ -1853,6 +2171,24 @@ export function buildResult(state: GameState, outcome: StepResult): RaceResult {
     nearestRivalName,
     nearestRivalAhead,
     correctedWinnerName,
+    // Sail-handling debrief: quality, not just frequency — how many changes,
+    // how many fumbled, what fraction of the race was under the best canvas
+    // aboard (only once enough of the race has been measured to be honest),
+    // and anything blown out along the way.
+    sailChanges: outcome.progress.sailChanges,
+    sailChangesFumbled:
+      outcome.progress.sailChanges !== undefined
+        ? (outcome.progress.sailChangesFumbled ?? 0)
+        : undefined,
+    rightSailPct:
+      (outcome.progress.sailFracTotal ?? 0) > 0.2
+        ? Math.round(
+            (100 * (outcome.progress.sailFracRight ?? 0)) / outcome.progress.sailFracTotal!
+          )
+        : undefined,
+    blownSails: outcome.progress.unavailableSails?.length
+      ? outcome.progress.unavailableSails.map((id) => getSailById(id)?.name ?? id)
+      : undefined,
     // Weather-scenario provenance: a run sailed on real model output carries
     // its stamp into history (and is thereby gated off the global leaderboard).
     scenario: state.scenario,

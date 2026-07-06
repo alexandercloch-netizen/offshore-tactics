@@ -238,6 +238,10 @@ export interface Boat {
   crewCapacity: number; // max crew berths
   price: number; // purchase / commission cost
   ratingTcc?: number; // IRC-style time correction coefficient (corrected = elapsed × TCC); derived if absent
+  // The class whose specialist-sail wardrobe this boat carries for free during
+  // a race (see `raceWardrobe`). Catalogue boats declare it; custom builds
+  // carry their own `boatType` + purchased sails instead.
+  boatType?: BoatType;
 }
 
 // ---- Custom boats: real polar diagrams (TWA x TWS speed tables) ----
@@ -456,6 +460,11 @@ export interface TacticalChoice {
   // A situation this choice leaves the boat in (e.g. 'reefed'), opening a
   // follow-on decision later in the passage. Transient; expires with distance.
   sets?: string;
+  // The sail this choice leaves flying: a sail id, or 'working' to douse back
+  // to the standard working set. Writes the SAME `progress.activeSailId` the
+  // manual picker does — one flown sail, whichever hand hoisted it. Ignored if
+  // the boat doesn't carry the sail. No RNG is drawn for it.
+  setsSail?: string;
 }
 
 export type EventKind = 'tactical' | 'weather' | 'mob' | 'hazard';
@@ -597,6 +606,18 @@ export interface RaceProgress {
   // reef, a big kite up, a strapped hand). While live it makes matching
   // follow-on events eligible; it expires with distance sailed.
   pendingSituation?: PendingSituation;
+  // ---- The flown sail (all optional, back-compatible: absent = the standard
+  // working set, exactly the pre-wardrobe boat). One field, written by BOTH the
+  // manual picker and authored event choices, so the two can never diverge.
+  activeSailId?: string; // specialist sail currently flying; undefined = working sails
+  sailChanges?: number; // committed distinct changes this race (the ⇄N counter)
+  sailChangesFumbled?: number; // how many of those the crew bungled
+  unavailableSails?: string[]; // sails blown out this race (a bad change in heavy air)
+  // Right-sail bookkeeping, accumulated by geometric progress like wear (each
+  // sums toward ~1 over a full race), so the debrief can say what fraction of
+  // the race was sailed under the best canvas aboard.
+  sailFracTotal?: number;
+  sailFracRight?: number;
 }
 
 // A transient situation opened by a tactical choice, carried on progress so a
@@ -706,6 +727,12 @@ export interface RaceResult {
   // output ("Today's forecast" / a historic edition). Scenario runs stay in the
   // local logbook — they never post to the global leaderboard.
   scenario?: WeatherScenarioStamp;
+  // ---- Sail-handling debrief (quality, not just frequency). Optional and
+  // back-compatible: absent on old saves and on races sailed before wardrobes.
+  sailChanges?: number;
+  sailChangesFumbled?: number;
+  rightSailPct?: number; // % of the race sailed under the best canvas aboard
+  blownSails?: string[]; // names of sails lost to a bungled heavy-air change
 }
 
 export interface GameState {

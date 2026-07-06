@@ -5,11 +5,34 @@ import { WeatherOutlook } from './wind';
 // right now, and how they've trended since the last decision (the "leg"), so the
 // player can judge whether their effort and side are paying — and how much risk
 // to take — before committing.
+// Scalars the report needs `state` to derive (polar target, VMC, the tidal
+// stream, the flown sail): the CALL SITE computes them and passes them in, so
+// this module stays a pure projection of plain data. All optional — the guest
+// and no-field paths simply leave them undefined and the report renders
+// without them.
+export interface InstrumentExtras {
+  targetKn?: number; // polarTargetSpeed(state) — the perfectly-sailed speed here
+  vmcKn?: number; // speedMadeGood(state) — speed made good toward the mark
+  tide?: { rateKn: number; along: number } | null; // tideRead(state); null = slack
+  activeSail?: {
+    id?: string; // specialist id; undefined = the working set
+    name: string;
+    isWorking: boolean;
+    coverage: number; // fit to the moment (working set always 1)
+    changes: number; // the ⇄N counter
+    fumbled: number;
+  };
+}
+
 export interface InstrumentReport {
   now: {
     speedKn: number;
     windDir: number;
     windSpeedKn: number;
+    // Signed true wind angle, folded to ±180: positive = wind over the
+    // starboard side, negative = port. Unsigned TWA is tack-blind — the band
+    // shows "52°S", not just "52°".
+    twaDeg: number;
     pointOfSail: PointOfSail;
     position: number;
     fleetSize: number;
@@ -17,6 +40,11 @@ export interface InstrumentReport {
     stamina: number;
     morale: number;
     distanceToGoNm: number;
+    targetKn?: number; // pass-through from InstrumentExtras
+    polarPct?: number; // speed ÷ target, as a %
+    vmcKn?: number;
+    tide?: { rateKn: number; along: number };
+    activeSail?: InstrumentExtras['activeSail'];
   };
   leg: {
     nm: number; // miles sailed since the last decision
@@ -41,7 +69,8 @@ export function buildInstrumentReport(
   progress: RaceProgress,
   condition: BoatCondition,
   fleetSize: number,
-  outlook: WeatherOutlook
+  outlook: WeatherOutlook,
+  extras: InstrumentExtras = {}
 ): InstrumentReport {
   const all = progress.readings ?? [];
   // The current leg: everything sailed since the last decision. Fall back to all
@@ -51,10 +80,12 @@ export function buildInstrumentReport(
   const last = leg[leg.length - 1];
   const first = leg[0];
 
+  const speedKn = last?.speedKn ?? 0;
   const now = {
-    speedKn: last?.speedKn ?? 0,
+    speedKn,
     windDir: progress.windDir,
     windSpeedKn: progress.windSpeedKn,
+    twaDeg: signedShift(progress.heading, progress.windDir),
     pointOfSail: progress.pointOfSail,
     position: progress.position,
     fleetSize,
@@ -62,6 +93,14 @@ export function buildInstrumentReport(
     stamina: condition.crewStamina,
     morale: condition.crewMorale,
     distanceToGoNm: Math.max(progress.totalDistanceNm - progress.distanceCoveredNm, 0),
+    targetKn: extras.targetKn,
+    polarPct:
+      extras.targetKn !== undefined && extras.targetKn > 0
+        ? Math.round((speedKn / extras.targetKn) * 100)
+        : undefined,
+    vmcKn: extras.vmcKn,
+    tide: extras.tide ? { rateKn: extras.tide.rateKn, along: extras.tide.along } : undefined,
+    activeSail: extras.activeSail,
   };
 
   const legNm = first && last ? Math.max(last.atNm - first.atNm, 0) : 0;

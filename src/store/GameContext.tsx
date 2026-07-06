@@ -48,6 +48,7 @@ import {
   initialProgress,
   raceDivision,
   resolveBoatById,
+  resolveSailChange,
   seedStartGrid,
   stepRace,
 } from '../engine/gameEngine';
@@ -399,6 +400,9 @@ export interface GameContextValue {
   reseedWeather: (scenario: WeatherScenario | null) => void;
   tick: () => StepResult;
   decide: (choice: TacticalChoice) => StepResult;
+  // Commit a manual sail change (the picker). Null = a no-op (same sail,
+  // unknown id, or a sail blown out this race) — nothing applied, no RNG drawn.
+  changeSail: (sailId: string) => StepResult | null;
   retireRace: () => void;
   prepareNextRace: () => void;
   resetCampaign: () => void;
@@ -835,6 +839,16 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
     [applyOutcome]
   );
 
+  // Commit a manual sail change from the picker and fold its outcome in.
+  const changeSail = useCallback(
+    (sailId: string): StepResult | null => {
+      const outcome = resolveSailChange(stateRef.current, sailId);
+      if (outcome) applyOutcome(outcome);
+      return outcome;
+    },
+    [applyOutcome]
+  );
+
   const retireRace = useCallback(() => {
     const current = stateRef.current;
     const race = getRaceById(current.selectedRaceId);
@@ -889,6 +903,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
       reseedWeather,
       tick,
       decide,
+      changeSail,
       retireRace,
       prepareNextRace,
       resetCampaign,
@@ -919,6 +934,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
       reseedWeather,
       tick,
       decide,
+      changeSail,
       retireRace,
       prepareNextRace,
       resetCampaign,

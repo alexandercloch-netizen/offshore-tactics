@@ -1,5 +1,10 @@
 import { Boat } from '../types';
 
+// Every catalogue boat declares its class (`boatType`), which is the wardrobe
+// it races with: the standard working set plus the class's specialist sails
+// (see `data/sails.ts` AVAILABILITY), carried free — no purchase, no economy
+// change. The base polar is the boat under working sails; the specialists only
+// pay when the crew actually calls for them mid-race.
 export const BOATS: Boat[] = [
   {
     id: 'boat-sprite',
@@ -14,6 +19,7 @@ export const BOATS: Boat[] = [
     crewCapacity: 4,
     price: 6500,
     ratingTcc: 0.96,
+    boatType: 'cruiserRacerIRC',
   },
   {
     id: 'boat-corsair',
@@ -28,6 +34,7 @@ export const BOATS: Boat[] = [
     crewCapacity: 6,
     price: 11500,
     ratingTcc: 1.0,
+    boatType: 'cruiserRacerIRC',
   },
   {
     id: 'boat-tempest',
@@ -42,6 +49,7 @@ export const BOATS: Boat[] = [
     crewCapacity: 8,
     price: 18500,
     ratingTcc: 1.07,
+    boatType: 'class40',
   },
   {
     id: 'boat-meridian',
@@ -56,6 +64,7 @@ export const BOATS: Boat[] = [
     crewCapacity: 8,
     price: 21000,
     ratingTcc: 0.93,
+    boatType: 'cruiserRacerIRC',
   },
   {
     id: 'boat-mistral',
@@ -70,5 +79,6 @@ export const BOATS: Boat[] = [
     crewCapacity: 10,
     price: 28000,
     ratingTcc: 1.28,
+    boatType: 'tp52',
   },
 ];
