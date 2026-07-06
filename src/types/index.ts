@@ -600,7 +600,10 @@ export interface RaceProgress {
   signatureChoiceId?: string; // id of the TacticalChoice taken at the signature decision
   // Where the active decision was triggered. A field-resolved call's edge decays
   // as the boat sails on past this point — the shift you spotted doesn't wait —
-  // so a late commit is worth less than an immediate one. Cleared on resolution.
+  // so a late commit is worth less than an immediate one. While set it also
+  // marks the docked opportunity as live (no fresh event is drawn over it).
+  // Cleared on resolution, on a "hold course" dismissal, and when the edge
+  // decays out entirely (expiry — see expireDecision/EDGE_SPENT).
   decisionTriggerNm?: number;
   // Decision memory: a transient situation a choice left the boat in (a tucked
   // reef, a big kite up, a strapped hand). While live it makes matching
@@ -776,11 +779,15 @@ export interface StepResult {
   condition: BoatCondition;
   weather: WeatherCondition;
   fleet: Competitor[];
-  event: GameEvent | null; // a decision that interrupts the auto-play, if any
+  event: GameEvent | null; // a decision docking into the cockpit's live lane, if any
   log?: string;
   finished: boolean;
   retired: boolean;
   resolution?: DecisionResolution; // present when this step resolved a decision
+  // A docked opportunity's moment passed this step (its edge decayed out):
+  // retracted draw-free — no deltas, no decision spent — the cards should leave
+  // the lane. Never set on a step that also resolves or fires an event.
+  eventExpired?: boolean;
 }
 
 // Global leaderboard row (mirrors the Supabase `leaderboard` table)

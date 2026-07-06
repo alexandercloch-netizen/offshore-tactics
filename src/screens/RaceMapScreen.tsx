@@ -9,8 +9,10 @@ import { LANDMASSES } from '../data/landmasses';
 import { storylineForRace, signatureBeat } from '../data/storylines';
 import { useGame } from '../store/GameContext';
 import {
+  EDGE_SPENT,
   availableWardrobe,
   currentSpeed,
+  edgeDecay,
   flownSpecialist,
   formatDuration,
   formatGap,
@@ -70,11 +72,22 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const reducedMotion = useReducedMotion();
-  const { state, beginRace, tick, decide, changeSail, retireRace, setStrategy, markTutorialSeen } =
-    useGame();
+  const {
+    state,
+    beginRace,
+    tick,
+    decide,
+    dismissEvent,
+    changeSail,
+    retireRace,
+    setStrategy,
+    markTutorialSeen,
+  } = useGame();
 
   // The one docked lane's state machine: what the bottom region shows beyond
-  // the control console. While ANY mode is open the sim is held (eventActiveRef).
+  // the control console. The lane is LIVE — the sim keeps ticking under a
+  // docked decision, the sail picker and the debrief ribbon; only a man
+  // overboard holds it (eventActiveRef).
   const [dockMode, setDockMode] = useState<DockMode | null>(null);
   const [activeEvent, setActiveEvent] = useState<GameEvent | null>(null);
   const [activeVmg, setActiveVmg] = useState<VmgPreview | null>(null);
@@ -123,9 +136,13 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
   tickRef.current = tick;
   const stateRef = useRef<GameState>(state);
   stateRef.current = state;
+  // The ONLY sim hold left in the cockpit: a man overboard. Every other
+  // interruption is a live opportunity the race sails on through.
   const eventActiveRef = useRef(false);
   const helpRef = useRef(false);
   helpRef.current = showHelp;
+  const dockModeRef = useRef<DockMode | null>(null);
+  dockModeRef.current = dockMode;
   const standingsTickRef = useRef(0);
   // The position when the current interruption docked, so the debrief ribbon
   // can report places gained/lost across the call.
@@ -150,9 +167,23 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
     if (!stateRef.current.tutorialSeen) markTutorialSeen();
   }, [markTutorialSeen]);
 
-  // The auto-play loop: tick the simulation forward until a decision or finish.
-  // Held while any dock is open (eventActiveRef), while the coach strip shows
-  // (helpRef) and while paused — exactly the pre-cockpit semantics.
+  // Everything docked is resolved or dismissed through here: the lane closes,
+  // any MOB hold lifts, the race sails on.
+  const closeDock = useCallback(() => {
+    setDockMode(null);
+    setActiveEvent(null);
+    setActiveVmg(null);
+    setActiveRead(null);
+    setDebrief(null);
+    setMobPos(null);
+    eventActiveRef.current = false;
+  }, []);
+
+  // The auto-play loop: tick the simulation forward to the finish. The race
+  // NEVER holds for a docked decision or the sail picker — those are live
+  // opportunities the boat sails on through (player-feedback overrule of the
+  // earlier hold-everything ruling). Only a man overboard (eventActiveRef),
+  // the coach strip (helpRef) and an explicit pause gate the tick.
   useEffect(() => {
     if (!started) return undefined;
     const id = setInterval(() => {
@@ -161,7 +192,9 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
       standingsTickRef.current += 1;
       if (standingsTickRef.current % 13 === 0) setStandingsBeat((b) => b + 1);
       if (outcome.event) {
-        eventActiveRef.current = true;
+        // Dock the opportunity live (evicting a lingering picker/ribbon — the
+        // race outranks them). The engine suppresses further events while this
+        // one rides on progress.decisionTriggerNm, so the lane never stacks.
         positionBeforeRef.current = outcome.progress.position;
         const tempState: GameState = {
           ...stateRef.current,
@@ -172,14 +205,22 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
         setActiveVmg(vmgPreview(tempState, outcome.event));
         setActiveRead(tacticalRead(tempState));
         if (outcome.event.kind === 'mob') {
+          // The one emergency that still stops the watch — a swimmer can't
+          // wait on a fading edge.
+          eventActiveRef.current = true;
           // Drop the swimmer a trail-point astern: the boat swept past before
           // the shout went up, so the steer-to read is a real turn-back.
           const trail = outcome.progress.trail;
           const p = trail.length > 1 ? trail[trail.length - 2] : trail[trail.length - 1];
           setMobPos(p ? { lat: p.lat, lon: p.lon } : null);
         }
+        setDebrief(null);
         setActiveEvent(outcome.event);
         setDockMode('decision');
+      } else if (outcome.eventExpired && dockModeRef.current === 'decision') {
+        // The engine retracted the docked opportunity (its edge decayed out) —
+        // the cards follow it off the lane. Not a decision: nothing resolved.
+        closeDock();
       }
       if (outcome.finished || outcome.retired) {
         clearInterval(id);
@@ -187,19 +228,7 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
       }
     }, TICK_MS);
     return () => clearInterval(id);
-  }, [started, paused, goToResults]);
-
-  // Everything docked is resolved or dismissed through here: the lane closes,
-  // the hold lifts, the race sails on.
-  const closeDock = useCallback(() => {
-    setDockMode(null);
-    setActiveEvent(null);
-    setActiveVmg(null);
-    setActiveRead(null);
-    setDebrief(null);
-    setMobPos(null);
-    eventActiveRef.current = false;
-  }, []);
+  }, [started, paused, goToResults, closeDock]);
 
   const handleChoice = useCallback(
     (choice: TacticalChoice) => {
@@ -211,11 +240,14 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
         goToResults();
         return;
       }
-      // The dock morphs into the debrief ribbon; the sim stays held until the
-      // ribbon is acknowledged (tap, or its independent timeout).
+      // The dock morphs into the debrief ribbon — informational only: any MOB
+      // hold lifts here and the sim sails on beneath it until it is tapped
+      // away (or its independent timeout fires).
+      eventActiveRef.current = false;
       setActiveEvent(null);
       setActiveVmg(null);
       setActiveRead(null);
+      setMobPos(null);
       const res = outcome.resolution;
       setDebrief(
         res
@@ -232,11 +264,21 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
     [decide, closeDock, goToResults]
   );
 
+  // Wave a docked (non-MOB) decision off: hold course, keep sailing. Zero RNG,
+  // zero deltas — the engine just clears the trigger and logs the quiet line.
+  const dismissDecision = useCallback(() => {
+    dismissEvent();
+    closeDock();
+  }, [dismissEvent, closeDock]);
+
   const openSailPicker = useCallback(() => {
-    if (eventActiveRef.current || !stateRef.current.progress) return;
-    eventActiveRef.current = true;
+    if (!stateRef.current.progress) return;
+    // The lane is single-occupancy: a docked decision (above all a MOB) keeps
+    // it — dismiss or answer the call first. A lingering ribbon yields.
+    if (dockModeRef.current === 'decision') return;
     positionBeforeRef.current = stateRef.current.progress.position;
     setOverflowOpen(false);
+    setDebrief(null);
     setDockMode('sail');
   }, []);
 
@@ -299,6 +341,18 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
     }
   }, [progressElapsed]);
 
+  // While a (non-MOB) decision rides the live lane, keep its read honest: the
+  // Navigator's hint, the VMG bands and the downside lines are recomputed from
+  // the CURRENT state each tick, so the cards fade with the decaying edge
+  // instead of promising the moment the boat has already sailed past. Cheap —
+  // a handful of wind samples, only while a card is docked. MOB holds the sim,
+  // so there is nothing to refresh.
+  useEffect(() => {
+    if (!activeEvent || activeEvent.kind === 'mob') return;
+    setActiveVmg(vmgPreview(stateRef.current, activeEvent));
+    setActiveRead(tacticalRead(stateRef.current));
+  }, [progressElapsed, activeEvent]);
+
   // The ribbon's corrected standing + gap to the nearest rival, on the calm
   // standings cadence — the honest handicap readout, top of screen. Hooks stay
   // above the loading guard; the memo simply returns undefined pre-race.
@@ -330,6 +384,10 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
     if (!best) return place;
     // A sub-second gap would print "−0s" — call the dead heat what it is.
     if (best.gap * 3600 < 1) return `${place} · level with ${best.name}`;
+    // Mid-race corrected gaps explode when a rival parks in a hole — beyond a
+    // watch (6h) the number reads as fiction ("+143h to X"), so say the honest
+    // qualitative thing instead.
+    if (best.gap > 6) return `${place} · ${best.ahead ? 'well astern' : 'clear ahead'}`;
     const sign = best.ahead ? '+' : '−';
     return `${place} · ${sign}${formatGap(best.gap * 3600)} to ${best.name}`;
     // The cadence key IS the dependency: recompute on the calm beat only.
@@ -518,6 +576,27 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
       }
     : undefined;
 
+  const isMob = activeEvent?.kind === 'mob';
+  // How much of the docked opportunity is left, 0–1: the engine's own decay of
+  // the edge past its fire point (progress.decisionTriggerNm), renormalised so
+  // the bar drains to empty exactly where the engine expires the event
+  // (EDGE_SPENT) — the UI and the resolution can never disagree.
+  const edgeFade =
+    activeEvent && !isMob && progress.decisionTriggerNm !== undefined
+      ? Math.max(
+          0,
+          Math.min(
+            1,
+            (edgeDecay(
+              progress.distanceCoveredNm - progress.decisionTriggerNm,
+              progress.totalDistanceNm
+            ) -
+              EDGE_SPENT) /
+              (1 - EDGE_SPENT)
+          )
+        )
+      : undefined;
+
   const usableHeight = Math.max(height - insets.top - insets.bottom, 320);
   const docked = dockMode !== null;
   const layout = cockpitLayout(width, usableHeight, docked);
@@ -560,19 +639,23 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
     <View>
       <DecisionDock
         mode={dockMode!}
-        hold
         reducedMotion={reducedMotion}
         maxHeight={layout.dockMaxHeight}
         event={activeEvent}
         vmg={activeVmg}
         read={activeRead}
+        edgeFade={edgeFade}
         storyBeat={beatBody}
         mobInfo={mobInfo}
         onChoice={handleChoice}
         sailOptions={dockMode === 'sail' ? buildSailOptions() : undefined}
         onSailPick={handleSailPick}
         debrief={debrief ?? undefined}
-        onDismiss={dockMode === 'decision' ? undefined : closeDock}
+        // Only a MOB demands an answer; everything else can be waved off —
+        // "hold course" retracts a decision draw-free, the picker/ribbon close.
+        onDismiss={
+          dockMode === 'decision' ? (isMob ? undefined : dismissDecision) : closeDock
+        }
       />
       <View style={{ height: insets.bottom + spacing.sm, backgroundColor: colors.deepSea }} />
     </View>
@@ -609,7 +692,8 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
         dock={dock}
         sheet={sheet}
         progressPct={pct}
-        held={docked}
+        // The HELD pill is MOB-only now — everything else keeps the race live.
+        held={isMob && dockMode === 'decision'}
       />
     </View>
   );

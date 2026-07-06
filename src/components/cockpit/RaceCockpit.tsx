@@ -61,7 +61,7 @@ interface RaceCockpitProps {
   // The overflow sheet, absolutely positioned over the bottom region only.
   sheet?: React.ReactNode;
   progressPct: number; // the 3px hairline along the chart's bottom edge
-  held: boolean; // sim held (any dock open) — shows the HELD pill
+  held: boolean; // sim held — MOB only now (every other dock is live) — shows the HELD pill
 }
 
 const RaceCockpit: React.FC<RaceCockpitProps> = ({

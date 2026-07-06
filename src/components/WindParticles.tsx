@@ -1,17 +1,20 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { G, Path } from 'react-native-svg';
 import { buildFlowField, sampleFlow, FlowCell, FlowField, FlowLayer } from './flowField';
+import { windHeatColor } from './windScale';
 
 export type { FlowCell, FlowLayer } from './flowField';
 export { windCells, tideCells } from './flowField';
 
 // A live, PredictWind-style flow animation: hundreds of particles drifting with
 // the wind (or the tide), seeded across the chart and advected by the sampled
-// field. Rendered as a *single* SVG <Path> per fade tier (two nodes total, not
-// one per particle), updated on a requestAnimationFrame loop — so it animates
-// smoothly yet stays pure react-native-svg, identical on iOS, Android and web
-// (no canvas/WebGL, no platform fork). Purely visual: it reads the same field
-// the engine routes on but never feeds back into it, so determinism is untouched.
+// field. Each streak is tinted by the LOCAL flow speed under its head, quantised
+// into a handful of colour bands so the whole swarm still renders as a bounded
+// set of SVG <Path> nodes (one per band × fade tier — never one per particle),
+// updated on a requestAnimationFrame loop. Pure react-native-svg, identical on
+// iOS, Android and web (no canvas/WebGL, no platform fork). Purely visual: it
+// reads the same field the engine routes on but never feeds back into it, so
+// determinism is untouched.
 
 interface XY {
   x: number;
@@ -40,6 +43,33 @@ interface Particle {
 const TRAIL_FADE = 0.6;
 const TRAIL_LEN = 12; // history points per streak — long enough to read as flow in light air
 
+// The wind/gust streak palette: band centres (kn) on the shared kn→colour ramp,
+// lifted well toward white so a streak reads *against* the same ramp painted
+// beneath it as the heatmap — the hue carries the local speed, the lightness
+// keeps it legible. Seven bands is enough hue resolution for the eye while
+// keeping the SVG node count fixed at bands × two fade tiers.
+const WIND_BAND_KN = [3, 8, 12, 16, 21, 28, 40];
+const STREAK_LIGHTEN = 0.62;
+
+function lighten(rgb: string, amount: number): string {
+  const m = /rgb\((\d+),\s*(\d+),\s*(\d+)\)/.exec(rgb);
+  if (!m) return rgb;
+  const ch = (v: string) => Math.round(Number(v) + (255 - Number(v)) * amount);
+  return `rgb(${ch(m[1])}, ${ch(m[2])}, ${ch(m[3])})`;
+}
+
+// Which colour band a local speed falls in: nearest band centre (edges midway).
+function bandIndex(kn: number): number {
+  let i = 0;
+  while (i < WIND_BAND_KN.length - 1 && kn > (WIND_BAND_KN[i] + WIND_BAND_KN[i + 1]) / 2) i += 1;
+  return i;
+}
+
+interface BandPaths {
+  head: string;
+  trail: string;
+}
+
 interface WindParticlesProps {
   cells: FlowCell[];
   cols: number;
@@ -59,7 +89,7 @@ export const WindParticles: React.FC<WindParticlesProps> = ({
   project,
   layer,
   color,
-  count = 140,
+  count = 160,
   width,
   height,
 }) => {
@@ -68,9 +98,19 @@ export const WindParticles: React.FC<WindParticlesProps> = ({
     [cells, cols, rows, project, layer]
   );
 
+  // The tide keeps its single pale streak colour: its own ramp is already the
+  // water painted under the particles, and one bright thread over it reads far
+  // better than cyan-on-cyan. Wind and gust get the speed-tinted bands.
+  const bandColors = useMemo(
+    () =>
+      layer === 'tide' ? [color] : WIND_BAND_KN.map((kn) => lighten(windHeatColor(kn), STREAK_LIGHTEN)),
+    [layer, color]
+  );
+  const bands = bandColors.length;
+
   const particles = useRef<Particle[]>([]);
   const rng = useRef(lcg(0x9e3779b1));
-  const [paths, setPaths] = useState<{ head: string; trail: string }>({ head: '', trail: '' });
+  const [paths, setPaths] = useState<BandPaths[]>([]);
 
   // (Re)seed the swarm whenever the swarm size or the drawable area changes.
   useEffect(() => {
@@ -101,8 +141,8 @@ export const WindParticles: React.FC<WindParticlesProps> = ({
     const frame = (t: number) => {
       const dt = last ? Math.min((t - last) / 1000, 0.05) : 0.016; // clamp tab-switch gaps
       last = t;
-      let head = '';
-      let trail = '';
+      const next: BandPaths[] = [];
+      for (let b = 0; b < bands; b += 1) next.push({ head: '', trail: '' });
       for (const p of particles.current) {
         const v = sampleFlow(field, p.x, p.y);
         p.x += v.vx * dt;
@@ -117,26 +157,33 @@ export const WindParticles: React.FC<WindParticlesProps> = ({
         }
         if (p.trail.length < 4) continue;
         // The whole streak (faint) plus its leading two points (bright) — a comet
-        // that reads as flow even in light air, all in two SVG <Path> nodes.
+        // that reads as flow even in light air — accumulated into its speed
+        // band's two paths, so the node count stays bands × 2 however many
+        // particles fly.
+        const bucket = next[bands === 1 ? 0 : bandIndex(v.kn)];
         let d = `M${p.trail[0].toFixed(1)} ${p.trail[1].toFixed(1)}`;
         for (let k = 2; k < p.trail.length; k += 2) d += `L${p.trail[k].toFixed(1)} ${p.trail[k + 1].toFixed(1)}`;
-        trail += d;
+        bucket.trail += d;
         const n = p.trail.length;
-        head += `M${p.trail[n - 4].toFixed(1)} ${p.trail[n - 3].toFixed(1)}L${p.trail[n - 2].toFixed(1)} ${p.trail[n - 1].toFixed(1)}`;
+        bucket.head += `M${p.trail[n - 4].toFixed(1)} ${p.trail[n - 3].toFixed(1)}L${p.trail[n - 2].toFixed(1)} ${p.trail[n - 1].toFixed(1)}`;
       }
-      setPaths({ head, trail });
+      setPaths(next);
       raf = requestAnimationFrame(frame);
     };
 
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [field, width, height]);
+  }, [field, width, height, bands]);
 
   if (!field) return null;
   return (
     <G>
-      <Path d={paths.trail} stroke={color} strokeWidth={1} strokeLinecap="round" fill="none" opacity={TRAIL_FADE * 0.5} />
-      <Path d={paths.head} stroke={color} strokeWidth={1.6} strokeLinecap="round" fill="none" opacity={TRAIL_FADE} />
+      {paths.map((p, i) => (
+        <React.Fragment key={i}>
+          <Path d={p.trail} stroke={bandColors[i]} strokeWidth={1} strokeLinecap="round" fill="none" opacity={TRAIL_FADE * 0.5} />
+          <Path d={p.head} stroke={bandColors[i]} strokeWidth={1.6} strokeLinecap="round" fill="none" opacity={TRAIL_FADE} />
+        </React.Fragment>
+      ))}
     </G>
   );
 };

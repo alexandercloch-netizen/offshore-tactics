@@ -996,6 +996,32 @@ export function edgeDecay(distPastTriggerNm: number, courseNm: number): number {
   return Math.exp(-Math.max(0, distPastTriggerNm) / windowNm);
 }
 
+// Below this remaining decay a docked opportunity is spent — there is nothing
+// left worth committing to, so the cards leave the lane. Derived from edgeDecay's
+// own window (the ONE timescale for "the moment has passed"), never a second one.
+export const EDGE_SPENT = 0.1;
+export function decisionExpiryNm(courseNm: number): number {
+  // Distance past the trigger at which edgeDecay first falls below EDGE_SPENT.
+  return Math.max(courseNm * EDGE_WINDOW_FRACTION, 1) * Math.log(1 / EDGE_SPENT);
+}
+
+// The one quiet race-log line an unanswered opportunity leaves behind.
+export const DECISION_EXPIRED_LOG = 'Sailed past the moment — kept the course.';
+
+// Retract a docked opportunity without answering it — the player waved it off
+// ("hold course"), or the boat sailed its edge out entirely. Either way it is
+// NOT a decision: zero RNG draws, zero deltas, and the fired slot is handed
+// back so passing on a call never burns one of the race's limited decisions.
+// Pure state clearing; the caller logs DECISION_EXPIRED_LOG.
+export function expireDecision(progress: RaceProgress): RaceProgress {
+  if (progress.decisionTriggerNm === undefined) return progress;
+  return {
+    ...progress,
+    decisionTriggerNm: undefined,
+    decisionsTaken: Math.max(progress.decisionsTaken - 1, 0),
+  };
+}
+
 // The edge a commitment made NOW would actually resolve against: the live read,
 // faded by how far the boat has sailed since the decision was triggered. In the
 // normal flow the boat holds station while the call is made (decay 1); an
@@ -1484,11 +1510,32 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
     ? finalPosition(fleet, elapsedHours)
     : livePosition(fleet, distanceCoveredNm);
 
+  // A docked, unanswered opportunity rides on `decisionTriggerNm` (the cockpit
+  // keeps ticking while its cards sit in the lane). While it is live NO fresh
+  // event is drawn — one moment at a time — and crucially nothing here consumes
+  // or skips a draw: on the immediate-resolve path (decide on the fire tick,
+  // as the golden races do) `applyDecision` has already spent the trigger
+  // before the next tick, so this gate never engages and the RNG stream is
+  // byte-identical. Once the boat has sailed the edge out (edgeDecay below
+  // EDGE_SPENT) the moment expires: draw-free, no deltas, the fired slot
+  // handed back — see `expireDecision`, whose clearing this mirrors.
+  let eventExpired = false;
+  if (
+    progress.decisionTriggerNm !== undefined &&
+    distanceCoveredNm - progress.decisionTriggerNm >= decisionExpiryNm(total)
+  ) {
+    progress.decisionTriggerNm = undefined;
+    progress.decisionsTaken = Math.max(progress.decisionsTaken - 1, 0);
+    eventExpired = true;
+  }
+  const eventPending = progress.decisionTriggerNm !== undefined;
+
   // Decision scheduling. The signature hazard is a set-piece tied to its mark —
   // it fires as the boat reaches that waypoint, once per race. Everyday calls
   // are drawn on the usual geometric cadence, never repeating until exhausted.
   let event: GameEvent | null = null;
-  const canDecide = !finished && !retired && prev.decisionsTaken < MAX_DECISIONS;
+  const canDecide =
+    !finished && !retired && !eventPending && progress.decisionsTaken < MAX_DECISIONS;
   // Fit the everyday draw to the moment: the race's waters, the live breeze band
   // and how far through the passage we are. The picker only *prefers* matching
   // events (it always falls back to the flat pool), so this shapes flavour, not
@@ -1531,7 +1578,7 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
     if (!progress.signatureFired && reachedPinned) {
       event = hazardEvent;
       progress.signatureFired = true;
-      progress.decisionsTaken = prev.decisionsTaken + 1;
+      progress.decisionsTaken += 1;
       progress.shownEventIds = [...progress.shownEventIds, event.id];
       progress.nextDecisionAtNm =
         distanceCoveredNm + rndRange(DECISION_MIN, DECISION_MAX) * total;
@@ -1539,7 +1586,7 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
       // Suppress the generic draw on the signature tick (the branch above), but
       // otherwise the everyday cadence runs as normal — never drawing the
       // signature hazard (the picker excludes it).
-      progress.decisionsTaken = prev.decisionsTaken + 1;
+      progress.decisionsTaken += 1;
       progress.nextDecisionAtNm =
         distanceCoveredNm + rndRange(DECISION_MIN, DECISION_MAX) * total;
       event = pickEventForRace(progress.shownEventIds, progress.pointOfSail, decisionContext);
@@ -1547,12 +1594,12 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
     }
   } else if (canDecide && nearHazard && !progress.shownEventIds.includes(hazardId)) {
     event = hazardEvent;
-    progress.decisionsTaken = prev.decisionsTaken + 1;
+    progress.decisionsTaken += 1;
     progress.shownEventIds = [...progress.shownEventIds, event.id];
     progress.nextDecisionAtNm =
       distanceCoveredNm + rndRange(DECISION_MIN, DECISION_MAX) * total;
   } else if (canDecide && distanceCoveredNm >= prev.nextDecisionAtNm) {
-    progress.decisionsTaken = prev.decisionsTaken + 1;
+    progress.decisionsTaken += 1;
     progress.nextDecisionAtNm =
       distanceCoveredNm + rndRange(DECISION_MIN, DECISION_MAX) * total;
     // Only the pending situation is offered here (the un-storied path is
@@ -1574,11 +1621,13 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
     log = `Forced to retire in ${weather.label.toLowerCase()} after the boat took too much punishment.`;
   } else if (finished) {
     log = `Crossed the finish line at ${race.name}.`;
+  } else if (eventExpired) {
+    log = DECISION_EXPIRED_LOG;
   } else if (rounded && marks[nextMarkIndex - 1]) {
     log = `Rounded ${marks[nextMarkIndex - 1].name} — ${weather.label}, ${progress.pointOfSail.toLowerCase()}.`;
   }
 
-  return { progress, condition, weather, fleet, event, log, finished, retired };
+  return { progress, condition, weather, fleet, event, log, finished, retired, eventExpired };
 }
 
 // The odds the crew fumbles this call, pure and inspectable. On top of the

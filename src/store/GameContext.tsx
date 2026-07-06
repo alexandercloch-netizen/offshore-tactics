@@ -38,11 +38,13 @@ import {
   getRaceById,
 } from '../data';
 import {
+  DECISION_EXPIRED_LOG,
   DEFAULT_STRATEGY,
   applyDecision,
   buildResult,
   campaignCost,
   defaultStepNm,
+  expireDecision,
   fleetBenchmarkHours,
   initialCondition,
   initialProgress,
@@ -400,6 +402,10 @@ export interface GameContextValue {
   reseedWeather: (scenario: WeatherScenario | null) => void;
   tick: () => StepResult;
   decide: (choice: TacticalChoice) => StepResult;
+  // Wave the docked opportunity off ("hold course") without answering it. NOT
+  // a decision: zero RNG draws, zero deltas, the slot handed back — just the
+  // one quiet race-log line.
+  dismissEvent: () => void;
   // Commit a manual sail change (the picker). Null = a no-op (same sail,
   // unknown id, or a sail blown out this race) — nothing applied, no RNG drawn.
   changeSail: (sailId: string) => StepResult | null;
@@ -839,6 +845,25 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
     [applyOutcome]
   );
 
+  // Retract the docked opportunity unanswered: pure state clearing through the
+  // engine's expireDecision (draw-free — passing on a call is not a decision),
+  // folded in through the same APPLY_STEP path so the log line lands with it.
+  const dismissEvent = useCallback(() => {
+    const current = stateRef.current;
+    if (!current.progress || !current.weather) return;
+    if (current.progress.decisionTriggerNm === undefined) return; // nothing docked
+    dispatch({
+      type: 'APPLY_STEP',
+      payload: {
+        progress: expireDecision(current.progress),
+        condition: current.condition,
+        weather: current.weather,
+        fleet: current.fleet ?? [],
+        log: DECISION_EXPIRED_LOG,
+      },
+    });
+  }, []);
+
   // Commit a manual sail change from the picker and fold its outcome in.
   const changeSail = useCallback(
     (sailId: string): StepResult | null => {
@@ -903,6 +928,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
       reseedWeather,
       tick,
       decide,
+      dismissEvent,
       changeSail,
       retireRace,
       prepareNextRace,
@@ -934,6 +960,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
       reseedWeather,
       tick,
       decide,
+      dismissEvent,
       changeSail,
       retireRace,
       prepareNextRace,

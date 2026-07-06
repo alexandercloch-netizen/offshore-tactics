@@ -333,6 +333,9 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
                 layer={activeLayer}
                 // The spread layer is a stillness — uncertainty doesn't flow.
                 animate={activeLayer !== 'spread'}
+                // The briefing is a study, not a race: a touch more streak
+                // density helps the synoptic picture read at a glance.
+                particleBoost={1.2}
                 windFeature={feature}
                 windFeatures={otherFeatures}
                 land={LANDMASSES[race.id]}

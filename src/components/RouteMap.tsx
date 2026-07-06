@@ -43,6 +43,7 @@ interface RouteMapProps {
   field?: FlowField; // dense field for the active layer: colour heatmap + flow animation
   layer?: FlowLayer; // 'wind' (speed ramp) or 'tide' (rate ramp); default 'wind'
   animate?: boolean; // run the particle flow (default true); off for the static debrief
+  particleBoost?: number; // density multiplier on the flow swarm (the briefing runs it slightly denser)
   windFeature?: { lat: number; lon: number; radiusNm: number; puff: boolean }; // headline puff/hole to shade
   // The remaining drifting systems (the headline excluded): quiet, unlabelled
   // dashed rings so the whole synoptic picture reads without stealing the chart.
@@ -86,6 +87,7 @@ export const RouteMap: React.FC<RouteMapProps> = ({
   field,
   layer = 'wind',
   animate = true,
+  particleBoost = 1,
   windFeature,
   windFeatures,
   nextMarkIndex = 0,
@@ -282,9 +284,12 @@ export const RouteMap: React.FC<RouteMapProps> = ({
     return { ...p, rPx: Math.min(p.rPx, secondaryRadiusCap) };
   });
 
-  // Enough particles to read as a field, scaled to the drawable area and capped so
-  // even a big web chart stays light (one Path per fade tier, so this is cheap).
-  const particleCount = Math.max(70, Math.min(220, Math.round((width * height) / 2600)));
+  // Enough particles to read as a dense field, scaled to the drawable area and
+  // capped so even a big web chart stays light (the swarm renders as a bounded
+  // handful of banded Paths, so the cost per particle is just its path string).
+  const particleCount = Math.round(
+    Math.max(140, Math.min(320, (width * height) / 2600)) * particleBoost
+  );
   const flowColor = layer === 'tide' ? colors.tideFlow : colors.foam;
 
   const mobXY = mobMarker ? project(mobMarker.lat, mobMarker.lon) : null;

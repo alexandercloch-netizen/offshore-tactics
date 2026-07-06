@@ -34,6 +34,30 @@ describe('buildFlowField / sampleFlow', () => {
     expect(v.kn).toBeCloseTo(10, 5);
   });
 
+  it('streams gust and spread WITH the wind — wind-shaped layers are named by origin', () => {
+    // Regression: gust/spread once kept the raw fromDeg, so their particles ran
+    // exactly opposite the wind layer's (players spotted it on the Swiftsure
+    // briefing). For identical cells their velocity must equal the wind layer's.
+    const wind = buildFlowField(cells, 2, 2, project, 'wind')!;
+    const w = sampleFlow(wind, 0.5, 0.5);
+    for (const layer of ['gust', 'spread'] as const) {
+      const f = buildFlowField(cells, 2, 2, project, layer)!;
+      const v = sampleFlow(f, 0.5, 0.5);
+      expect(Math.sign(v.vx)).toBe(Math.sign(w.vx)); // parallel, same sign — never opposite
+      expect(v.vx).toBeCloseTo(w.vx, 5);
+      expect(v.vy).toBeCloseTo(w.vy, 5);
+    }
+  });
+
+  it('leaves the tide layer exactly as it was (set already points downstream)', () => {
+    // Pins today's numbers: 10 kn set due east × the tide px/kn scale (26).
+    const tide: FlowCell[] = cells.map((c) => ({ ...c, dirDeg: 90 }));
+    const field = buildFlowField(tide, 2, 2, project, 'tide')!;
+    const v = sampleFlow(field, 0.5, 0.5);
+    expect(v.vx).toBeCloseTo(260, 3);
+    expect(Math.abs(v.vy)).toBeLessThan(1e-4);
+  });
+
   it('treats tide direction as set (downstream), not origin', () => {
     const tide: FlowCell[] = cells.map((c) => ({ ...c, dirDeg: 90 })); // set due east
     const field = buildFlowField(tide, 2, 2, project, 'tide')!;
