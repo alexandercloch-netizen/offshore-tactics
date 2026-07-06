@@ -1,12 +1,16 @@
 import {
+  DECISION_EXPIRED_LOG,
   DEFAULT_STRATEGY,
   EDGE_SEND,
+  EDGE_SPENT,
   applyDecision,
   choiceDownside,
   decisionBungleChance,
+  decisionExpiryNm,
   defaultStepNm,
   edgeDecay,
   effectiveTacticalEdge,
+  expireDecision,
   initialProgress,
   misreadForgiveness,
   raceDivision,
@@ -396,6 +400,144 @@ describe('edge decay on late commits (item 3)', () => {
     setRng(() => 0.999);
     const out = applyDecision(s, boldCall);
     expect(out.progress.decisionTriggerNm).toBeUndefined();
+  });
+});
+
+describe('the live lane — unanswered opportunities (cockpit PR3)', () => {
+  const step = defaultStepNm(getRaceById('race-round-island')!);
+
+  // Fold a stepRace outcome back into state, exactly as the live loop does.
+  function fold(s: GameState, out: ReturnType<typeof stepRace>): GameState {
+    return {
+      ...s,
+      progress: out.progress,
+      condition: out.condition,
+      weather: out.weather,
+      fleet: out.fleet,
+    };
+  }
+
+  it('suppresses every fresh event while an opportunity is docked', () => {
+    const s = baseState({ windField: shiftingField(START.lat, START.lon) });
+    s.progress = { ...s.progress!, nextDecisionAtNm: 0 }; // force a fire this tick
+    setRng(() => 0.5);
+    const fired = stepRace(s, step);
+    expect(fired.event).not.toBeNull();
+    expect(fired.progress.decisionTriggerNm).toBeDefined();
+    // Leave the card unanswered and demand another event immediately — the
+    // engine must refuse while the trigger rides on progress.
+    let live = fold(s, fired);
+    live = { ...live, progress: { ...live.progress!, nextDecisionAtNm: 0 } };
+    const next = stepRace(live, step);
+    expect(next.event).toBeNull();
+    expect(next.progress.decisionTriggerNm).toBeDefined(); // still docked
+    // Resolving the call reopens the cadence: the same forced tick now fires.
+    const resolved = fold(fold(live, next), applyDecision(fold(live, next), boldCall));
+    expect(resolved.progress!.decisionTriggerNm).toBeUndefined();
+    const after = stepRace(
+      { ...resolved, progress: { ...resolved.progress!, nextDecisionAtNm: 0 } },
+      step
+    );
+    expect(after.event).not.toBeNull();
+  });
+
+  it('a decision left docked resolves against the decayed edge — a smaller realised gain', () => {
+    const s = baseState({ windField: shiftingField(START.lat, START.lon) });
+    s.progress = { ...s.progress!, nextDecisionAtNm: 0 };
+    setRng(() => 0.5);
+    const fired = stepRace(s, step);
+    expect(fired.event).not.toBeNull();
+    const atFire = fold(s, fired);
+
+    // Answer at once: the genuine shift, taken fresh, is free.
+    setRng(() => 0.999);
+    const immediate = applyDecision(atFire, boldCall);
+    const lostNow = immediate.progress.elapsedHours - atFire.progress!.elapsedHours;
+
+    // Sail on under the docked card (well inside the expiry window), then answer.
+    setRng(() => 0.5);
+    let delayed = atFire;
+    for (let i = 0; i < 6; i += 1) {
+      const out = stepRace(delayed, step);
+      expect(out.event).toBeNull(); // no stacking while the card waits
+      expect(out.eventExpired).toBeFalsy();
+      delayed = fold(delayed, out);
+    }
+    expect(
+      delayed.progress!.distanceCoveredNm - delayed.progress!.decisionTriggerNm!
+    ).toBeLessThan(decisionExpiryNm(delayed.progress!.totalDistanceNm));
+    setRng(() => 0.999);
+    const late = applyDecision(delayed, boldCall);
+    const lostLate = late.progress.elapsedHours - delayed.progress!.elapsedHours;
+    expect(lostNow).toBeCloseTo(0, 5);
+    expect(lostLate).toBeGreaterThan(lostNow + 0.02); // the moment faded under the cards
+  });
+
+  it('the docked card expires once the edge is spent: draw-free, the slot handed back', () => {
+    // Two identical states, one with a stale trigger (past the expiry distance),
+    // one with a fresh trigger. Both suppress the event draw, so any draw-count
+    // difference would be the expiry itself consuming RNG — there must be none.
+    // stepRace recomputes distance from the boat's position (still on the
+    // line), so the trigger is anchored BEHIND the start by `staleness` — the
+    // same geometry as a boat that sailed that far past its fire point.
+    const mk = (staleFactor: number): GameState => {
+      setRng(mulberry32(21));
+      const s = baseState();
+      // Expiry is measured against the GEOMETRIC course length stepRace sails.
+      const staleness = decisionExpiryNm(s.progress!.totalDistanceNm) * staleFactor;
+      s.progress = {
+        ...s.progress!,
+        decisionsTaken: 5,
+        decisionTriggerNm: -staleness,
+        nextDecisionAtNm: s.progress!.totalDistanceNm, // never due — isolate expiry
+      };
+      return s;
+    };
+    const countDraws = (s: GameState): { out: ReturnType<typeof stepRace>; draws: number } => {
+      let draws = 0;
+      const base = mulberry32(33);
+      setRng(() => {
+        draws += 1;
+        return base();
+      });
+      return { out: stepRace(s, step), draws };
+    };
+
+    const stale = countDraws(mk(1.05));
+    const fresh = countDraws(mk(0));
+    expect(stale.draws).toBe(fresh.draws); // expiry consumed ZERO draws
+
+    expect(stale.out.eventExpired).toBe(true);
+    expect(stale.out.progress.decisionTriggerNm).toBeUndefined();
+    expect(stale.out.progress.decisionsTaken).toBe(4); // handed back — never counts toward the cap
+    expect(stale.out.log).toBe(DECISION_EXPIRED_LOG);
+
+    expect(fresh.out.eventExpired).toBeFalsy();
+    expect(fresh.out.progress.decisionTriggerNm).toBeDefined();
+    expect(fresh.out.progress.decisionsTaken).toBe(5);
+  });
+
+  it('expiry and the send line share one timescale: decisionExpiryNm is where edgeDecay hits EDGE_SPENT', () => {
+    for (const course of [50, 600, 5000]) {
+      expect(edgeDecay(decisionExpiryNm(course), course)).toBeCloseTo(EDGE_SPENT, 9);
+    }
+  });
+
+  it('expireDecision (the "hold course" dismissal) is pure, draw-free and idempotent', () => {
+    const s = baseState();
+    const p = { ...s.progress!, decisionsTaken: 3, decisionTriggerNm: 7.5 };
+    let draws = 0;
+    setRng(() => {
+      draws += 1;
+      return 0.5;
+    });
+    const cleared = expireDecision(p);
+    expect(draws).toBe(0); // waving a call off is not a decision
+    expect(cleared.decisionTriggerNm).toBeUndefined();
+    expect(cleared.decisionsTaken).toBe(2); // the slot is handed back
+    expect(cleared.elapsedHours).toBe(p.elapsedHours); // zero deltas
+    // With nothing docked it is the identity — safe to call defensively.
+    expect(expireDecision(cleared)).toBe(cleared);
   });
 });
 

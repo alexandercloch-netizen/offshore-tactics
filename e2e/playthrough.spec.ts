@@ -3,9 +3,10 @@ import { test, expect, Page } from '@playwright/test';
 // Drives the exported web build through a complete campaign in the fixed-frame
 // cockpit: pick the first race, kit out a boat and crew, sail it — proving the
 // cockpit's structural contract along the way (the chart never yields to a
-// dialog, the sim holds while a call is docked, the sail picker commits real
-// changes) — and land on the results screen. Guest path throughout: no
-// Supabase env, no login wall, no blocking network call.
+// dialog, the race keeps SAILING while a call or the sail picker is docked —
+// only a MOB holds — and the sail picker commits real changes) — and land on
+// the results screen. Guest path throughout: no Supabase env, no login wall,
+// no blocking network call.
 
 // The chart must be a real chart, not a sliver that merely "isVisible".
 const MIN_CHART_AREA = 240 * 200;
@@ -73,8 +74,8 @@ test('a full race can be played from start to finish in the cockpit', async ({ p
 
   // Instrument liveness: a frozen band photographs identically to a live one —
   // the band's numbers (SOG at 1dp especially) must move across real ticks.
-  // (While a dock holds the sim the band legitimately freezes, so treat a
-  // visible interruption as "still alive" and settle it.)
+  // (Only a MOB holds the sim now, so treat a visible interruption as "still
+  // alive" and settle it.)
   const band = page.getByTestId('instrument-band');
   const bandBefore = await band.textContent();
   await expect
@@ -87,9 +88,12 @@ test('a full race can be played from start to finish in the cockpit', async ({ p
     )
     .toBe('live');
 
+  // The race no longer waits for docked calls, so it barrels toward the finish
+  // in real seconds — pause it for the deliberate structural probes below.
+  await setSimPaused(page, true);
+
   // Retire stays reachable from the overflow, and still surfaces the themed
-  // confirm sheet — which can be DECLINED (we keep racing). Decisions fire on
-  // a fast cadence, so each probe settles any dock first and retries.
+  // confirm sheet — which can be DECLINED (we keep racing).
   await withQuietCockpit(page, async () => {
     await page.getByTestId('overflow-button').click({ timeout: 2_000 });
     await page.getByTestId('retire-button').click({ timeout: 2_000 });
@@ -106,13 +110,6 @@ test('a full race can be played from start to finish in the cockpit', async ({ p
     await expect(page.getByTestId('sail-change-choice').first()).toBeVisible({ timeout: 3_000 });
   });
   await expect(dock).toBeVisible();
-  await expect(page.getByTestId('held-pill')).toBeVisible();
-
-  // Held means held: the race clock is static while the picker is docked.
-  const clock = page.getByTestId('ribbon-elapsed');
-  const clockDocked = await clock.textContent();
-  await page.waitForTimeout(800);
-  expect(await clock.textContent()).toBe(clockDocked);
 
   // Same-frame geometry: the chart stays a real chart and the dock compresses
   // rather than covers it.
@@ -124,7 +121,8 @@ test('a full race can be played from start to finish in the cockpit', async ({ p
   expect(await page.locator('[role="dialog"], [aria-modal="true"]').count()).toBe(0);
 
   // Commit a real change (never the sail already flying) and watch the ⇄
-  // counter acknowledge it; the debrief ribbon holds until tapped.
+  // counter acknowledge it (a commit works even while paused — it is a call,
+  // not a tick); the debrief ribbon docks until tapped or timed out.
   await page
     .locator('[data-testid="sail-change-choice"]:not([aria-label*="currently flying"])')
     .first()
@@ -135,7 +133,21 @@ test('a full race can be played from start to finish in the cockpit', async ({ p
   await page.getByTestId('debrief-ribbon').click();
   await expect(dock).not.toBeVisible();
 
-  // Sail to the finish, answering any tactical decisions that interrupt.
+  // Resume, and prove the lane is LIVE: with the sail picker docked the race
+  // clock keeps running (the old cockpit froze it — that hold is MOB-only now).
+  await setSimPaused(page, false);
+  await withQuietCockpit(page, async () => {
+    await page.getByTestId('sail-cell').click({ timeout: 2_000 });
+    await expect(page.getByTestId('sail-change-choice').first()).toBeVisible({ timeout: 3_000 });
+    const clock = page.getByTestId('ribbon-elapsed');
+    const before = await clock.textContent();
+    await expect
+      .poll(async () => (await clock.textContent()) !== before, { timeout: 5_000 })
+      .toBe(true);
+    await page.getByTestId('sail-dismiss').click({ timeout: 2_000 });
+  });
+
+  // Sail to the finish, answering any tactical decisions that dock.
   await playToResults(page);
 
   // The staged finish reveal plays over the results; tap it to skip straight to
@@ -183,11 +195,7 @@ test('phone portrait keeps the chart floor and the one-line band', async ({ page
 
   // Pause the sim (decisions dock within a second of the gun) so the IDLE
   // geometry can be measured deliberately.
-  await withQuietCockpit(page, async () => {
-    await page.getByTestId('overflow-button').click({ timeout: 2_000 });
-    await page.getByTestId('pause-button').click({ timeout: 2_000 });
-    await page.getByTestId('overflow-close').click({ timeout: 2_000 });
-  });
+  await setSimPaused(page, true);
 
   // Idle: the chart owns its floor (300 minus its own 18px frame), the band is
   // one thin line of exactly six cells.
@@ -200,19 +208,23 @@ test('phone portrait keeps the chart floor and the one-line band', async ({ page
   expect(await page.getByTestId('instrument-cell').count()).toBe(6);
 
   // Resume and wait for the first decision to dock.
-  await withQuietCockpit(page, async () => {
-    await page.getByTestId('overflow-button').click({ timeout: 2_000 });
-    await page.getByTestId('pause-button').click({ timeout: 2_000 });
-    await page.getByTestId('overflow-close').click({ timeout: 2_000 });
-  });
+  await setSimPaused(page, false);
 
   // Docked: the chart snaps but never below its 260px floor, and the dock sits
-  // wholly below it.
-  await expect(page.getByTestId('decision-choice').first()).toBeVisible({ timeout: 30_000 });
-  const dockedBox = (await chart.boundingBox())!;
-  expect(dockedBox.height).toBeGreaterThanOrEqual(230);
-  const dockBox = (await page.getByTestId('decision-dock').boundingBox())!;
-  expect(dockBox.y).toBeGreaterThanOrEqual(dockedBox.y + dockedBox.height - 1);
+  // wholly below it. The lane is live now — a docked card can EXPIRE (its edge
+  // decays as the boat sails on) between visibility and measurement, so retry
+  // against the next card rather than flake on a vanished box.
+  let measured = false;
+  for (let attempt = 0; attempt < 8 && !measured; attempt += 1) {
+    await expect(page.getByTestId('decision-choice').first()).toBeVisible({ timeout: 30_000 });
+    const dockedBox = await chart.boundingBox();
+    const dockBox = await page.getByTestId('decision-dock').boundingBox();
+    if (!dockedBox || !dockBox) continue; // the moment passed mid-measure — next card
+    expect(dockedBox.height).toBeGreaterThanOrEqual(230);
+    expect(dockBox.y).toBeGreaterThanOrEqual(dockedBox.y + dockedBox.height - 1);
+    measured = true;
+  }
+  expect(measured).toBe(true);
   expect(await page.getByTestId('instrument-cell').count()).toBe(6);
 
   // Done probing — retire cleanly (accepting the themed confirm sheet) so the
@@ -285,6 +297,21 @@ async function withQuietCockpit(page: Page, probe: () => Promise<void>): Promise
   throw lastError;
 }
 
+// Drive the pause toggle to a TARGET state (never blind-click it — a retried
+// probe would toggle the sim straight back). The button's label is the truth:
+// it reads "Pause" while running and "Resume" while paused.
+async function setSimPaused(page: Page, target: boolean): Promise<void> {
+  await withQuietCockpit(page, async () => {
+    await page.getByTestId('overflow-button').click({ timeout: 2_000 });
+    const pauseButton = page.getByTestId('pause-button');
+    await expect(pauseButton).toBeVisible({ timeout: 2_000 });
+    const label = (await pauseButton.textContent()) ?? '';
+    const paused = /resume/i.test(label);
+    if (paused !== target) await pauseButton.click({ timeout: 2_000 });
+    await page.getByTestId('overflow-close').click({ timeout: 2_000 });
+  });
+}
+
 async function playToResults(page: Page): Promise<void> {
   const results = page.getByRole('button', { name: 'Enter Another Race' });
   const choice = page.getByTestId('decision-choice').first();
@@ -294,20 +321,34 @@ async function playToResults(page: Page): Promise<void> {
 
   while (Date.now() < deadline) {
     if (await results.isVisible().catch(() => false)) return;
+    // Cards persist until answered or their edge expires — answer promptly,
+    // and treat a click landing on an already-expired card as a miss to poll
+    // past, never a failure.
     if (await choice.isVisible().catch(() => false)) {
       if (!geometryChecked) {
-        // Once, on the first live decision: the dock compresses the chart, the
-        // HELD pill is up, and no dialog semantics exist.
+        // Once, on the first live decision: the dock compresses the chart, no
+        // dialog semantics exist, and — unless it is the MOB emergency, the
+        // one hold left — the race clock keeps running under the cards.
         geometryChecked = true;
         await assertChartClearOfDock(page).catch(() => undefined);
-        await expect(page.getByTestId('held-pill')).toBeVisible();
         expect(await page.locator('[role="dialog"], [aria-modal="true"]').count()).toBe(0);
+        const isMob = await page
+          .getByText('EMERGENCY', { exact: true })
+          .isVisible()
+          .catch(() => false);
+        if (!isMob) {
+          const clock = page.getByTestId('ribbon-elapsed');
+          const before = await clock.textContent();
+          await expect
+            .poll(async () => (await clock.textContent()) !== before, { timeout: 5_000 })
+            .toBe(true);
+        }
       }
       await choice.click({ timeout: 2_000 }).catch(() => undefined);
       continue;
     }
-    // The post-call debrief ribbon holds the sim; tap it on rather than wait
-    // out its timeout.
+    // The post-call debrief ribbon is informational (the sim sails on) — tap
+    // it away rather than wait out its timeout.
     if (await ribbon.isVisible().catch(() => false)) {
       await ribbon.click({ timeout: 2_000 }).catch(() => undefined);
       continue;

@@ -80,9 +80,10 @@ export function buildFlowField(
   const speed = new Float32Array(cols * rows);
   for (let i = 0; i < cols * rows; i += 1) {
     const cell = cells[i];
-    // Direction the flow travels TOWARD: wind is named by where it comes from
-    // (fromDeg), so it blows to fromDeg+180; tide set already points downstream.
-    const toDeg = layer === 'wind' ? cell.dirDeg + 180 : cell.dirDeg;
+    // Direction the flow travels TOWARD. Every wind-shaped layer — the breeze,
+    // its gusts, the forecast spread — is named by origin (fromDeg), so it flows
+    // to fromDeg+180; only tide is named by set, already pointing downstream.
+    const toDeg = layer === 'tide' ? cell.dirDeg : cell.dirDeg + 180;
     const a = (toDeg * Math.PI) / 180;
     vx[i] = Math.sin(a) * cell.speedKn * scale;
     vy[i] = -Math.cos(a) * cell.speedKn * scale; // north is up → screen y down

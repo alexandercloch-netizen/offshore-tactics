@@ -16,10 +16,11 @@ import { CompassIcon } from '../icons';
 
 // The ONE docked lane every mid-race interruption arrives through: tactical
 // decisions, the sail picker and the post-call debrief ribbon all render here,
-// compressing (never covering) the chart above. The sim is held while any mode
-// is open — the "HELD — your call" pill on the chart says so — so the downside
-// lines are readable at leisure. Only the dock translates/fades; the chart
-// snaps between its idle/docked heights without animating its dimensions.
+// compressing (never covering) the chart above. The lane is LIVE: the sim
+// keeps ticking beneath a docked call (a spotted shift doesn't wait — its edge
+// drains, see `edgeFade`), and only a man overboard holds the race (the "HELD"
+// pill is MOB's alone). Only the dock translates/fades; the chart snaps
+// between its idle/docked heights without animating its dimensions.
 
 export type DockMode = 'decision' | 'sail' | 'debrief';
 
@@ -40,15 +41,16 @@ export interface DebriefInfo {
 
 interface DecisionDockProps {
   mode: DockMode;
-  // Whether the sim holds while the dock is open. Always true in PR1; the
-  // deferred "Race Clock Runs" hard mode is a flag flip here, not a rebuild.
-  hold: boolean;
   reducedMotion: boolean;
   maxHeight: number;
   // Decision mode.
   event?: GameEvent | null;
   vmg?: VmgPreview | null;
   read?: TacticalRead | null;
+  // How much of the docked opportunity is left, 0–1 (1 = just fired, 0 = the
+  // engine is about to expire it). Drives the draining bar on field-tagged
+  // events; undefined hides it (MOB, or no live trigger).
+  edgeFade?: number;
   storyBeat?: string;
   mobInfo?: { bearingDeg: number; rangeNm: number };
   onChoice?: (choice: TacticalChoice) => void;
@@ -57,8 +59,9 @@ interface DecisionDockProps {
   onSailPick?: (sailId: string) => void;
   // Debrief mode.
   debrief?: DebriefInfo;
-  // Dismiss: the picker's "hold course", the ribbon's tap/auto-continue. A
-  // decision (and MOB above all) is never dismissable — a call must be made.
+  // Dismiss: a decision's "hold course" (retracts it, draw-free), the picker's
+  // "hold course", the ribbon's tap/auto-continue. Only a MOB is never
+  // dismissable — a swimmer demands an answer.
   onDismiss?: () => void;
 }
 
@@ -96,12 +99,12 @@ function vmgColor(before: number, after: number): string {
 
 const DecisionDock: React.FC<DecisionDockProps> = ({
   mode,
-  hold,
   reducedMotion,
   maxHeight,
   event,
   vmg,
   read,
+  edgeFade,
   storyBeat,
   mobInfo,
   onChoice,
@@ -154,9 +157,10 @@ const DecisionDock: React.FC<DecisionDockProps> = ({
     return () => loop.stop();
   }, [isMob, pulse, reducedMotion]);
 
-  // The debrief ribbon auto-continues on an INDEPENDENT wall-clock timer. The
-  // sim is held while the ribbon shows, so a tick-driven timer would softlock
-  // the race (and the e2e) — never couple this to the tick.
+  // The debrief ribbon auto-continues on an INDEPENDENT wall-clock timer —
+  // never couple this to the tick: the ribbon must move on identically whether
+  // the sim is racing beneath it or held for a MOB (a tick-driven timer would
+  // softlock the held case, and the e2e).
   const dismissRef = useRef(onDismiss);
   dismissRef.current = onDismiss;
   useEffect(() => {
@@ -227,6 +231,7 @@ const DecisionDock: React.FC<DecisionDockProps> = ({
     );
   };
 
+  const hasFieldChoice = !!event && event.choices.some((c) => c.field);
   const decisionBody = event ? (
     <>
       <View style={styles.headerRow}>
@@ -234,6 +239,17 @@ const DecisionDock: React.FC<DecisionDockProps> = ({
         <Text style={[styles.title, isMob && { color: colors.signalRed }]} numberOfLines={1}>
           {event.title}
         </Text>
+        {!isMob && onDismiss ? (
+          <Pressable
+            onPress={onDismiss}
+            testID="decision-dismiss"
+            accessibilityRole="button"
+            accessibilityLabel="Hold course, let the moment pass"
+            style={styles.dismissButton}
+          >
+            <Text style={styles.dismissLabel}>Hold course</Text>
+          </Pressable>
+        ) : null}
       </View>
       {isMob && mobInfo ? (
         <Text style={styles.mobSteer}>
@@ -246,12 +262,30 @@ const DecisionDock: React.FC<DecisionDockProps> = ({
       {storyBeat ? (
         <StoryBeatRibbon body={storyBeat} />
       ) : null}
-      {read && event.choices.some((c) => c.field) ? (
+      {read && hasFieldChoice ? (
         <View style={styles.readRow}>
           <CompassIcon size={14} color={colors.brassLight} />
           <Text style={styles.read} numberOfLines={1}>
             Navigator: {read.hint}
           </Text>
+        </View>
+      ) : null}
+      {edgeFade !== undefined && hasFieldChoice ? (
+        // The race sails on under the cards: the spotted edge drains with
+        // every length past the trigger. The bar IS the engine's edgeDecay —
+        // empty exactly where the event expires, so the UI never promises an
+        // edge the resolution won't pay.
+        <View style={styles.fadeRow} testID="edge-fade">
+          <View style={styles.fadeTrack}>
+            <View
+              style={[
+                styles.fadeFill,
+                edgeFade < 0.35 && styles.fadeFillLow,
+                { width: `${Math.round(edgeFade * 100)}%` },
+              ]}
+            />
+          </View>
+          <Text style={styles.fadeLabel}>{edgeFade < 0.6 ? 'edge fading' : 'edge holding'}</Text>
         </View>
       ) : null}
       <View style={styles.choices}>{event.choices.map(renderChoice)}</View>
@@ -396,7 +430,8 @@ const CATEGORY_GLYPH: Record<string, string> = {
 };
 
 // The signature event's narrative beat: collapsed to a single tappable line on
-// a phone, expanding in place (the HOLD means there's time to read it).
+// a phone, expanding in place (a reader's pause is what the pause button is for
+// — the race no longer waits).
 const StoryBeatRibbon: React.FC<{ body: string }> = ({ body }) => {
   const [open, setOpen] = React.useState(false);
   return (
@@ -488,6 +523,31 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
+  },
+  // The edge's draining bar.
+  fadeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  fadeTrack: {
+    flex: 1,
+    height: 3,
+    borderRadius: radius.sm,
+    backgroundColor: colors.navy,
+    overflow: 'hidden',
+  },
+  fadeFill: {
+    height: 3,
+    backgroundColor: colors.brassLight,
+  },
+  fadeFillLow: {
+    backgroundColor: status.warn,
+  },
+  fadeLabel: {
+    color: colors.slate,
+    fontSize: fontSize.xs,
+    fontStyle: 'italic',
   },
   read: {
     flex: 1,
