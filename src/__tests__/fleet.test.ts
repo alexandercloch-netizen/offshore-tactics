@@ -5,6 +5,7 @@ import {
   correctedStandings,
   createFleet,
   finalPosition,
+  liveCorrectedStandings,
   livePosition,
   madeGoodSpeed,
   nearestCorrectedGapSeconds,
@@ -211,6 +212,34 @@ describe('correctedStandings & nearest gap (The Duel)', () => {
   it('returns undefined for a nearest gap when the player is alone', () => {
     const solo = correctedStandings([], race.distanceNm, 50, 1.0, 'Me');
     expect(nearestCorrectedGapSeconds(solo)).toBeUndefined();
+  });
+
+  it('liveCorrectedStandings projects the player like every rival mid-race', () => {
+    // Half-way round: a rival at the player's exact pace and rating must sit a
+    // whisker away on corrected time, not the hours of fiction the finish-form
+    // scoring produces (elapsed-so-far vs a fleet projected to the line).
+    const half = race.distanceNm / 2;
+    const midRace: Competitor[] = [
+      { id: 'twin', name: 'Twin', speedMul: 1, ratingTcc: 1.0, targetHours: 100, distanceNm: half, finishedHours: null, retired: false },
+    ];
+    const live = liveCorrectedStandings(midRace, race.distanceNm, 50, half, 1.0, 'Me');
+    const me = live.find((r) => r.isPlayer)!;
+    const twin = live.find((r) => !r.isPlayer)!;
+    // Both project to 100h corrected — dead level (player wins the tie).
+    expect(me.correctedHours).toBeCloseTo(twin.correctedHours, 6);
+    expect(live[0].isPlayer).toBe(true);
+    // The finish-form scoring would call this a 50h "gap" — the ribbon bug.
+    const finishForm = correctedStandings(midRace, race.distanceNm, 50, 1.0, 'Me');
+    expect(nearestCorrectedGapSeconds(finishForm)! / 3600).toBeCloseTo(50, 1);
+    expect(nearestCorrectedGapSeconds(live)! / 3600).toBeCloseTo(0, 3);
+  });
+
+  it('liveCorrectedStandings converges on the finish-form scoring at the line', () => {
+    const s = liveCorrectedStandings(finished, race.distanceNm, 48, race.distanceNm, 1.0, 'Me');
+    const f = correctedStandings(finished, race.distanceNm, 48, 1.0, 'Me');
+    expect(s.map((r) => [r.name, r.correctedHours])).toEqual(
+      f.map((r) => [r.name, r.correctedHours])
+    );
   });
 
   it('makes a ~10s photo finish reachable but rare across plausible finishes', () => {

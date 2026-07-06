@@ -29,7 +29,7 @@ import {
   vmgPreview,
 } from '../engine/gameEngine';
 import type { TacticalRead } from '../engine/gameEngine';
-import { competitorPoints, correctedStandings } from '../engine/fleet';
+import { competitorPoints, liveCorrectedStandings } from '../engine/fleet';
 import { bearing, haversineNm } from '../engine/geo';
 import { featureState, featureStates, gustRatioFor, sampleWindGrid, weatherOutlook } from '../engine/wind';
 import { sampleTideField } from '../engine/current';
@@ -309,10 +309,11 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
     if (!r || !b || !current.progress || !current.fleet || current.fleet.length === 0) {
       return undefined;
     }
-    const rows = correctedStandings(
+    const rows = liveCorrectedStandings(
       current.fleet,
       r.distanceNm,
       current.progress.elapsedHours,
+      current.progress.distanceCoveredNm,
       ratingTccFor(b),
       b.name
     );
@@ -443,6 +444,7 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
             fleet={state.fleet}
             totalNm={race.distanceNm}
             playerElapsedHours={progress.elapsedHours}
+            playerDistanceNm={progress.distanceCoveredNm}
             playerTcc={ratingTccFor(boat)}
             playerName={boat.name}
             cadenceKey={standingsBeat}

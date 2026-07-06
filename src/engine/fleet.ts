@@ -350,12 +350,35 @@ export function correctedStandings(
     isPlayer: true,
   });
   // Ties broken so the order is deterministic (player ahead on an exact tie).
-  return rows.sort(
-    (a, b) =>
-      a.correctedHours - b.correctedHours ||
-      Number(b.isPlayer) - Number(a.isPlayer) ||
-      a.id.localeCompare(b.id)
-  );
+  return rows.sort(sortStandings);
+}
+
+const sortStandings = (a: CorrectedStanding, b: CorrectedStanding) =>
+  a.correctedHours - b.correctedHours ||
+  Number(b.isPlayer) - Number(a.isPlayer) ||
+  a.id.localeCompare(b.id);
+
+// The MID-RACE corrected standings. `correctedStandings` scores the player on
+// elapsed-so-far, which is right only at the line (the photo-finish hold and the
+// finish debrief) — reusing it while racing compares the player's partial time
+// against a fleet projected to the finish, and the "gap" balloons to hours of
+// fiction. Here the player is projected to the finish at their current pace,
+// exactly as `projectedElapsed` treats every rival, so the ribbon's place and
+// gap stay honest the whole way round and converge on the finish semantics as
+// the line approaches. Pure.
+export function liveCorrectedStandings(
+  fleet: Competitor[],
+  totalNm: number,
+  playerElapsedHours: number,
+  playerDistanceNm: number,
+  playerTcc: number,
+  playerName: string
+): CorrectedStanding[] {
+  const covered = Math.max(playerDistanceNm, 1e-6);
+  const rows = correctedStandings(fleet, totalNm, playerElapsedHours, playerTcc, playerName);
+  const player = rows.find((r) => r.isPlayer);
+  if (player) player.correctedHours = playerElapsedHours * (totalNm / covered) * playerTcc;
+  return rows.sort(sortStandings);
 }
 
 // The corrected-time gap, in seconds, between the player and the boat nearest to

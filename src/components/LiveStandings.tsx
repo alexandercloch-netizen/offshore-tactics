@@ -2,7 +2,7 @@ import React, { useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Competitor } from '../types';
 import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
-import { correctedStandings, CorrectedStanding } from '../engine/fleet';
+import { liveCorrectedStandings, CorrectedStanding } from '../engine/fleet';
 import { formatGap } from '../engine/gameEngine';
 
 // The navigator's glance at the corrected-time standings: the top few boats on
@@ -14,6 +14,7 @@ interface Props {
   fleet: Competitor[];
   totalNm: number;
   playerElapsedHours: number;
+  playerDistanceNm: number; // projects the player to the finish like every rival
   playerTcc: number;
   playerName: string;
   cadenceKey: number; // changes on the calm cadence; gates the recompute
@@ -24,6 +25,7 @@ const LiveStandings: React.FC<Props> = ({
   fleet,
   totalNm,
   playerElapsedHours,
+  playerDistanceNm,
   playerTcc,
   playerName,
   cadenceKey,
@@ -35,7 +37,14 @@ const LiveStandings: React.FC<Props> = ({
   // displayed order stable between cadence beats so the strip doesn't flicker.
   const snapshot = useRef<CorrectedStanding[]>([]);
   const standings = useMemo(() => {
-    snapshot.current = correctedStandings(fleet, totalNm, playerElapsedHours, playerTcc, playerName);
+    snapshot.current = liveCorrectedStandings(
+      fleet,
+      totalNm,
+      playerElapsedHours,
+      playerDistanceNm,
+      playerTcc,
+      playerName
+    );
     return snapshot.current;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cadenceKey]);
