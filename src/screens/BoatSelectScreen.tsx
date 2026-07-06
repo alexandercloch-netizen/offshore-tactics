@@ -1,14 +1,16 @@
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Boat, RootStackParamList } from '../types';
-import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
+import { colors, fontSize, fontWeight, spacing, status } from '../theme';
 import { BOATS } from '../data';
 import { isBoatOwned } from '../engine/gameEngine';
 import { useGame } from '../store/GameContext';
 import StatBar from '../components/StatBar';
 import NauticalButton from '../components/NauticalButton';
+import FunnelSteps from '../components/FunnelSteps';
+import SelectableCard from '../components/SelectableCard';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'BoatSelect'>;
 
@@ -24,6 +26,7 @@ export const BoatSelectScreen: React.FC<Props> = ({ navigation }) => {
 
   return (
     <View style={styles.screen}>
+      <FunnelSteps stage="boat" />
       <ScrollView
         contentContainerStyle={[styles.content, { paddingBottom: spacing.xxl }]}
       >
@@ -36,15 +39,14 @@ export const BoatSelectScreen: React.FC<Props> = ({ navigation }) => {
           const owned = isBoatOwned(state, boat);
           const affordable = owned || state.funds >= boat.price;
           return (
-            <Pressable
+            <SelectableCard
               key={boat.id}
               onPress={() => affordable && selectBoat(boat.id)}
               disabled={!affordable}
-              style={({ pressed }) => [
-                styles.card,
-                selected && styles.cardSelected,
-                { opacity: !affordable ? 0.5 : pressed ? 0.92 : 1 },
-              ]}
+              dimmed={!affordable}
+              selected={selected}
+              accessibilityLabel={`${boat.name}, ${owned ? 'owned' : money(boat.price)}`}
+              style={styles.card}
             >
               <View style={styles.cardHeader}>
                 <View style={{ flex: 1 }}>
@@ -67,7 +69,7 @@ export const BoatSelectScreen: React.FC<Props> = ({ navigation }) => {
                 <Text style={styles.crewNeedLabel}>crew berths to fill</Text>
               </View>
               {selected ? <Text style={styles.selectedTag}>Selected</Text> : null}
-            </Pressable>
+            </SelectableCard>
           );
         })}
       </ScrollView>
@@ -96,16 +98,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   card: {
-    backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.hull,
-    padding: spacing.lg,
     marginBottom: spacing.lg,
-  },
-  cardSelected: {
-    borderColor: colors.brass,
-    borderWidth: 2,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -149,7 +142,7 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.bold,
   },
   crewNeedLabel: {
-    color: colors.slate,
+    color: status.labelOnPanel,
     fontSize: fontSize.xs,
     textTransform: 'uppercase',
     letterSpacing: 1,

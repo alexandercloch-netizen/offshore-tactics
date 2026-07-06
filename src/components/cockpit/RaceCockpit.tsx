@@ -158,8 +158,11 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   heldPill: {
+    // Bottom-centre, clear of the standings strip and layer toggle that own the
+    // top edge (they collide with a centred pill on a phone), and next to the
+    // docked cards the held sim is waiting on.
     position: 'absolute',
-    top: spacing.sm,
+    bottom: spacing.md,
     alignSelf: 'center',
     backgroundColor: colors.overlay,
     borderColor: colors.brassLight,

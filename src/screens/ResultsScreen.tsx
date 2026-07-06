@@ -3,7 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } fr
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RaceResult, RootStackParamList } from '../types';
-import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
+import { colors, fontSize, fontWeight, radius, spacing, status } from '../theme';
 import { getRaceById } from '../data';
 import { LANDMASSES } from '../data/landmasses';
 import { useGame } from '../store/GameContext';
@@ -11,7 +11,9 @@ import { formatDuration, formatGap } from '../engine/gameEngine';
 import { scenarioTagLine } from '../services/weather';
 import { courseAspect } from '../engine/geo';
 import NauticalButton from '../components/NauticalButton';
-import RouteMap from '../components/RouteMap';
+import RouteMap, { clampChartToCoverage } from '../components/RouteMap';
+import EmptyState from '../components/EmptyState';
+import { divisionName } from '../lib/labels';
 
 // A corrected gap this tight (seconds) is a photo finish — rare by design — and
 // earns the extra suspense beat before the corrected result is shown.
@@ -46,10 +48,11 @@ export const ResultsScreen: React.FC<Props> = ({ navigation }) => {
 
   if (!result) {
     return (
-      <View style={styles.empty}>
-        <Text style={styles.emptyText}>No race result to show.</Text>
-        <NauticalButton label="Back to Harbour" onPress={goHome} />
-      </View>
+      <EmptyState
+        fill
+        title="No race result to show."
+        action={<NauticalButton label="Back to Harbour" onPress={goHome} />}
+      />
     );
   }
 
@@ -87,9 +90,7 @@ export const ResultsScreen: React.FC<Props> = ({ navigation }) => {
       <Text style={[styles.headline, { color: headlineColor }]}>{headline}</Text>
       <Text style={styles.raceName}>
         {result.raceName}
-        {result.division
-          ? ` • ${result.division === 'pro' ? 'Pro' : 'Corinthian'} Division`
-          : ''}
+        {result.division ? ` • ${divisionName(result.division)} Division` : ''}
       </Text>
       {result.scenario ? (
         <Text style={styles.scenarioTag} testID="results-scenario-tag">
@@ -299,13 +300,20 @@ const Debrief: React.FC<{ result: NonNullable<ReturnType<typeof useGame>['state'
   const race = getRaceById(result.raceId);
   if (!result.finished || !race || !result.trail || result.trail.length < 2) return null;
 
-  const mapWidth = Math.min(width - spacing.lg * 2, 720);
+  const rawMapWidth = Math.min(width - spacing.lg * 2, 720);
   // Clamp the course aspect the same way the race and briefing charts do, so a
   // very tall or very wide course doesn't render a letterbox-thin or towering
   // debrief map. Keeping the three charts on one clamp is what makes the maps
   // read as the same instrument throughout.
   const mapAspect = Math.max(0.55, Math.min(courseAspect(race.waypoints), 1.3));
-  const mapHeight = Math.max(220, Math.min(Math.round(mapWidth * mapAspect), 420));
+  const rawMapHeight = Math.max(220, Math.min(Math.round(rawMapWidth * mapAspect), 420));
+  // …and letterbox to the baked coastline box so unmapped land never shows as
+  // open water past the coverage edge.
+  const { width: mapWidth, height: mapHeight } = clampChartToCoverage(
+    race.waypoints,
+    rawMapWidth,
+    rawMapHeight
+  );
   const delta = result.optimalHours != null ? result.elapsedHours - result.optimalHours : null;
 
   return (
@@ -342,18 +350,6 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: spacing.xl,
-  },
-  empty: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing.xl,
-    gap: spacing.lg,
-    backgroundColor: colors.abyss,
-  },
-  emptyText: {
-    color: colors.mist,
-    fontSize: fontSize.md,
   },
   headline: {
     fontSize: fontSize.xxl,
@@ -416,7 +412,7 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.bold,
   },
   statLabel: {
-    color: colors.slate,
+    color: status.labelOnPanel,
     fontSize: fontSize.xs,
     textTransform: 'uppercase',
     marginTop: 2,

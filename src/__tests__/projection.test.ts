@@ -1,5 +1,12 @@
-import { projectionParams, buildProjector, chartViewportBounds } from '../components/projection';
+import {
+  projectionParams,
+  buildProjector,
+  chartViewportBounds,
+  clampChartToCoverage,
+  landCoverageHalfSpan,
+} from '../components/projection';
 import { courseAspect } from '../engine/geo';
+import { RACES } from '../data/races';
 import { Waypoint } from '../types';
 
 // A small, real-ish coastal course (Solent-shaped) and a wide/tall one, so the
@@ -97,5 +104,45 @@ describe('courseAspect', () => {
     const a = courseAspect(solent);
     expect(a).toBeGreaterThan(0);
     expect(Number.isFinite(a)).toBe(true);
+  });
+});
+
+describe('clampChartToCoverage', () => {
+  // The bug this guards: an extreme-aspect stage letterboxes the course on the
+  // looser axis, and the inverted viewport reaches past the coastline bake box
+  // (landCoverageHalfSpan mirrors scripts/build-coastlines.mjs) — unmapped land
+  // then renders as open water (Race to Mac showed "sea" over inland Wisconsin).
+  const aspects: [number, number][] = [
+    [390, 844], // phone portrait
+    [923, 590], // phone-browser landscape-ish chart (the reported bug)
+    [1638, 900], // desktop chart pane
+    [320, 900], // towering split view
+    [2400, 700], // ultrawide
+  ];
+
+  it('keeps every race chart viewport inside the baked land coverage', () => {
+    for (const race of RACES) {
+      const half = landCoverageHalfSpan(race.waypoints);
+      const lats = race.waypoints.map((w) => w.lat);
+      const lons = race.waypoints.map((w) => w.lon);
+      const cLat = (Math.min(...lats) + Math.max(...lats)) / 2;
+      const cLon = (Math.min(...lons) + Math.max(...lons)) / 2;
+      const k = Math.cos((cLat * Math.PI) / 180) || 1;
+      for (const [w, h] of aspects) {
+        const fit = clampChartToCoverage(race.waypoints, w, h);
+        const b = chartViewportBounds(race.waypoints, fit.width, fit.height);
+        const eps = 1e-6;
+        expect((b.maxLon - cLon) * k).toBeLessThanOrEqual(half + eps);
+        expect((cLon - b.minLon) * k).toBeLessThanOrEqual(half + eps);
+        expect(b.maxLat - cLat).toBeLessThanOrEqual(half + eps);
+        expect(cLat - b.minLat).toBeLessThanOrEqual(half + eps);
+      }
+    }
+  });
+
+  it('leaves a chart that already fits untouched', () => {
+    // Solent on a modest near-square stage sits well inside the coverage box.
+    const fit = clampChartToCoverage(solent, 360, 300);
+    expect(fit).toEqual({ width: 360, height: 300 });
   });
 });

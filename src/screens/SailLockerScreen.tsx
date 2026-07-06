@@ -3,11 +3,12 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RootStackParamList, Sail } from '../types';
-import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
+import { colors, fontSize, fontWeight, radius, spacing, status } from '../theme';
 import { availableSailsFor, sailCost, sailRefund } from '../data/sails';
 import { effectivePolar } from '../engine/sails';
 import { useGame } from '../store/GameContext';
 import PolarViewer from '../components/PolarViewer';
+import EmptyState from '../components/EmptyState';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SailLocker'>;
 
@@ -43,9 +44,11 @@ export const SailLockerScreen: React.FC<Props> = ({ route, navigation }) => {
 
   if (!boat || !effective) {
     return (
-      <View style={styles.screen}>
-        <Text style={styles.intro}>This boat is no longer in your fleet.</Text>
-      </View>
+      <EmptyState
+        fill
+        title="This boat is no longer in your fleet."
+        body="Head back to the fleet to pick another, or build a new one."
+      />
     );
   }
 
@@ -88,6 +91,8 @@ export const SailLockerScreen: React.FC<Props> = ({ route, navigation }) => {
                 {isOwned ? (
                   <Pressable
                     style={[styles.btn, styles.btnSell]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Sell the ${sail.name} for ${money(refund)}`}
                     onPress={() => sellSail(boat.id, sail.id, refund)}
                   >
                     <Text style={styles.btnSellText}>Sell</Text>
@@ -97,6 +102,9 @@ export const SailLockerScreen: React.FC<Props> = ({ route, navigation }) => {
                   <Pressable
                     style={[styles.btn, styles.btnBuy, !affordable && styles.btnDisabled]}
                     disabled={!affordable}
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: !affordable }}
+                    accessibilityLabel={`Buy the ${sail.name} for ${money(cost)}`}
                     onPress={() => buySail(boat.id, sail.id, cost)}
                   >
                     <Text style={styles.btnBuyText}>Buy</Text>
@@ -110,10 +118,18 @@ export const SailLockerScreen: React.FC<Props> = ({ route, navigation }) => {
         })}
 
         {sails.length === 0 ? (
-          <Text style={styles.intro}>No specialist sails are made for this class.</Text>
+          <EmptyState
+            title="No specialist sails for this class."
+            body="She races on her working wardrobe — nothing to buy here."
+          />
         ) : null}
 
-        <Pressable style={styles.doneBtn} onPress={() => navigation.goBack()}>
+        <Pressable
+          style={styles.doneBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Done"
+          onPress={() => navigation.goBack()}
+        >
           <Text style={styles.doneText}>Done</Text>
         </Pressable>
       </ScrollView>
@@ -139,7 +155,7 @@ const styles = StyleSheet.create({
   cardOwned: { borderColor: colors.brassLight },
   cardHeader: { flexDirection: 'row', alignItems: 'center' },
   sailName: { color: colors.foam, fontSize: fontSize.md, fontWeight: fontWeight.bold },
-  sailMeta: { color: colors.slate, fontSize: fontSize.xs, marginTop: 2 },
+  sailMeta: { color: status.labelOnPanel, fontSize: fontSize.xs, marginTop: 2 },
   sailBlurb: { color: colors.mist, fontSize: fontSize.xs, marginTop: 4 },
   btn: {
     minWidth: 84,

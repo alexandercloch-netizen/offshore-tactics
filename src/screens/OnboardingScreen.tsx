@@ -19,6 +19,7 @@ import {
 } from '../data/onboarding';
 import { useGame } from '../store/GameContext';
 import { detectCurrency } from '../lib/currency';
+import SelectableCard from '../components/SelectableCard';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Onboarding'>;
 
@@ -123,21 +124,28 @@ export const OnboardingScreen: React.FC<Props> = ({ navigation }) => {
           {options.map((opt) => {
             const active = opt.value === selected;
             return (
-              <Pressable
+              <SelectableCard
                 key={opt.value}
                 onPress={() => choose(opt.value)}
-                style={[styles.card, active && styles.cardActive]}
+                selected={active}
+                accessibilityLabel={`${opt.label}. ${opt.blurb}`}
+                style={styles.card}
               >
                 <Text style={[styles.cardLabel, active && styles.cardLabelActive]}>{opt.label}</Text>
                 <Text style={styles.cardBlurb}>{opt.blurb}</Text>
-              </Pressable>
+              </SelectableCard>
             );
           })}
         </View>
       </ScrollView>
 
       {stepIndex > 0 ? (
-        <Pressable style={[styles.backBtn, { bottom: insets.bottom + spacing.lg }]} onPress={back}>
+        <Pressable
+          style={[styles.backBtn, { bottom: insets.bottom + spacing.lg }]}
+          onPress={back}
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+        >
           <Text style={styles.backText}>← Back</Text>
         </Pressable>
       ) : null}
@@ -157,7 +165,7 @@ const styles = StyleSheet.create({
   },
   pipActive: { backgroundColor: colors.brassLight },
   stepCount: {
-    color: colors.slate,
+    color: colors.mist,
     fontSize: fontSize.xs,
     textTransform: 'uppercase',
     letterSpacing: 1,
@@ -182,13 +190,7 @@ const styles = StyleSheet.create({
   card: {
     width: '47%',
     flexGrow: 1,
-    backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.hull,
-    padding: spacing.lg,
   },
-  cardActive: { borderColor: colors.brassLight, backgroundColor: colors.navy },
   cardLabel: { color: colors.foam, fontSize: fontSize.md, fontWeight: fontWeight.bold },
   cardLabelActive: { color: colors.brassLight },
   cardBlurb: { color: colors.mist, fontSize: fontSize.xs, marginTop: 4 },

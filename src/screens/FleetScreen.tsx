@@ -9,6 +9,7 @@ import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
 import { useGame } from '../store/GameContext';
 import NauticalButton from '../components/NauticalButton';
 import PolarViewer from '../components/PolarViewer';
+import EmptyState from '../components/EmptyState';
 import { confirmAction } from '../lib/confirm';
 
 type Props = CompositeScreenProps<
@@ -30,11 +31,12 @@ export const FleetScreen: React.FC<Props> = ({ navigation }) => {
   const { state, removeFleetBoat, money } = useGame();
   const fleet = state.profile.fleet;
 
-  const confirmRemove = (boat: FleetBoat) => {
+  // The trigger says "Scrap", so the confirm says "Scrap" — one verb per act.
+  const confirmScrap = (boat: FleetBoat) => {
     confirmAction({
-      title: 'Scrap boat',
-      message: `Remove ${boat.name} from your fleet?`,
-      confirmLabel: 'Remove',
+      title: 'Scrap Boat',
+      message: `Scrap ${boat.name} and strike her from your fleet?`,
+      confirmLabel: 'Scrap',
       onConfirm: () => removeFleetBoat(boat.id),
     });
   };
@@ -48,10 +50,10 @@ export const FleetScreen: React.FC<Props> = ({ navigation }) => {
         </Text>
 
         {fleet.length === 0 ? (
-          <View style={styles.empty}>
-            <Text style={styles.emptyText}>No custom boats yet.</Text>
-            <Text style={styles.emptySub}>Build your first boat to add it to your fleet.</Text>
-          </View>
+          <EmptyState
+            title="No custom boats yet."
+            body="Build your first boat to add it to your fleet."
+          />
         ) : (
           fleet.map((boat) => (
             <View key={boat.id} style={styles.card}>
@@ -63,7 +65,7 @@ export const FleetScreen: React.FC<Props> = ({ navigation }) => {
                   </Text>
                 </View>
                 <Pressable
-                  onPress={() => confirmRemove(boat)}
+                  onPress={() => confirmScrap(boat)}
                   hitSlop={8}
                   accessibilityRole="button"
                   accessibilityLabel={`Scrap ${boat.name}`}
@@ -77,6 +79,8 @@ export const FleetScreen: React.FC<Props> = ({ navigation }) => {
               </View>
               <Pressable
                 style={styles.lockerBtn}
+                accessibilityRole="button"
+                accessibilityLabel={`Sail Locker for ${boat.name}`}
                 onPress={() => navigation.navigate('SailLocker', { boatId: boat.id })}
               >
                 <Text style={styles.lockerBtnText}>
@@ -99,16 +103,6 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.abyss },
   content: { padding: spacing.lg },
   intro: { color: colors.mist, fontSize: fontSize.sm, lineHeight: 19, marginBottom: spacing.md },
-  empty: {
-    backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.hull,
-    padding: spacing.xl,
-    alignItems: 'center',
-  },
-  emptyText: { color: colors.foam, fontSize: fontSize.md, fontWeight: fontWeight.bold },
-  emptySub: { color: colors.mist, fontSize: fontSize.sm, marginTop: spacing.xs },
   card: {
     backgroundColor: colors.card,
     borderRadius: radius.lg,

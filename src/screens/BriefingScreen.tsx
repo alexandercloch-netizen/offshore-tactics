@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,7 +11,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EffortMode, RootStackParamList, RoutingBias, WeatherScenario } from '../types';
-import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
+import { colors, fontSize, fontWeight, radius, spacing, status } from '../theme';
 import { getCrewById, getRaceById, storylineForRace } from '../data';
 import { LANDMASSES } from '../data/landmasses';
 import { useGame } from '../store/GameContext';
@@ -40,7 +39,7 @@ import {
   weatherOutlook,
 } from '../engine/wind';
 import { sampleTideField } from '../engine/current';
-import RouteMap, { chartViewportBounds, FlowField } from '../components/RouteMap';
+import RouteMap, { chartViewportBounds, clampChartToCoverage, FlowField } from '../components/RouteMap';
 import { FlowLayer, windCells, tideCells, gustCells, fieldResolution } from '../components/flowField';
 import MapLayerToggle, { MapLayerOption } from '../components/MapLayerToggle';
 import WindIndicator from '../components/WindIndicator';
@@ -49,6 +48,9 @@ import ForecastScrubber from '../components/ForecastScrubber';
 import WindScaleLegend from '../components/WindScaleLegend';
 import ForecastGraph, { ForecastGraphReadout, ForecastPoint } from '../components/ForecastGraph';
 import ErrorBoundary from '../components/ErrorBoundary';
+import LoadingState from '../components/LoadingState';
+import Segmented from '../components/Segmented';
+import { divisionName } from '../lib/labels';
 import { fetchCourseSnapshot, liveWeatherEnabled } from '../services/weather';
 import { editionsForRace } from '../data/weatherEditions';
 
@@ -181,16 +183,10 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
   }, [liveEnabled, isFocused, conditions, selectedEdition, snapState, snapshot, scenarioActive, scenarioStampKey, !!state.progress, reseedWeather]);
 
   if (!race || !boat || !state.progress || !state.weather || !state.windField) {
-    return (
-      <View style={styles.loading}>
-        <ActivityIndicator color={colors.brassLight} style={{ marginBottom: spacing.md }} />
-        <Text style={styles.loadingText}>Reading the conditions…</Text>
-      </View>
-    );
+    return <LoadingState title="Reading the conditions…" />;
   }
 
   const { progress, weather, windField } = state;
-  const divisionName = state.selectedDivision === 'pro' ? 'Pro' : 'Corinthian';
   const fleetSize = raceDivision(race, state.selectedDivision).fleetSize;
   const outlook = weatherOutlook(windField, progress.lat, progress.lon, 0);
   const hint = pressureHint(windField, progress.lat, progress.lon, 0);
@@ -198,9 +194,20 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
   // Map sized to the course, centred in a max-width column (as in the race).
   const CONTENT_MAX = 760;
   const columnWidth = Math.min(width - spacing.lg * 2, CONTENT_MAX);
-  const mapWidth = columnWidth - spacing.sm * 2;
+  const rawMapWidth = columnWidth - spacing.sm * 2;
   const mapAspect = Math.max(0.55, Math.min(courseAspect(race.waypoints), 1.3));
-  const mapHeight = Math.max(280, Math.min(Math.round(mapWidth * mapAspect), Math.round(height * 0.5)));
+  const rawMapHeight = Math.max(
+    280,
+    Math.min(Math.round(rawMapWidth * mapAspect), Math.round(height * 0.5))
+  );
+  // The aspect clamps above can stretch the viewport past the baked coastline
+  // box (a tall course on a capped-height chart), and unmapped land would show
+  // as open water — letterbox to the covered box instead.
+  const { width: mapWidth, height: mapHeight } = clampChartToCoverage(
+    race.waypoints,
+    rawMapWidth,
+    rawMapHeight
+  );
 
   // The wind chart reflects the scrubbed forecast hour: arrows for direction, a
   // dense grid for the speed heatmap, and the drifting pressure feature. (Plain
@@ -312,7 +319,7 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={styles.kicker}>Skipper's Briefing</Text>
           <Text style={styles.raceName}>{race.name}</Text>
           <Text style={styles.sub}>
-            {race.location} · {divisionName} division · {fleetSize} boats
+            {race.location} · {divisionName(state.selectedDivision)} division · {fleetSize} boats
           </Text>
 
           <View style={styles.mapWrap}>
@@ -607,34 +614,8 @@ const Fact: React.FC<{ label: string; value: string }> = ({ label, value }) => (
   </View>
 );
 
-interface SegProps<T> {
-  value: T;
-  options: { value: T; label: string }[];
-  onSelect: (value: T) => void;
-}
-function Segmented<T extends string | number>({ value, options, onSelect }: SegProps<T>) {
-  return (
-    <View style={styles.segmented}>
-      {options.map((opt) => {
-        const active = opt.value === value;
-        return (
-          <Pressable
-            key={String(opt.value)}
-            onPress={() => onSelect(opt.value)}
-            style={[styles.segment, active && styles.segmentActive]}
-          >
-            <Text style={[styles.segmentLabel, active && styles.segmentLabelActive]}>{opt.label}</Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.abyss },
-  loading: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.abyss },
-  loadingText: { color: colors.mist, fontSize: fontSize.md },
   content: { padding: spacing.lg, alignItems: 'center' },
   kicker: {
     color: colors.brassLight,
@@ -666,14 +647,16 @@ const styles = StyleSheet.create({
   windRow: { flexDirection: 'row', alignItems: 'center' },
   windInfo: { flex: 1, marginLeft: spacing.lg },
   panelLabel: {
-    color: colors.slate,
+    color: status.labelOnPanel,
     fontSize: fontSize.xs,
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
   bigValue: { color: colors.foam, fontSize: fontSize.lg, fontWeight: fontWeight.bold, marginTop: 2 },
   outlook: { color: colors.brassLight, fontSize: fontSize.sm, marginTop: spacing.xs, lineHeight: 18 },
-  hint: { color: colors.signalGreen, fontSize: fontSize.sm, marginTop: spacing.xs },
+  // A navigator's weather read, not a good-state — `info` cyan, so the teal
+  // "good" keeps its meaning next door.
+  hint: { color: status.info, fontSize: fontSize.sm, marginTop: spacing.xs },
   firstLeg: { color: colors.mist, fontSize: fontSize.sm, marginTop: spacing.xs },
   hazard: { color: colors.mist, fontSize: fontSize.sm, lineHeight: 20 },
   storyTheme: {
@@ -703,18 +686,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   factValue: { color: colors.foam, fontSize: fontSize.sm, fontWeight: fontWeight.bold },
-  factLabel: { color: colors.slate, fontSize: fontSize.xs, textTransform: 'uppercase', marginTop: 2 },
+  factLabel: { color: status.labelOnPanel, fontSize: fontSize.xs, textTransform: 'uppercase', marginTop: 2 },
   planLabel: {
-    color: colors.slate,
+    color: status.labelOnPanel,
     fontSize: fontSize.xs,
     textTransform: 'uppercase',
     letterSpacing: 1,
     marginBottom: spacing.xs,
   },
-  planHint: { color: colors.slate, fontSize: fontSize.xs, marginTop: spacing.sm },
+  planHint: { color: status.labelOnPanel, fontSize: fontSize.xs, marginTop: spacing.sm },
   archive: { marginTop: spacing.md },
   archiveLabel: {
-    color: colors.slate,
+    color: status.labelOnPanel,
     fontSize: fontSize.xs,
     textTransform: 'uppercase',
     letterSpacing: 1,
@@ -732,14 +715,14 @@ const styles = StyleSheet.create({
   editionLabel: { color: colors.foam, fontSize: fontSize.sm, fontWeight: fontWeight.bold },
   editionLabelActive: { color: colors.brassLight },
   editionBlurb: { color: colors.mist, fontSize: fontSize.xs, lineHeight: 16, marginTop: 2 },
-  archiveNote: { color: colors.slate, fontSize: fontSize.xs, marginTop: spacing.xs, fontStyle: 'italic' },
+  archiveNote: { color: status.labelOnPanel, fontSize: fontSize.xs, marginTop: spacing.xs, fontStyle: 'italic' },
   liveNote: { color: colors.mist, fontSize: fontSize.xs, marginTop: spacing.sm, lineHeight: 16 },
   liveNoteWarn: { color: colors.warning, fontSize: fontSize.xs, marginTop: spacing.sm, lineHeight: 16 },
-  liveDisclaimer: { color: colors.slate, fontSize: fontSize.xs, marginTop: spacing.xs, fontStyle: 'italic' },
+  liveDisclaimer: { color: status.labelOnPanel, fontSize: fontSize.xs, marginTop: spacing.xs, fontStyle: 'italic' },
   confWrap: { marginTop: spacing.sm },
   confHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   confLabel: {
-    color: colors.slate,
+    color: status.labelOnPanel,
     fontSize: fontSize.xs,
     textTransform: 'uppercase',
     letterSpacing: 1,
@@ -776,18 +759,6 @@ const styles = StyleSheet.create({
   etaSlower: { color: colors.brassLight, fontSize: fontSize.sm, fontWeight: fontWeight.bold, marginTop: 2, textAlign: 'right' },
   etaOnPace: { color: colors.signalGreen, fontSize: fontSize.sm, fontWeight: fontWeight.bold, marginTop: 2, textAlign: 'right' },
   etaCaption: { color: colors.signalGreen, fontSize: fontSize.xs, marginTop: spacing.xs },
-  segmented: {
-    flexDirection: 'row',
-    backgroundColor: colors.navy,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.hull,
-    overflow: 'hidden',
-  },
-  segment: { flex: 1, paddingVertical: spacing.sm, alignItems: 'center' },
-  segmentActive: { backgroundColor: colors.hull },
-  segmentLabel: { color: colors.mist, fontSize: fontSize.sm, fontWeight: fontWeight.medium },
-  segmentLabelActive: { color: colors.brassLight, fontWeight: fontWeight.bold },
   footer: {
     padding: spacing.lg,
     borderTopWidth: 1,

@@ -3,7 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AutoProvisionPreset, Provision, RootStackParamList } from '../types';
-import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
+import { colors, fontSize, fontWeight, radius, spacing, status } from '../theme';
 import { PROVISIONS, getRaceById } from '../data';
 import { useGame } from '../store/GameContext';
 import {
@@ -15,6 +15,7 @@ import {
   resolveBoatById,
 } from '../engine/gameEngine';
 import NauticalButton from '../components/NauticalButton';
+import FunnelSteps from '../components/FunnelSteps';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Provisioning'>;
 
@@ -63,6 +64,7 @@ export const ProvisioningScreen: React.FC<Props> = ({ navigation }) => {
 
   return (
     <View style={styles.screen}>
+      <FunnelSteps stage="provisions" />
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: spacing.xxl }]}>
         <Text style={styles.intro}>
           Stock the boat for the passage — {crewCount} crew, about{' '}
@@ -84,6 +86,8 @@ export const ProvisioningScreen: React.FC<Props> = ({ navigation }) => {
               <Pressable
                 key={p.key}
                 onPress={() => setProvisions(autoProvision(state, p.key))}
+                accessibilityRole="button"
+                accessibilityLabel={`Auto-provision: ${p.label}, ${p.hint}`}
                 style={({ pressed }) => [styles.preset, { opacity: pressed ? 0.85 : 1 }]}
               >
                 <Text style={styles.presetLabel}>{p.label}</Text>
@@ -92,7 +96,7 @@ export const ProvisioningScreen: React.FC<Props> = ({ navigation }) => {
             ))}
           </View>
           {state.provisions.length > 0 ? (
-            <Pressable onPress={() => setProvisions([])} hitSlop={8}>
+            <Pressable onPress={() => setProvisions([])} hitSlop={8} accessibilityRole="button">
               <Text style={styles.clear}>Clear provisions</Text>
             </Pressable>
           ) : null}
@@ -130,6 +134,7 @@ export const ProvisioningScreen: React.FC<Props> = ({ navigation }) => {
               <View style={styles.stepper}>
                 <StepButton
                   label="–"
+                  a11yLabel={`One fewer ${item.name}`}
                   onPress={() =>
                     setProvisionQuantity(item.id, Math.max(0, qty - 1))
                   }
@@ -138,6 +143,7 @@ export const ProvisioningScreen: React.FC<Props> = ({ navigation }) => {
                 <Text style={styles.qty}>{qty}</Text>
                 <StepButton
                   label="+"
+                  a11yLabel={`One more ${item.name}`}
                   onPress={() =>
                     setProvisionQuantity(item.id, Math.min(MAX_QTY, qty + 1))
                   }
@@ -201,12 +207,16 @@ const CoverageBar: React.FC<{ label: string; ratio: number }> = ({ label, ratio 
 
 const StepButton: React.FC<{
   label: string;
+  a11yLabel: string;
   onPress: () => void;
   disabled?: boolean;
-}> = ({ label, onPress, disabled }) => (
+}> = ({ label, a11yLabel, onPress, disabled }) => (
   <Pressable
     onPress={onPress}
     disabled={disabled}
+    accessibilityRole="button"
+    accessibilityState={{ disabled: !!disabled }}
+    accessibilityLabel={a11yLabel}
     style={({ pressed }) => [
       styles.stepBtn,
       { opacity: disabled ? 0.35 : pressed ? 0.7 : 1 },
@@ -274,7 +284,7 @@ const styles = StyleSheet.create({
   coverPct: { fontSize: fontSize.xs, fontWeight: fontWeight.bold, width: 40, textAlign: 'right' },
   autoBar: { marginBottom: spacing.md },
   autoLabel: {
-    color: colors.slate,
+    color: status.labelOnPanel,
     fontSize: fontSize.xs,
     textTransform: 'uppercase',
     letterSpacing: 1,
@@ -291,8 +301,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   presetLabel: { color: colors.brassLight, fontSize: fontSize.sm, fontWeight: fontWeight.bold },
-  presetHint: { color: colors.slate, fontSize: fontSize.xs, marginTop: 1 },
-  clear: { color: colors.slate, fontSize: fontSize.xs, marginTop: spacing.sm },
+  presetHint: { color: status.labelOnPanel, fontSize: fontSize.xs, marginTop: 1 },
+  clear: { color: status.labelOnPanel, fontSize: fontSize.xs, marginTop: spacing.sm },
   recHint: { color: colors.warning, fontSize: fontSize.xs, marginBottom: spacing.sm },
   recMet: { color: colors.signalGreen },
   card: {
@@ -354,8 +364,8 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   stepBtn: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     borderRadius: radius.sm,
     backgroundColor: colors.hull,
     alignItems: 'center',

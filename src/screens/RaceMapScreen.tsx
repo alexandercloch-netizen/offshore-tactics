@@ -34,7 +34,7 @@ import { bearing, haversineNm } from '../engine/geo';
 import { featureState, featureStates, gustRatioFor, sampleWindGrid, weatherOutlook } from '../engine/wind';
 import { sampleTideField } from '../engine/current';
 import { buildInstrumentReport } from '../engine/instruments';
-import RouteMap, { chartViewportBounds, FlowField } from '../components/RouteMap';
+import RouteMap, { chartViewportBounds, clampChartToCoverage, FlowField } from '../components/RouteMap';
 import { FlowLayer, windCells, tideCells, gustCells, fieldResolution } from '../components/flowField';
 import MapLayerToggle, { MapLayerOption } from '../components/MapLayerToggle';
 import WindScaleLegend from '../components/WindScaleLegend';
@@ -328,6 +328,8 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
     });
     const place = ordinal(idx + 1);
     if (!best) return place;
+    // A sub-second gap would print "−0s" — call the dead heat what it is.
+    if (best.gap * 3600 < 1) return `${place} · level with ${best.name}`;
     const sign = best.ahead ? '+' : '−';
     return `${place} · ${sign}${formatGap(best.gap * 3600)} to ${best.name}`;
     // The cadence key IS the dependency: recompute on the calm beat only.
@@ -387,8 +389,16 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
   // The single live chart, drawn to the measured stage. The colour/flow field
   // is cached by its inputs so a layout pass doesn't reseed the particle swarm.
   const renderChart = (w: number, h: number): React.ReactNode => {
-    const innerW = Math.max(w - MAP_FRAME, 50);
-    const innerH = Math.max(h - MAP_FRAME, 50);
+    // Clamp to the baked land coverage: past that box there is no coastline and
+    // unmapped terrain would render as open water, so an extreme-aspect stage
+    // letterboxes (the stage's own background is the chart margin) instead.
+    const fit = clampChartToCoverage(
+      race.waypoints,
+      Math.max(w - MAP_FRAME, 50),
+      Math.max(h - MAP_FRAME, 50)
+    );
+    const innerW = fit.width;
+    const innerH = fit.height;
     const { cols, rows } = fieldResolution(innerW, innerH);
     const cacheKey = `${innerW}x${innerH}|${cols}x${rows}|${activeLayer}|${elapsedHourBucket}|${gustRatio}`;
     let field: FlowField | undefined;
