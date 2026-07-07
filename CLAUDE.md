@@ -124,15 +124,17 @@ The simulation is a **pure, deterministic engine** with a thin React UI on top.
   `InstrumentBand`/`InstrumentCell` + `cells.ts` (exactly six cells; the pure
   cell builders + tint rules), `ControlDock`/`OverflowSheet`, and
   `DecisionDock` — the ONE docked lane decisions, the sail picker and the
-  debrief ribbon all render through. The lane is **live**: the sim holds ONLY
-  for a man overboard (`kind === 'mob'`; the HELD pill is MOB's alone) — direct
-  player feedback overruled the earlier hold-while-docked ruling. A docked
-  decision's edge decays as the boat sails on (`edgeDecay` off
-  `progress.decisionTriggerNm`; the card shows the draining bar), the engine
-  draws no second event while one is docked, and once the edge is spent (below
-  `EDGE_SPENT`) — or the player taps "hold course" — the event is retracted
-  draw-free (`expireDecision`: no deltas, no decision spent, one quiet log
-  line). Sail changes commit at commit-time state, picker open or not. The
+  debrief ribbon all render through. The sim **HOLDS while a key decision is
+  on the table** (any docked event, not just MOB — the free-running pace was
+  unplayable; this is the second player-feedback swing on the ruling), but
+  the hold blocks NOTHING else: the sail picker opens and commits over a held
+  decision (the decision reclaims the lane, reads refreshed), every
+  instrument and readout stays live. The picker and the ribbon alone never
+  hold. The engine's live-opportunity machinery stays (draw-free
+  `expireDecision`, event suppression on `progress.decisionTriggerNm`,
+  `edgeDecay`) — "hold course" still retracts a decision draw-free; the edge
+  simply cannot drain under a held card, so the UI no longer shows the bar.
+  Sail changes commit at commit-time state, picker open or not. The
   ribbon's auto-continue is an independent `setTimeout`, never tick-driven.
   There is no racing Modal: `TutorialOverlay` is an inline coach strip.
   Motion comes from `lib/motion.ts` + `lib/useReducedMotion.ts` (core RN

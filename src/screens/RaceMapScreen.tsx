@@ -9,10 +9,8 @@ import { LANDMASSES } from '../data/landmasses';
 import { storylineForRace, signatureBeat } from '../data/storylines';
 import { useGame } from '../store/GameContext';
 import {
-  EDGE_SPENT,
   availableWardrobe,
   currentSpeed,
-  edgeDecay,
   flownSpecialist,
   formatDuration,
   formatGap,
@@ -143,6 +141,8 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
   helpRef.current = showHelp;
   const dockModeRef = useRef<DockMode | null>(null);
   dockModeRef.current = dockMode;
+  const activeEventRef = useRef<GameEvent | null>(null);
+  activeEventRef.current = activeEvent;
   const standingsTickRef = useRef(0);
   // The position when the current interruption docked, so the debrief ribbon
   // can report places gained/lost across the call.
@@ -180,10 +180,12 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
   }, []);
 
   // The auto-play loop: tick the simulation forward to the finish. The race
-  // NEVER holds for a docked decision or the sail picker — those are live
-  // opportunities the boat sails on through (player-feedback overrule of the
-  // earlier hold-everything ruling). Only a man overboard (eventActiveRef),
-  // the coach strip (helpRef) and an explicit pause gate the tick.
+  // HOLDS while a key decision is on the table (eventActiveRef — thinking time
+  // is the player's; the pace was unplayable otherwise), but the hold blocks
+  // NOTHING else: the sail picker still opens and commits over a held
+  // decision, every instrument and readout stays live. The picker and the
+  // debrief ribbon alone never hold. The coach strip (helpRef) and an
+  // explicit pause also gate the tick.
   useEffect(() => {
     if (!started) return undefined;
     const id = setInterval(() => {
@@ -204,10 +206,9 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
         };
         setActiveVmg(vmgPreview(tempState, outcome.event));
         setActiveRead(tacticalRead(tempState));
+        // Every key decision stops the watch while it is on the table.
+        eventActiveRef.current = true;
         if (outcome.event.kind === 'mob') {
-          // The one emergency that still stops the watch — a swimmer can't
-          // wait on a fading edge.
-          eventActiveRef.current = true;
           // Drop the swimmer a trail-point astern: the boat swept past before
           // the shout went up, so the steer-to read is a real turn-back.
           const trail = outcome.progress.trail;
@@ -273,21 +274,44 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
 
   const openSailPicker = useCallback(() => {
     if (!stateRef.current.progress) return;
-    // The lane is single-occupancy: a docked decision (above all a MOB) keeps
-    // it — dismiss or answer the call first. A lingering ribbon yields.
-    if (dockModeRef.current === 'decision') return;
+    // A held decision does NOT lock the wardrobe: the picker takes the lane
+    // and the decision (and its hold) waits underneath, restored on close.
+    // Only a MOB outranks a sail change — the swimmer comes first.
+    if (activeEventRef.current?.kind === 'mob') return;
     positionBeforeRef.current = stateRef.current.progress.position;
     setOverflowOpen(false);
     setDebrief(null);
     setDockMode('sail');
   }, []);
 
+  // Close the picker back to whatever it interrupted: a still-pending decision
+  // reclaims the lane (its hold never lifted); otherwise the lane clears.
+  const closeSailPicker = useCallback(() => {
+    if (activeEventRef.current) setDockMode('decision');
+    else closeDock();
+  }, [closeDock]);
+
   const handleSailPick = useCallback(
     (sailId: string) => {
       const outcome = changeSail(sailId);
       if (!outcome) {
         // A no-op (same sail / blown) — retract, nothing happened, no draw.
-        closeDock();
+        closeSailPicker();
+        return;
+      }
+      const pending = activeEventRef.current;
+      if (pending) {
+        // A decision is waiting on the lane: the change is committed (the log
+        // carries its line) and the cards come straight back with their reads
+        // refreshed — the manoeuvre took time and the breeze moved.
+        const tempState: GameState = {
+          ...stateRef.current,
+          progress: outcome.progress,
+          condition: outcome.condition,
+        };
+        setActiveVmg(vmgPreview(tempState, pending));
+        setActiveRead(tacticalRead(tempState));
+        setDockMode('decision');
         return;
       }
       const res = outcome.resolution!;
@@ -299,7 +323,7 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
       });
       setDockMode('debrief');
     },
-    [changeSail, closeDock]
+    [changeSail, closeSailPicker]
   );
 
   const confirmRetire = useCallback(() => {
@@ -577,25 +601,11 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
     : undefined;
 
   const isMob = activeEvent?.kind === 'mob';
-  // How much of the docked opportunity is left, 0–1: the engine's own decay of
-  // the edge past its fire point (progress.decisionTriggerNm), renormalised so
-  // the bar drains to empty exactly where the engine expires the event
-  // (EDGE_SPENT) — the UI and the resolution can never disagree.
-  const edgeFade =
-    activeEvent && !isMob && progress.decisionTriggerNm !== undefined
-      ? Math.max(
-          0,
-          Math.min(
-            1,
-            (edgeDecay(
-              progress.distanceCoveredNm - progress.decisionTriggerNm,
-              progress.totalDistanceNm
-            ) -
-              EDGE_SPENT) /
-              (1 - EDGE_SPENT)
-          )
-        )
-      : undefined;
+  // No edge-fade bar: the watch stops while a decision is docked, so the edge
+  // structurally cannot drain under the cards any more. The engine's decay and
+  // draw-free expiry stay (they still govern anyone sailing on via "hold
+  // course" and keep the resolution honest) — the UI just no longer needs to
+  // animate a bar that can never move.
 
   const usableHeight = Math.max(height - insets.top - insets.bottom, 320);
   const docked = dockMode !== null;
@@ -644,7 +654,6 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
         event={activeEvent}
         vmg={activeVmg}
         read={activeRead}
-        edgeFade={edgeFade}
         storyBeat={beatBody}
         mobInfo={mobInfo}
         onChoice={handleChoice}
@@ -652,9 +661,16 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
         onSailPick={handleSailPick}
         debrief={debrief ?? undefined}
         // Only a MOB demands an answer; everything else can be waved off —
-        // "hold course" retracts a decision draw-free, the picker/ribbon close.
+        // "hold course" retracts a decision draw-free; the picker hands the
+        // lane back to a decision it interrupted; the ribbon just closes.
         onDismiss={
-          dockMode === 'decision' ? (isMob ? undefined : dismissDecision) : closeDock
+          dockMode === 'decision'
+            ? isMob
+              ? undefined
+              : dismissDecision
+            : dockMode === 'sail'
+              ? closeSailPicker
+              : closeDock
         }
       />
       <View style={{ height: insets.bottom + spacing.sm, backgroundColor: colors.deepSea }} />
@@ -692,8 +708,10 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
         dock={dock}
         sheet={sheet}
         progressPct={pct}
-        // The HELD pill is MOB-only now — everything else keeps the race live.
-        held={isMob && dockMode === 'decision'}
+        // The watch stops for any key decision on the table (including while
+        // the sail picker borrows its lane); the picker or ribbon alone never
+        // hold the race.
+        held={activeEvent !== null}
       />
     </View>
   );

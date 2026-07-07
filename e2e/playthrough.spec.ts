@@ -133,8 +133,10 @@ test('a full race can be played from start to finish in the cockpit', async ({ p
   await page.getByTestId('debrief-ribbon').click();
   await expect(dock).not.toBeVisible();
 
-  // Resume, and prove the lane is LIVE: with the sail picker docked the race
-  // clock keeps running (the old cockpit froze it — that hold is MOB-only now).
+  // Resume, and prove the two-speed contract: the sail picker ALONE never
+  // holds (the clock runs beneath it), but a docked DECISION stops the watch —
+  // and the picker still opens and closes over the held call, handing the
+  // lane back to it.
   await setSimPaused(page, false);
   await withQuietCockpit(page, async () => {
     await page.getByTestId('sail-cell').click({ timeout: 2_000 });
@@ -146,6 +148,25 @@ test('a full race can be played from start to finish in the cockpit', async ({ p
       .toBe(true);
     await page.getByTestId('sail-dismiss').click({ timeout: 2_000 });
   });
+
+  // Wait for a key decision to dock: the clock must FREEZE (HELD pill up)…
+  await expect(page.getByTestId('decision-choice').first()).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId('held-pill')).toBeVisible();
+  const heldClock = page.getByTestId('ribbon-elapsed');
+  const frozen = await heldClock.textContent();
+  await page.waitForTimeout(900);
+  expect(await heldClock.textContent()).toBe(frozen);
+  // …while the wardrobe stays reachable: the picker borrows the lane over the
+  // held call and hands it straight back on dismiss.
+  await page.getByTestId('sail-cell').click({ timeout: 2_000 });
+  await expect(page.getByTestId('sail-change-choice').first()).toBeVisible({ timeout: 3_000 });
+  await page.getByTestId('sail-dismiss').click({ timeout: 2_000 });
+  await expect(page.getByTestId('decision-choice').first()).toBeVisible({ timeout: 3_000 });
+  await page.getByTestId('decision-choice').first().click();
+  const ribbonAfter = page.getByTestId('debrief-ribbon');
+  if (await ribbonAfter.isVisible().catch(() => false)) {
+    await ribbonAfter.click().catch(() => undefined);
+  }
 
   // Sail to the finish, answering any tactical decisions that dock.
   await playToResults(page);
@@ -211,9 +232,9 @@ test('phone portrait keeps the chart floor and the one-line band', async ({ page
   await setSimPaused(page, false);
 
   // Docked: the chart snaps but never below its 260px floor, and the dock sits
-  // wholly below it. The lane is live now — a docked card can EXPIRE (its edge
-  // decays as the boat sails on) between visibility and measurement, so retry
-  // against the next card rather than flake on a vanished box.
+  // wholly below it. A docked card holds the watch, so it cannot vanish
+  // between visibility and measurement — the retry loop stays purely as
+  // belt-and-braces against animation timing.
   let measured = false;
   for (let attempt = 0; attempt < 8 && !measured; attempt += 1) {
     await expect(page.getByTestId('decision-choice').first()).toBeVisible({ timeout: 30_000 });
@@ -321,28 +342,17 @@ async function playToResults(page: Page): Promise<void> {
 
   while (Date.now() < deadline) {
     if (await results.isVisible().catch(() => false)) return;
-    // Cards persist until answered or their edge expires — answer promptly,
-    // and treat a click landing on an already-expired card as a miss to poll
-    // past, never a failure.
+    // A docked card holds the watch until answered (or waved off) — answer
+    // promptly, and treat a click landing on a card dismissed mid-flight as a
+    // miss to poll past, never a failure.
     if (await choice.isVisible().catch(() => false)) {
       if (!geometryChecked) {
-        // Once, on the first live decision: the dock compresses the chart, no
-        // dialog semantics exist, and — unless it is the MOB emergency, the
-        // one hold left — the race clock keeps running under the cards.
+        // Once, on the first docked decision: the dock compresses the chart
+        // and no dialog semantics exist (the held-clock contract is asserted
+        // explicitly in the main test body).
         geometryChecked = true;
         await assertChartClearOfDock(page).catch(() => undefined);
         expect(await page.locator('[role="dialog"], [aria-modal="true"]').count()).toBe(0);
-        const isMob = await page
-          .getByText('EMERGENCY', { exact: true })
-          .isVisible()
-          .catch(() => false);
-        if (!isMob) {
-          const clock = page.getByTestId('ribbon-elapsed');
-          const before = await clock.textContent();
-          await expect
-            .poll(async () => (await clock.textContent()) !== before, { timeout: 5_000 })
-            .toBe(true);
-        }
       }
       await choice.click({ timeout: 2_000 }).catch(() => undefined);
       continue;
