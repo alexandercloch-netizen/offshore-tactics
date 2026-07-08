@@ -124,3 +124,40 @@ describe('the Harbour dashboard', () => {
     expect(tree.root.findAllByType('ScrollView' as never)).toHaveLength(0);
   });
 });
+
+describe('the desktop chart table', () => {
+  it('splits into charts-left / numbers-right with every section present', () => {
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = renderer.create(
+        <HarbourDashboard
+          history={[]}
+          conditions={seasonalBoardConditions()}
+          now={NOW}
+          onEnterRace={() => undefined}
+          width={760}
+          twoPane
+          rightWidth={480}
+        />
+      );
+    });
+    expect(byTestID(tree, 'harbour-charts-pane')).toHaveLength(1);
+    expect(byTestID(tree, 'harbour-numbers-pane')).toHaveLength(1);
+    // The charts live left, the numbers right — and nothing is lost.
+    const charts = byTestID(tree, 'harbour-charts-pane')[0];
+    const numbers = byTestID(tree, 'harbour-numbers-pane')[0];
+    const inside = (root: ReactTestInstance, id: string) =>
+      root.findAll((n) => typeof n.type === 'string' && n.props.testID === id);
+    expect(inside(charts, 'harbour-hero')).toHaveLength(1);
+    expect(inside(charts, 'harbour-world')).toHaveLength(1);
+    expect(inside(numbers, 'harbour-board')).toHaveLength(1);
+    expect(inside(numbers, 'harbour-logbook')).toHaveLength(1);
+    expect(inside(numbers, 'harbour-season')).toHaveLength(1);
+  });
+
+  it('keeps the phone single column free of panes', () => {
+    const tree = mount();
+    expect(byTestID(tree, 'harbour-charts-pane')).toHaveLength(0);
+    expect(byTestID(tree, 'harbour-numbers-pane')).toHaveLength(0);
+  });
+});

@@ -20,6 +20,7 @@ interface ConditionsHeroProps {
   onEnterRace: (raceId: string) => void;
   isUnlocked: (raceId: string) => boolean;
   width: number;
+  chartHeight?: number; // desktop panes ask for a taller chart than the phone's 200
 }
 
 export const ConditionsHero: React.FC<ConditionsHeroProps> = ({
@@ -28,6 +29,7 @@ export const ConditionsHero: React.FC<ConditionsHeroProps> = ({
   onEnterRace,
   isUnlocked,
   width,
+  chartHeight = 200,
 }) => {
   const races = regionRaces(region);
   const lead = races[0];
@@ -70,7 +72,7 @@ export const ConditionsHero: React.FC<ConditionsHeroProps> = ({
         onPinPress={onEnterRace}
         windWash={sample}
         width={width}
-        height={200}
+        height={chartHeight}
         testID="hero-chart"
       />
     </View>

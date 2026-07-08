@@ -26,6 +26,7 @@ type Props = CompositeScreenProps<
 // owns navigation, the CTAs and the conditions fetch; everything visual lives
 // in components/harbour. Charts stay readable, not vast, on a wide web window.
 const MAX_CONTENT_WIDTH = 680;
+const TWO_PANE_MAX_WIDTH = 1360;
 
 export const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
@@ -131,8 +132,17 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
     enterRace(recommended.id);
   };
 
-  const contentWidth = Math.min(windowWidth, MAX_CONTENT_WIDTH);
-  const chartWidth = contentWidth - spacing.xl * 2;
+  // Desktop-wide stages get the two-pane chart table (charts left, numbers
+  // right); anything narrower reads as the phone's single column. The
+  // breakpoint sits below the cockpit's 900 rail so a comfortable laptop
+  // window qualifies, and the two-pane content is capped like a broadsheet.
+  const twoPane = windowWidth >= 1024;
+  const contentWidth = twoPane
+    ? Math.min(windowWidth, TWO_PANE_MAX_WIDTH)
+    : Math.min(windowWidth, MAX_CONTENT_WIDTH);
+  const usable = contentWidth - spacing.xl * 2;
+  const chartWidth = twoPane ? Math.round(usable * 0.6) : usable;
+  const rightWidth = twoPane ? usable - chartWidth - spacing.xl : undefined;
 
   return (
     <ScrollView
@@ -174,6 +184,8 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
           recommendedId={recommended?.id}
           onEnterRace={enterRace}
           width={chartWidth}
+          twoPane={twoPane}
+          rightWidth={rightWidth}
         >
           {/* The standing CTAs, anchored right under the world chart. */}
           <View style={styles.actions}>

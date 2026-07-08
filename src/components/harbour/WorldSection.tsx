@@ -19,6 +19,8 @@ interface WorldSectionProps {
   onEnterRace: (raceId: string) => void;
   isUnlocked: (raceId: string) => boolean;
   width: number;
+  worldHeight?: number; // desktop panes ask for taller charts than the phone defaults
+  regionHeight?: number;
 }
 
 export const WorldSection: React.FC<WorldSectionProps> = ({
@@ -26,6 +28,8 @@ export const WorldSection: React.FC<WorldSectionProps> = ({
   onEnterRace,
   isUnlocked,
   width,
+  worldHeight = 200,
+  regionHeight = 230,
 }) => {
   const [region, setRegion] = useState<RegionKey | null>(null);
 
@@ -91,7 +95,7 @@ export const WorldSection: React.FC<WorldSectionProps> = ({
             if (isUnlocked(id)) onEnterRace(id);
           }}
           width={width}
-          height={230}
+          height={regionHeight}
           testID="region-chart"
         />
       ) : (
@@ -102,7 +106,7 @@ export const WorldSection: React.FC<WorldSectionProps> = ({
             pins={worldPins}
             onPinPress={(id) => setRegion(id as RegionKey)}
             width={width}
-            height={200}
+            height={worldHeight}
             testID="world-chart"
           />
           <View style={styles.chipRow}>
