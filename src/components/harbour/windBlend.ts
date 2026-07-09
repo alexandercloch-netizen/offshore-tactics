@@ -1,5 +1,6 @@
 import { GeoBounds } from '../../data/worldmap';
 import { FlowCell } from '../flowField';
+import { haversineNm } from '../../engine/geo';
 
 // Blend the Harbour's real per-course wind samples into a smooth field over a
 // region chart. This is honest interpolation, not invention: the field is
@@ -71,6 +72,41 @@ export function blendWindGrid(
     }
   }
   return cells;
+}
+
+// The honesty gate on blending at all. IDW is a fair read across the few tens
+// of miles the comment above promises — but a region box can be a whole ocean
+// (usWest spans ~4,700 km), where "between the samples" is invention. The
+// blend may render only when EVERY spot in the box is within maxKm of a real
+// sample (great-circle, corners probed at ≤~100 km pitch); otherwise the
+// region shows vanes-only in seasonal mode. Pure — PR-2 wires it to the chart.
+const KM_PER_NM = 1.852;
+const clampInt = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v));
+export function blendCoverageOk(
+  points: readonly { lat: number; lon: number }[],
+  bounds: GeoBounds,
+  maxKm = 500
+): boolean {
+  if (points.length === 0) return false;
+  const midLat = (bounds.minLat + bounds.maxLat) / 2;
+  const spanKmX = haversineNm(midLat, bounds.minLon, midLat, bounds.maxLon) * KM_PER_NM;
+  const spanKmY = haversineNm(bounds.minLat, bounds.minLon, bounds.maxLat, bounds.minLon) * KM_PER_NM;
+  const cols = clampInt(Math.ceil(spanKmX / 100) + 1, 2, 64);
+  const rows = clampInt(Math.ceil(spanKmY / 100) + 1, 2, 64);
+  for (let r = 0; r < rows; r += 1) {
+    const lat = bounds.maxLat + ((bounds.minLat - bounds.maxLat) * r) / (rows - 1);
+    for (let c = 0; c < cols; c += 1) {
+      const lon = bounds.minLon + ((bounds.maxLon - bounds.minLon) * c) / (cols - 1);
+      let nearest = Infinity;
+      for (const p of points) {
+        const d = haversineNm(lat, lon, p.lat, p.lon) * KM_PER_NM;
+        if (d < nearest) nearest = d;
+        if (nearest <= maxKm) break;
+      }
+      if (nearest > maxKm) return false;
+    }
+  }
+  return true;
 }
 
 // The vector-mean direction of a station's courses (the world chart's arrow):

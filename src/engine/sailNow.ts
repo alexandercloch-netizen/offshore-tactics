@@ -18,6 +18,9 @@ import { isRaceUnlocked } from './gameEngine';
 export interface BoardConditions {
   source: 'live' | 'seasonal';
   samples: Record<string, WindSample>;
+  // Epoch ms of a live fetch — display-only provenance ("as of HH:MM") and the
+  // staleness clock. Absent on seasonal boards, which never expire.
+  fetchedAt?: number;
 }
 
 // The seasonal fallback: every race gets its climatological mean breeze. Total

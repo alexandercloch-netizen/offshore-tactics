@@ -1,12 +1,24 @@
 import {
   GeoPoint,
   Race,
+  SailingRegion,
   WeatherScenario,
   WeatherScenarioPoint,
   WeatherScenarioStamp,
   WindSample,
 } from '../types';
 import { BoardConditions } from '../engine/sailNow';
+import { FlowCell } from '../components/flowField';
+import { REGION_BOUNDS } from '../data/worldmap';
+import {
+  WORLD_LATTICE_CELLS,
+  WORLD_LATTICE_COLS,
+  WORLD_LATTICE_ROWS,
+  WORLD_NEAREST_OCEAN,
+  WORLD_OCEAN_INDEX,
+} from '../data/worldLattice';
+import { WORLD_CLIMATOLOGY } from '../data/worldClimatology';
+import { haversineNm } from '../engine/geo';
 
 // Live weather scenarios ("sail today's forecast") from Open-Meteo's free
 // forecast API. Strictly optional and fail-soft: the fetch runs only behind the
@@ -24,6 +36,15 @@ export const SCENARIO_FIELD_VERSION = 1;
 
 const WEATHER_API = 'https://api.open-meteo.com/v1/forecast';
 const FETCH_TIMEOUT_MS = 4000;
+
+// The live-claim clocks, shared by every surface that paints live weather
+// (PR-2 wires them to focus/refresh; they live here so there is exactly one
+// boundary). A live reading older than LIVE_REFRESH_MS is refetched on focus;
+// one older than STALE_DEMOTE_MS may no longer be shown as live at all — the
+// whole surface demotes to its seasonal rung and relabels. Never a mix.
+export const LIVE_REFRESH_MS = 15 * 60_000;
+export const STALE_DEMOTE_MS = 60 * 60_000;
+
 // Longer courses sample start/mid/finish so the field carries the model's real
 // spatial gradient; a short course sees one synoptic sky.
 const MULTI_POINT_NM = 150;
@@ -180,7 +201,7 @@ export async function fetchBoardConditions(races: Race[]): Promise<BoardConditio
       `${WEATHER_API}?latitude=${points.map((p) => p.lat).join(',')}` +
       `&longitude=${points.map((p) => p.lon).join(',')}` +
       `&current=wind_speed_10m,wind_direction_10m` +
-      `&wind_speed_unit=kn&models=${WEATHER_MODEL}&timeformat=unixtime`;
+      `&wind_speed_unit=kn&models=${WEATHER_MODEL}&cell_selection=sea&timeformat=unixtime`;
 
     const json = await getJsonWithRetry(url);
     if (!json || typeof json !== 'object') return null;
@@ -196,7 +217,7 @@ export async function fetchBoardConditions(races: Race[]): Promise<BoardConditio
         speedKn: current.wind_speed_10m,
       };
     }
-    return { source: 'live', samples };
+    return { source: 'live', samples, fetchedAt: Date.now() };
   } catch {
     return null;
   }
@@ -214,7 +235,8 @@ export async function fetchCourseSnapshot(race: Race): Promise<WeatherScenario |
       `${WEATHER_API}?latitude=${points.map((p) => p.lat).join(',')}` +
       `&longitude=${points.map((p) => p.lon).join(',')}` +
       `&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,surface_pressure` +
-      `&wind_speed_unit=kn&models=${WEATHER_MODEL}&forecast_hours=${hoursAhead}&timeformat=unixtime`;
+      `&wind_speed_unit=kn&models=${WEATHER_MODEL}&cell_selection=sea` +
+      `&forecast_hours=${hoursAhead}&timeformat=unixtime`;
 
     const json = await getJsonWithRetry(url);
     if (!json || typeof json !== 'object') return null;
@@ -242,4 +264,168 @@ export async function fetchCourseSnapshot(race: Race): Promise<WeatherScenario |
   } catch {
     return null;
   }
+}
+
+// ---- The Harbour's flow lattices --------------------------------------------
+//
+// The world chart and the region drill-ins paint a real wind field: every
+// rendered cell is (or copies) an actual ECMWF sea-cell sample — the fetched
+// lattice IS the display grid, so there is no interpolation anywhere except
+// bilinear between adjacent real samples inside buildFlowField. These are pure
+// fetchers: the caller owns caching (session state is PR-2's concern), the
+// same flag/timeout/retry/all-or-nothing discipline as the board fetch.
+
+// One fetched lattice, ready for buildFlowField: row-major, north row first.
+export interface LiveFlowGrid {
+  cells: FlowCell[];
+  cols: number;
+  rows: number;
+  fetchedAt: number; // epoch ms — feeds "as of HH:MM" and the demotion clock
+}
+
+const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v));
+
+// Parse one batched current-wind response into per-point samples (null where a
+// point came back empty). Null overall on a malformed or miscounted body.
+function parseCurrentBatch(json: unknown, expected: number): (WindSample | null)[] | null {
+  if (!json || typeof json !== 'object') return null;
+  const locations = (Array.isArray(json) ? json : [json]) as OpenMeteoCurrentLocation[];
+  if (locations.length !== expected) return null;
+  return locations.map((loc) => {
+    const current = loc?.current;
+    if (current?.wind_speed_10m == null || current.wind_direction_10m == null) return null;
+    return { fromDeg: current.wind_direction_10m, speedKn: current.wind_speed_10m };
+  });
+}
+
+// The world's ocean lattice in ONE batched GET — current wind at every ocean
+// node of the baked 10° grid. Tolerates a whisper of missing points (≤2% of
+// the ocean set, filled from the nearest LIVE neighbour — within-source fill,
+// never a live/seasonal mix); anything worse is treated as no response.
+// Rehydrates to the full 36×13 grid via WORLD_NEAREST_OCEAN — land cells copy
+// their nearest ocean node and are painted over by the land layer, so the fill
+// is display plumbing, never a data claim.
+export async function fetchWorldFlow(): Promise<LiveFlowGrid | null> {
+  if (!liveWeatherEnabled()) return null;
+  try {
+    const ocean = WORLD_OCEAN_INDEX.map((i) => WORLD_LATTICE_CELLS[i]);
+    const url =
+      `${WEATHER_API}?latitude=${ocean.map((p) => p.lat).join(',')}` +
+      `&longitude=${ocean.map((p) => p.lon).join(',')}` +
+      `&current=wind_speed_10m,wind_direction_10m` +
+      `&wind_speed_unit=kn&models=${WEATHER_MODEL}&cell_selection=sea&timeformat=unixtime`;
+
+    const samples = parseCurrentBatch(await getJsonWithRetry(url), ocean.length);
+    if (!samples) return null;
+    const nullCount = samples.filter((s) => s === null).length;
+    if (nullCount > ocean.length * 0.02) return null;
+
+    // Patch the stragglers from their nearest live neighbour (deterministic:
+    // first minimum in fetch order).
+    for (let i = 0; i < samples.length; i += 1) {
+      if (samples[i] !== null) continue;
+      let best: WindSample | null = null;
+      let bestNm = Infinity;
+      for (let j = 0; j < samples.length; j += 1) {
+        const s = samples[j];
+        if (s === null) continue;
+        const d = haversineNm(ocean[i].lat, ocean[i].lon, ocean[j].lat, ocean[j].lon);
+        if (d < bestNm) {
+          bestNm = d;
+          best = s;
+        }
+      }
+      if (!best) return null; // an all-null board can't be patched
+      samples[i] = best;
+    }
+
+    const cells: FlowCell[] = WORLD_LATTICE_CELLS.map((cell, i) => {
+      const s = samples[WORLD_NEAREST_OCEAN[i]] as WindSample;
+      return { lat: cell.lat, lon: cell.lon, dirDeg: s.fromDeg, speedKn: s.speedKn };
+    });
+    return {
+      cells,
+      cols: WORLD_LATTICE_COLS,
+      rows: WORLD_LATTICE_ROWS,
+      fetchedAt: Date.now(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+// The regions the Harbour can chart live ('other' borrows and has no box).
+export type LiveRegionKey = Exclude<SailingRegion, 'other'>;
+
+// A per-region lattice sized to its box so anchors stay ≤~450 km apart — live
+// mode's honest replacement for IDW over a huge box. All-or-nothing: a region
+// field with holes would silently lie, so any missing point is no response.
+export async function fetchRegionFlow(region: LiveRegionKey): Promise<LiveFlowGrid | null> {
+  if (!liveWeatherEnabled()) return null;
+  const bounds = REGION_BOUNDS[region];
+  if (!bounds) return null;
+  try {
+    const cols = clamp(Math.ceil((bounds.maxLon - bounds.minLon) / 4), 6, 12);
+    const rows = clamp(Math.ceil((bounds.maxLat - bounds.minLat) / 4), 5, 10);
+    // Same node placement as blendWindGrid: endpoints inclusive, north row
+    // first — the swap-in keeps buildFlowField's affine contract.
+    const grid: GeoPoint[] = [];
+    for (let r = 0; r < rows; r += 1) {
+      const lat = bounds.maxLat + ((bounds.minLat - bounds.maxLat) * r) / (rows - 1);
+      for (let c = 0; c < cols; c += 1) {
+        const lon = bounds.minLon + ((bounds.maxLon - bounds.minLon) * c) / (cols - 1);
+        grid.push({ lat, lon });
+      }
+    }
+    const round3 = (v: number): number => Math.round(v * 1000) / 1000;
+    const url =
+      `${WEATHER_API}?latitude=${grid.map((p) => round3(p.lat)).join(',')}` +
+      `&longitude=${grid.map((p) => round3(p.lon)).join(',')}` +
+      `&current=wind_speed_10m,wind_direction_10m` +
+      `&wind_speed_unit=kn&models=${WEATHER_MODEL}&cell_selection=sea&timeformat=unixtime`;
+
+    const samples = parseCurrentBatch(await getJsonWithRetry(url), grid.length);
+    if (!samples || samples.some((s) => s === null)) return null;
+
+    const cells: FlowCell[] = grid.map((p, i) => {
+      const s = samples[i] as WindSample;
+      return { lat: p.lat, lon: p.lon, dirDeg: s.fromDeg, speedKn: s.speedKn };
+    });
+    return { cells, cols, rows, fetchedAt: Date.now() };
+  } catch {
+    return null;
+  }
+}
+
+// ---- The seasonal world (the guest/CI/flag-off/demoted story) -----------------
+
+// The baked world climatology for one month, as the same 36×13 grid the live
+// fetch returns — plus each cell's constancy q (0–1), which PR-2 gates any
+// seasonal direction glyph on (a westerlies-belt "mean direction" with q 0.3
+// is a fiction; the wash may paint speed, the vanes must hold their tongue).
+export interface SeasonalWorldFlow {
+  cells: FlowCell[];
+  q: number[]; // per cell, aligned with cells
+  cols: number;
+  rows: number;
+}
+
+// Pure and total: quantised half-knots / 3° steps / tenths back to real units,
+// rehydrated through the same nearest-ocean map as the live grid.
+export function seasonalWorldFlow(monthIndex: number): SeasonalWorldFlow {
+  const m = clamp(Math.floor(monthIndex), 0, 11);
+  const cells: FlowCell[] = [];
+  const q: number[] = [];
+  for (let i = 0; i < WORLD_LATTICE_CELLS.length; i += 1) {
+    const cell = WORLD_LATTICE_CELLS[i];
+    const row = WORLD_CLIMATOLOGY[WORLD_NEAREST_OCEAN[i]];
+    cells.push({
+      lat: cell.lat,
+      lon: cell.lon,
+      dirDeg: row[12 + m] * 3,
+      speedKn: row[m] / 2,
+    });
+    q.push(row[24 + m] / 10);
+  }
+  return { cells, q, cols: WORLD_LATTICE_COLS, rows: WORLD_LATTICE_ROWS };
 }
