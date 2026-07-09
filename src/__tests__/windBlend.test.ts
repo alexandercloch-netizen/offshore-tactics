@@ -1,5 +1,11 @@
-import { blendWindGrid, meanFromDeg, WindPoint } from '../components/harbour/windBlend';
-import { GeoBounds } from '../data/worldmap';
+import {
+  blendCoverageOk,
+  blendWindGrid,
+  meanFromDeg,
+  WindPoint,
+} from '../components/harbour/windBlend';
+import { GeoBounds, REGION_BOUNDS } from '../data/worldmap';
+import { regionRaces } from '../components/harbour/regions';
 
 // The Harbour's blended field must be honest interpolation: exact at every
 // real sample, sensible between them, and direction-safe through north.
@@ -52,6 +58,32 @@ describe('blendWindGrid', () => {
     // Row-major, north row first (matches sampleWindGrid's contract).
     expect(cells[0].lat).toBeCloseTo(box.maxLat, 6);
     expect(cells[23].lat).toBeCloseTo(box.minLat, 6);
+  });
+});
+
+describe('blendCoverageOk — the 500 km honesty gate', () => {
+  // The real question the gate answers: are this region's course waypoints
+  // dense enough that IDW across its box is a read, not an invention?
+  const anchors = (key: 'uk' | 'usWest') =>
+    regionRaces(key).flatMap((race) => race.waypoints.map((w) => ({ lat: w.lat, lon: w.lon })));
+
+  it('passes the UK box — its three courses genuinely cover the Western Approaches', () => {
+    expect(blendCoverageOk(anchors('uk'), REGION_BOUNDS.uk)).toBe(true);
+  });
+
+  it('fails the usWest box — 4,700 km of Pacific between four courses is not coverage', () => {
+    expect(blendCoverageOk(anchors('usWest'), REGION_BOUNDS.usWest)).toBe(false);
+  });
+
+  it('is false with no samples at all', () => {
+    expect(blendCoverageOk([], box)).toBe(false);
+  });
+
+  it('honours the maxKm knob and covers a snug box with one point', () => {
+    // The little test box spans well under 500 km; one mid-box point covers it.
+    expect(blendCoverageOk([{ lat: 50.5, lon: -1 }], box)).toBe(true);
+    // Squeeze the tolerance below the corner distance and it must refuse.
+    expect(blendCoverageOk([{ lat: 50.5, lon: -1 }], box, 10)).toBe(false);
   });
 });
 
