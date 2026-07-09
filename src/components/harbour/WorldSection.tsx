@@ -5,7 +5,13 @@ import { REGION_BOUNDS, REGION_LAND, WORLD_BOUNDS, WORLD_LAND } from '../../data
 import { BoardConditions } from '../../engine/sailNow';
 import WorldChart, { WorldPin } from '../WorldChart';
 import { windHeatColor } from '../windScale';
+import { Race } from '../../types';
+import { blendWindGrid, meanFromDeg, WindPoint } from './windBlend';
 import { REGION_KEYS, REGION_META, RegionKey, regionRaces, shortRaceName } from './regions';
+
+// The blended field's grid (shared with the hero): coarse cols, finer rows.
+const FLOW_COLS = 14;
+const FLOW_ROWS = 22;
 
 // §2 The world chart — tap the planet to go racing. World view shows one
 // station pin per sailing region (anchored on its home-port classic, so the
@@ -46,11 +52,24 @@ export const WorldSection: React.FC<WorldSectionProps> = ({
       ) / Math.max(1, races.length);
     return { key, races, meanKn, anchor };
   });
-  const worldPins: WorldPin[] = worldStations.map(({ key, meanKn, anchor }) => ({
+  const stationPoints = (races: Race[]): WindPoint[] =>
+    races.map((race) => {
+      const s = conditions.samples[race.id] ?? race.prevailingWind;
+      return {
+        lat: race.waypoints[0].lat,
+        lon: race.waypoints[0].lon,
+        fromDeg: s.fromDeg,
+        speedKn: s.speedKn,
+      };
+    });
+  const worldPins: WorldPin[] = worldStations.map(({ key, races, meanKn, anchor }) => ({
     id: key,
     lat: anchor.waypoints[0].lat,
     lon: anchor.waypoints[0].lon,
     color: windHeatColor(meanKn),
+    // The station's true wind as a small vane — blending a field across whole
+    // oceans would be fiction, so the world chart shows its winds pointwise.
+    fromDeg: meanFromDeg(stationPoints(races)),
   }));
 
   const regionPins: WorldPin[] = region
@@ -67,6 +86,21 @@ export const WorldSection: React.FC<WorldSectionProps> = ({
         };
       })
     : [];
+
+  // The zoomed region reads like the hero: the real course samples blended
+  // into a heat wash + particle swarm over the region box.
+  const regionFlow = region
+    ? {
+        cells: blendWindGrid(
+          stationPoints(regionRaces(region)),
+          REGION_BOUNDS[region],
+          FLOW_COLS,
+          FLOW_ROWS
+        ),
+        cols: FLOW_COLS,
+        rows: FLOW_ROWS,
+      }
+    : undefined;
 
   return (
     <View style={styles.section} testID="harbour-world">
@@ -96,6 +130,7 @@ export const WorldSection: React.FC<WorldSectionProps> = ({
           }}
           width={width}
           height={regionHeight}
+          flow={regionFlow}
           testID="region-chart"
         />
       ) : (

@@ -6,6 +6,8 @@ import { WindSample } from '../types';
 import { LandPolygon } from '../data/landmasses';
 import { GeoBounds } from '../data/worldmap';
 import { windHeatColor } from './windScale';
+import { FlowCell } from './flowField';
+import { WindParticles } from './WindParticles';
 
 // The Harbour's chart: a lightweight, display-only map of a fixed geographic
 // box (the whole world, or one sailing region) with tappable pins on top. It
@@ -24,6 +26,7 @@ export interface WorldPin {
   label?: string;
   sublabel?: string; // a quiet second line (a wind readout, a course count)
   locked?: boolean; // render dimmed; still tappable (the caller explains)
+  fromDeg?: number; // the station's true wind direction → a small chart arrow
 }
 
 interface WorldChartProps {
@@ -34,6 +37,11 @@ interface WorldChartProps {
   // Paint the current breeze over the water (the conditions hero): a wash of
   // the wind-band colour plus a from-direction arrow.
   windWash?: WindSample;
+  // The blended regional wind field (windBlend.ts over the region's real
+  // course samples): a soft heat wash per row plus the live particle swarm —
+  // the Harbour's charts read like the race charts. Region boxes only; the
+  // world chart stays wash-free (blending across oceans would be fiction).
+  flow?: { cells: FlowCell[]; cols: number; rows: number };
   width: number;
   height: number;
   // Caption block width. The world view packs seven stations onto a short
@@ -102,6 +110,7 @@ export const WorldChart: React.FC<WorldChartProps> = ({
   pins,
   onPinPress,
   windWash,
+  flow,
   width,
   height,
   captionWidth = 120,
@@ -116,6 +125,51 @@ export const WorldChart: React.FC<WorldChartProps> = ({
   const uid = React.useId().replace(/[^a-zA-Z0-9]/g, '');
   const seaId = `wc-sea-${uid}`;
   const landId = `wc-land-${uid}`;
+
+  // The blended field as a heat wash: one horizontal gradient per row (the
+  // same strip trick as RouteMap — solid cells read as tiles), quiet enough
+  // that the land, pins and particles stay the chart's voice.
+  const flowWash = useMemo(() => {
+    if (!flow || flow.cols < 2 || flow.rows < 2 || flow.cells.length < flow.cols * flow.rows) {
+      return null;
+    }
+    const { cells, cols, rows } = flow;
+    const stripH = h / (rows - 1);
+    const defs: React.ReactNode[] = [];
+    const strips: React.ReactNode[] = [];
+    for (let r = 0; r < rows; r += 1) {
+      const gid = `wc-flow-${uid}-${r}`;
+      defs.push(
+        <LinearGradient key={gid} id={gid} x1="0" y1="0" x2="1" y2="0">
+          {Array.from({ length: cols }, (_, c) => (
+            <Stop
+              key={c}
+              offset={`${((c / (cols - 1)) * 100).toFixed(1)}%`}
+              stopColor={windHeatColor(cells[r * cols + c].speedKn)}
+            />
+          ))}
+        </LinearGradient>
+      );
+      const top = Math.max(0, (r - 0.5) * stripH);
+      strips.push(
+        <Rect
+          key={`fs-${r}`}
+          x={0}
+          y={top}
+          width={w}
+          height={Math.min(h, (r + 0.5) * stripH) - top}
+          fill={`url(#${gid})`}
+          opacity={0.3}
+        />
+      );
+    }
+    return (
+      <>
+        <Defs>{defs}</Defs>
+        {strips}
+      </>
+    );
+  }, [flow, w, h, uid]);
 
   // Land geometry is static per bounds — never re-path it on a re-render.
   const landLayer = useMemo(
@@ -217,9 +271,10 @@ export const WorldChart: React.FC<WorldChartProps> = ({
           </LinearGradient>
         </Defs>
         <Rect x={0} y={0} width={w} height={h} fill={`url(#${seaId})`} rx={radius.sm} />
-        {windWash ? (
-          // The wind wash: the sea takes the band's colour, faintly — honest
-          // paint (one sample for these waters), not a fake per-cell field.
+        {windWash && !flow ? (
+          // The flat wind wash: the sea takes the band's colour, faintly —
+          // honest paint (one sample for these waters), superseded wherever a
+          // blended field is available.
           <Rect
             x={0}
             y={0}
@@ -230,7 +285,39 @@ export const WorldChart: React.FC<WorldChartProps> = ({
             rx={radius.sm}
           />
         ) : null}
+        {flowWash}
+        {flow ? (
+          <WindParticles
+            cells={flow.cells}
+            cols={flow.cols}
+            rows={flow.rows}
+            project={project}
+            layer="wind"
+            color={colors.foam}
+            count={Math.round(Math.min(Math.max((w * h) / 2600, 60), 160))}
+            width={w}
+            height={h}
+          />
+        ) : null}
         {landLayer}
+        {/* Each station's true wind: a small vane off the dot, pointing the
+            way the breeze blows (from + 180, the hero arrow's convention). */}
+        {labelled.map(({ pin, at }) =>
+          pin.fromDeg !== undefined ? (
+            <G
+              key={`vane-${pin.id}`}
+              transform={`translate(${at.x}, ${at.y}) rotate(${((pin.fromDeg + 180) % 360).toFixed(0)})`}
+              opacity={pin.locked ? 0.35 : 0.85}
+            >
+              <Path
+                d="M 0 -8 L 0 -18 M -3 -13 L 0 -19 L 3 -13"
+                stroke={colors.foam}
+                strokeWidth={1.5}
+                fill="none"
+              />
+            </G>
+          ) : null
+        )}
         {arrow}
       </Svg>
 
