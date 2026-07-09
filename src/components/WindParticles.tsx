@@ -126,6 +126,9 @@ export const WindParticles: React.FC<WindParticlesProps> = ({
 
   useEffect(() => {
     if (!field) return undefined;
+    // View-only motion degrades, never crashes: a host with no RAF (the node
+    // render tests, SSR) simply gets a still chart — the streaks are decor.
+    if (typeof requestAnimationFrame === 'undefined') return undefined;
     let raf = 0;
     let last = 0;
     const r = rng.current;

@@ -7,7 +7,12 @@ import { REGION_BOUNDS, REGION_LAND } from '../../data/worldmap';
 import { BoardConditions, compassPoint, harbourRead } from '../../engine/sailNow';
 import WorldChart, { WorldPin } from '../WorldChart';
 import { windHeatColor } from '../windScale';
+import { blendWindGrid, WindPoint } from './windBlend';
 import { RegionKey, REGION_META, regionRaces, shortRaceName } from './regions';
+
+// The blended field's grid: coarse cols (the strips interpolate), finer rows.
+const FLOW_COLS = 14;
+const FLOW_ROWS = 22;
 
 // §1 Conditions hero — "your waters right now": the player's home region as a
 // compact chart with the breeze painted on it, plus the headline readout and a
@@ -52,6 +57,24 @@ export const ConditionsHero: React.FC<ConditionsHeroProps> = ({
     };
   });
 
+  // The region's breeze, blended from its real course samples (exact at each
+  // anchor, inverse-distance between them) — the heat wash and the particle
+  // swarm both ride it.
+  const points: WindPoint[] = races.map((race) => {
+    const s = conditions.samples[race.id] ?? race.prevailingWind;
+    return {
+      lat: race.waypoints[0].lat,
+      lon: race.waypoints[0].lon,
+      fromDeg: s.fromDeg,
+      speedKn: s.speedKn,
+    };
+  });
+  const flow = {
+    cells: blendWindGrid(points, REGION_BOUNDS[region], FLOW_COLS, FLOW_ROWS),
+    cols: FLOW_COLS,
+    rows: FLOW_ROWS,
+  };
+
   return (
     <View style={styles.section} testID="harbour-hero">
       <Text style={styles.kicker}>
@@ -71,6 +94,7 @@ export const ConditionsHero: React.FC<ConditionsHeroProps> = ({
         pins={pins}
         onPinPress={onEnterRace}
         windWash={sample}
+        flow={flow}
         width={width}
         height={chartHeight}
         testID="hero-chart"
