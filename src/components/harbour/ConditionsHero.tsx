@@ -10,6 +10,7 @@ import WorldChart, { WorldPin } from '../WorldChart';
 import WindScaleLegend from '../WindScaleLegend';
 import { windHeatColor } from '../windScale';
 import { blendWindGrid, courseWindPoints, regionBlendAllowed } from './windBlend';
+import { regionWorldWash } from './worldField';
 import { RegionKey, REGION_META, regionRaces, shortRaceName } from './regions';
 import { liveProvenance, SEASONAL_INDICATIVE } from './provenance';
 
@@ -31,6 +32,8 @@ interface ConditionsHeroProps {
   region: RegionKey;
   conditions: BoardConditions;
   liveFlow?: LiveFlowGrid | null; // the home region's live lattice, if fetched
+  worldFlow?: LiveFlowGrid | null; // the world lattice — the ocean-region fallback
+  month: number; // 0–11, for the seasonal-world fallback wash
   onEnterRace: (raceId: string) => void;
   isUnlocked: (raceId: string) => boolean;
   width: number;
@@ -41,6 +44,8 @@ export const ConditionsHero: React.FC<ConditionsHeroProps> = ({
   region,
   conditions,
   liveFlow,
+  worldFlow,
+  month,
   onEnterRace,
   isUnlocked,
   width,
@@ -55,8 +60,12 @@ export const ConditionsHero: React.FC<ConditionsHeroProps> = ({
       return { flow: liveFlow, motion: true, provenance: liveProvenance(liveFlow.fetchedAt) };
     }
     const live = conditions.source === 'live' && conditions.fetchedAt != null;
+    // A wide ocean region (ausNz/usEast/usWest) can't cover its own box with a
+    // few course samples — but the global field does. Paint the world clipped
+    // to the box (live if we have it, else the baked seasonal world) rather
+    // than leave the home waters a blank sea.
+    if (!regionBlendAllowed(region)) return regionWorldWash(region, worldFlow, month);
     const provenance = live ? liveProvenance(conditions.fetchedAt as number) : SEASONAL_INDICATIVE;
-    if (!regionBlendAllowed(region)) return { flow: undefined, motion: false, provenance };
     return {
       flow: {
         cells: blendWindGrid(
@@ -71,7 +80,7 @@ export const ConditionsHero: React.FC<ConditionsHeroProps> = ({
       motion: live,
       provenance,
     };
-  }, [liveFlow, conditions, region, races]);
+  }, [liveFlow, conditions, region, races, worldFlow, month]);
 
   const lead = races[0];
   if (!lead) return null;
