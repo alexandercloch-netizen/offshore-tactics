@@ -613,6 +613,10 @@ export interface RaceProgress {
   // working set, exactly the pre-wardrobe boat). One field, written by BOTH the
   // manual picker and authored event choices, so the two can never diverge.
   activeSailId?: string; // specialist sail currently flying; undefined = working sails
+  // Peak true wind speed the boat has seen this race (running max of the local
+  // sample). Pure bookkeeping — a draw-free Math.max updated each tick — so it
+  // never touches the RNG stream or a golden pin.
+  peakWindKn?: number;
   sailChanges?: number; // committed distinct changes this race (the ⇄N counter)
   sailChangesFumbled?: number; // how many of those the crew bungled
   unavailableSails?: string[]; // sails blown out this race (a bad change in heavy air)
@@ -715,6 +719,7 @@ export interface RaceResult {
   trail?: GeoPoint[]; // the track actually sailed
   optimalRoute?: GeoPoint[]; // the weather-optimal line for contrast
   optimalHours?: number; // ETA a clean run on the optimal line would have made
+  peakWindKn?: number; // peak true wind (kn) the boat saw this race — drives the gale-finish tally
   // Storyline debrief (storied races only): which signature choice was made and
   // the matching debrief beat text, captured at finish for the results screen.
   signatureOutcome?: SignatureOutcome;
@@ -738,6 +743,29 @@ export interface RaceResult {
   blownSails?: string[]; // names of sails lost to a bungled heavy-air change
 }
 
+// A player's forward-accruing lifetime record. `state.history` is hard-capped at
+// 50 races, so cumulative career stats CANNOT be derived from it — a veteran's
+// early races fall off the end. This record is folded once per finish in the
+// FINISH_RACE reducer (outside the engine RNG path) and never truncates, so it
+// is the single durable source of lifetime totals (the foundation for Honours).
+export interface CareerRecord {
+  racesSailed: number;
+  racesFinished: number;
+  wins: number; // corrected-time firsts
+  podiums: number; // corrected top 3
+  nmLogged: number; // course miles of finished races
+  handicapSwingWins: number; // won on corrected while beaten on the water
+  photoFinishWins: number; // corrected win with nearest gap < PHOTO_FINISH_SECONDS
+  cleanSailRaces: number; // finished with sailChanges>0 and 0 fumbled
+  galeFinishes: number; // finished a race whose peakWindKn >= GALE_KN
+  boldStoryWins: number; // signatureOutcome==='bold' && position===1
+  scenarioRuns: number; // finished a race with a weather scenario stamp
+  regionsSailed: string[]; // distinct region keys, deduped
+  bestCorrectedGapSeconds?: number; // smallest recorded (closest duel)
+  bestPaceVsOptimalPct?: number; // largest recorded optimalHours/elapsedHours*100
+  updatedAt: number; // epoch ms of the last fold (from the result's timestamp)
+}
+
 export interface GameState {
   funds: number;
   selectedRaceId?: string;
@@ -757,6 +785,7 @@ export interface GameState {
   weather?: WeatherCondition;
   lastResult?: RaceResult;
   history: RaceResult[];
+  career?: CareerRecord; // forward-accruing lifetime record (optional — back-compat with old saves)
   eventLog: string[];
   tutorialSeen?: boolean; // whether the player has seen the race how-to-play
   savedAt?: number; // epoch ms the save was last written; drives cloud sync reconciliation

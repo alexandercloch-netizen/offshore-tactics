@@ -12,6 +12,7 @@ const midRace = {
   profile: { fleet: [] },
   condition: { hullIntegrity: 90, crewStamina: 80, crewMorale: 80 },
   history: [],
+  career: { racesSailed: 3, racesFinished: 2, wins: 1, podiums: 2, nmLogged: 500 },
   eventLog: ['Off the line'],
   savedAt: 123,
   // Transient live-race runtime — should be stripped before the cloud write.
@@ -41,6 +42,14 @@ describe('cloudSnapshot', () => {
     expect(snap.eventLog).toEqual(['Off the line']);
     expect(snap.savedAt).toBe(123);
     expect(snap.strategy).toEqual({ bias: 0, effort: 'cruise' });
+    // The lifetime record is durable — it rides along in the cloud snapshot.
+    expect(snap.career).toEqual({
+      racesSailed: 3,
+      racesFinished: 2,
+      wins: 1,
+      podiums: 2,
+      nmLogged: 500,
+    });
   });
 
   it('does not mutate the original state', () => {

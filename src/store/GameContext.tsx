@@ -57,6 +57,7 @@ import {
 import { createWindField, sampleWind, weatherFromWind } from '../engine/wind';
 import { createTidalField } from '../engine/current';
 import { createFleet } from '../engine/fleet';
+import { applyRaceToCareer, careerFrom } from '../engine/career';
 import { AppState } from 'react-native';
 import { clearState, loadState, saveState, GUEST_SCOPE } from './storage';
 import { reconcileSaves, isNewerSave } from './reconcile';
@@ -340,6 +341,16 @@ function reducer(state: GameState, action: Action): GameState {
         funds: state.funds + action.payload.result.prizeMoney,
         lastResult: action.payload.result,
         history: [action.payload.result, ...state.history].slice(0, 50),
+        // Fold this finish into the lifetime record (never truncates, unlike the
+        // 50-race history). `state.history` here is the PRE-race history, so
+        // `careerFrom` computes the prior floor once for a save with no record
+        // yet, and `applyRaceToCareer` folds the new result exactly once — the
+        // new result is only prepended to `history` in the same return, so it is
+        // never double-counted.
+        career: applyRaceToCareer(
+          state.career ?? careerFrom(state.history),
+          action.payload.result
+        ),
         progress: undefined,
         weather: undefined,
         windField: undefined,

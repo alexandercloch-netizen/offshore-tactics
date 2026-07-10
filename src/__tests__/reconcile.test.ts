@@ -1,5 +1,5 @@
 import { reconcileSaves, isNewerSave } from '../store/reconcile';
-import { GameState, RaceResult, FleetBoat } from '../types';
+import { CareerRecord, GameState, RaceResult, FleetBoat } from '../types';
 
 function result(raceId: string, timestamp: number, prize = 1000): RaceResult {
   return {
@@ -157,6 +157,78 @@ describe('reconcileSaves — realtime push is a merge, not an overwrite', () => 
     expect(merged.funds).toBe(700);
     // …but the local-only result survives the merge (not overwritten away).
     expect(merged.history.map((r) => r.raceId)).toContain('just-finished');
+  });
+});
+
+// The lifetime record must never be LOWERED by a stale device (the same exploit
+// the funds guard blocks). reconcileSaves folds it through mergeCareer: per
+// counter Math.max, regions union, best-gap min, best-pace max, later updatedAt.
+function career(overrides: Partial<CareerRecord> = {}): CareerRecord {
+  return {
+    racesSailed: 0,
+    racesFinished: 0,
+    wins: 0,
+    podiums: 0,
+    nmLogged: 0,
+    handicapSwingWins: 0,
+    photoFinishWins: 0,
+    cleanSailRaces: 0,
+    galeFinishes: 0,
+    boldStoryWins: 0,
+    scenarioRuns: 0,
+    regionsSailed: [],
+    updatedAt: 0,
+    ...overrides,
+  };
+}
+
+describe('reconcileSaves — career record is merged exploit-safely', () => {
+  it('takes the higher of every counter (a stale device cannot lower a total)', () => {
+    const local = state({
+      savedAt: 200, // newer base, but with LOWER lifetime totals
+      career: career({ racesSailed: 5, wins: 1, nmLogged: 400, updatedAt: 200 }),
+    });
+    const cloud = state({
+      savedAt: 100,
+      career: career({ racesSailed: 12, wins: 3, nmLogged: 3000, updatedAt: 100 }),
+    });
+    const merged = reconcileSaves(local, cloud)!.career!;
+    expect(merged.racesSailed).toBe(12);
+    expect(merged.wins).toBe(3);
+    expect(merged.nmLogged).toBe(3000);
+  });
+
+  it('unions regions, mins the best gap, maxes the best pace, and takes the later updatedAt', () => {
+    const local = state({
+      savedAt: 200,
+      career: career({
+        regionsSailed: ['uk', 'med'],
+        bestCorrectedGapSeconds: 120,
+        bestPaceVsOptimalPct: 88,
+        updatedAt: 200,
+      }),
+    });
+    const cloud = state({
+      savedAt: 100,
+      career: career({
+        regionsSailed: ['med', 'ausNz'],
+        bestCorrectedGapSeconds: 45,
+        bestPaceVsOptimalPct: 95,
+        updatedAt: 100,
+      }),
+    });
+    const merged = reconcileSaves(local, cloud)!.career!;
+    expect(merged.regionsSailed.sort()).toEqual(['ausNz', 'med', 'uk']);
+    expect(merged.bestCorrectedGapSeconds).toBe(45); // closest duel wins
+    expect(merged.bestPaceVsOptimalPct).toBe(95); // fastest pace wins
+    expect(merged.updatedAt).toBe(200);
+  });
+
+  it('takes the present side when only one has a record, undefined when neither does', () => {
+    const only = career({ racesSailed: 4 });
+    expect(reconcileSaves(state({ savedAt: 200, career: only }), state({ savedAt: 100 }))!.career).toEqual(only);
+    expect(reconcileSaves(state({ savedAt: 200 }), state({ savedAt: 100, career: only }))!.career).toEqual(only);
+    expect(reconcileSaves(state({ savedAt: 200 }), state({ savedAt: 100 }))!.career).toBeUndefined();
   });
 });
 
