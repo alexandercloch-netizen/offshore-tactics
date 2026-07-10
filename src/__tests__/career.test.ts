@@ -2,10 +2,11 @@ import {
   emptyCareer,
   applyRaceToCareer,
   careerFrom,
+  hydrateCareer,
   PHOTO_FINISH_SECONDS,
   GALE_KN,
 } from '../engine/career';
-import { RaceResult } from '../types';
+import { CareerRecord, RaceResult } from '../types';
 
 // A finishing result with sensible defaults; override per test. Real race ids so
 // the region + distance lookups resolve against the actual catalogue.
@@ -114,6 +115,52 @@ describe('applyRaceToCareer — the per-race fold', () => {
     expect(applyRaceToCareer(emptyCareer(), finish({})).scenarioRuns).toBe(0);
   });
 
+  it('accrues the distinct-race SETS, deduped', () => {
+    let c = emptyCareer();
+    c = applyRaceToCareer(c, finish({ raceId: 'race-fastnet', position: 1 }));
+    c = applyRaceToCareer(c, finish({ raceId: 'race-fastnet', position: 1 })); // same course again
+    c = applyRaceToCareer(c, finish({ raceId: 'race-round-island', position: 3 }));
+    c = applyRaceToCareer(c, finish({ raceId: 'race-sydney-hobart', position: 8 }));
+    expect(c.wonRaceIds).toEqual(['race-fastnet']); // deduped
+    expect(c.podiumRaceIds!.sort()).toEqual(['race-fastnet', 'race-round-island']);
+    expect(c.finishedRaceIds!.sort()).toEqual([
+      'race-fastnet',
+      'race-round-island',
+      'race-sydney-hobart',
+    ]);
+  });
+
+  it('counts a Corinthian offshore win only in the right division and grade', () => {
+    // race-fastnet is Offshore; race-round-island is Inshore.
+    expect(
+      applyRaceToCareer(emptyCareer(), finish({ raceId: 'race-fastnet', position: 1, division: 'corinthian' }))
+        .corinthianOffshoreWins
+    ).toBe(1);
+    expect(
+      applyRaceToCareer(emptyCareer(), finish({ raceId: 'race-fastnet', position: 1, division: 'pro' }))
+        .corinthianOffshoreWins
+    ).toBe(0);
+    expect(
+      applyRaceToCareer(
+        emptyCareer(),
+        finish({ raceId: 'race-round-island', position: 1, division: 'corinthian' })
+      ).corinthianOffshoreWins
+    ).toBe(0); // Inshore does not count
+  });
+
+  it('records a finished historic edition, deduped by raceId:year', () => {
+    const stamp = { kind: 'historic', model: 'era5', issuedAt: '', label: '2011', year: 2011 } as const;
+    let c = applyRaceToCareer(emptyCareer(), finish({ raceId: 'race-fastnet', scenario: stamp }));
+    c = applyRaceToCareer(c, finish({ raceId: 'race-fastnet', scenario: stamp })); // same edition again
+    expect(c.historicEditions).toEqual(['race-fastnet:2011']);
+    // A live (non-historic) scenario is not an edition.
+    const live = applyRaceToCareer(
+      emptyCareer(),
+      finish({ scenario: { kind: 'live', model: 'ecmwf', issuedAt: '', label: 'today' } })
+    );
+    expect(live.historicEditions).toEqual([]);
+  });
+
   it('dedupes regions and unions distinct ones', () => {
     let c = emptyCareer();
     c = applyRaceToCareer(c, finish({ raceId: 'race-round-island' })); // uk
@@ -190,6 +237,52 @@ describe('careerFrom — the honest-floor backfill', () => {
     expect(careerFrom([])).toEqual(emptyCareer());
     // @ts-expect-error exercising the runtime guard for a legacy save
     expect(() => careerFrom(undefined)).not.toThrow();
+  });
+});
+
+describe('hydrateCareer — the PR-1 migration', () => {
+  it('builds a complete record from history when there is no record at all', () => {
+    const history: RaceResult[] = [
+      finish({ raceId: 'race-fastnet', position: 1, timestamp: 200 }),
+      finish({ raceId: 'race-round-island', position: 3, timestamp: 100 }),
+    ];
+    const c = hydrateCareer(undefined, history);
+    expect(c.wonRaceIds).toEqual(['race-fastnet']);
+    expect(c.finishedRaceIds!.sort()).toEqual(['race-fastnet', 'race-round-island']);
+  });
+
+  it('backfills the SET fields on a PR-1-era record that lacks them', () => {
+    // A record with the counters but none of the new SET fields (undefined).
+    const legacy = {
+      ...emptyCareer(),
+      racesSailed: 2,
+      racesFinished: 2,
+      wins: 1,
+      podiums: 2,
+    } as CareerRecord;
+    delete legacy.wonRaceIds;
+    delete legacy.podiumRaceIds;
+    delete legacy.finishedRaceIds;
+    delete legacy.corinthianOffshoreWins;
+    delete legacy.historicEditions;
+
+    const history: RaceResult[] = [
+      finish({ raceId: 'race-fastnet', position: 1, timestamp: 200 }),
+      finish({ raceId: 'race-round-island', position: 2, timestamp: 100 }),
+    ];
+    const c = hydrateCareer(legacy, history);
+    // Counters preserved; sets recovered from the surviving history (a floor).
+    expect(c.wins).toBe(1);
+    expect(c.wonRaceIds).toEqual(['race-fastnet']);
+    expect(c.finishedRaceIds!.sort()).toEqual(['race-fastnet', 'race-round-island']);
+    expect(c.corinthianOffshoreWins).toBe(0);
+  });
+
+  it('returns a record that already has the SET fields untouched', () => {
+    const complete = applyRaceToCareer(emptyCareer(), finish({ raceId: 'race-fastnet', position: 1 }));
+    // A DIFFERENT history must not be unioned in when the record is complete.
+    const c = hydrateCareer(complete, [finish({ raceId: 'race-sydney-hobart', position: 1 })]);
+    expect(c).toBe(complete);
   });
 });
 

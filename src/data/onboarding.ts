@@ -59,17 +59,18 @@ export interface Port {
   name: string; // display name, e.g. "Cowes, Isle of Wight"
   region: SailingRegion;
   crownJewelRaceId: string; // the port's famous race (must be a real race id)
+  club: string; // the port's home yacht club — the burgee flown on the Sailor's Card
 }
 
 export const PORTS: Port[] = [
-  { id: 'cowes', name: 'Cowes, Isle of Wight', region: 'uk', crownJewelRaceId: 'race-fastnet' },
-  { id: 'valletta', name: 'Valletta, Malta', region: 'med', crownJewelRaceId: 'race-middle-sea' },
-  { id: 'antigua', name: 'English Harbour, Antigua', region: 'caribbean', crownJewelRaceId: 'race-caribbean-600' },
-  { id: 'newportRI', name: 'Newport, Rhode Island', region: 'usEast', crownJewelRaceId: 'race-newport-bermuda' },
-  { id: 'sanPedro', name: 'San Pedro, California', region: 'usWest', crownJewelRaceId: 'race-transpac' },
-  { id: 'portTownsend', name: 'Port Townsend, Washington', region: 'usWest', crownJewelRaceId: 'race-r2ak' },
-  { id: 'chicago', name: 'Chicago, Illinois', region: 'greatLakes', crownJewelRaceId: 'race-chicago-mac' },
-  { id: 'sydney', name: 'Sydney, New South Wales', region: 'ausNz', crownJewelRaceId: 'race-sydney-hobart' },
+  { id: 'cowes', name: 'Cowes, Isle of Wight', region: 'uk', crownJewelRaceId: 'race-fastnet', club: 'Royal Yacht Squadron' },
+  { id: 'valletta', name: 'Valletta, Malta', region: 'med', crownJewelRaceId: 'race-middle-sea', club: 'Royal Malta Yacht Club' },
+  { id: 'antigua', name: 'English Harbour, Antigua', region: 'caribbean', crownJewelRaceId: 'race-caribbean-600', club: 'Antigua Yacht Club' },
+  { id: 'newportRI', name: 'Newport, Rhode Island', region: 'usEast', crownJewelRaceId: 'race-newport-bermuda', club: 'New York Yacht Club' },
+  { id: 'sanPedro', name: 'San Pedro, California', region: 'usWest', crownJewelRaceId: 'race-transpac', club: 'Los Angeles Yacht Club' },
+  { id: 'portTownsend', name: 'Port Townsend, Washington', region: 'usWest', crownJewelRaceId: 'race-r2ak', club: 'Port Townsend Yacht Club' },
+  { id: 'chicago', name: 'Chicago, Illinois', region: 'greatLakes', crownJewelRaceId: 'race-chicago-mac', club: 'Chicago Yacht Club' },
+  { id: 'sydney', name: 'Sydney, New South Wales', region: 'ausNz', crownJewelRaceId: 'race-sydney-hobart', club: 'Cruising Yacht Club of Australia' },
 ];
 
 export function getPortById(id?: PortId): Port | undefined {

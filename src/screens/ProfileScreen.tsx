@@ -1,156 +1,140 @@
-import React from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useMemo } from 'react';
+import { ScrollView, StyleSheet, useWindowDimensions } from 'react-native';
 import { CompositeScreenProps } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { MainTabParamList, RootStackParamList } from '../types';
-import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
+import { Currency, MainTabParamList, RootStackParamList } from '../types';
+import { colors, spacing } from '../theme';
 import { useGame } from '../store/GameContext';
 import { useAuth } from '../store/AuthContext';
-import { formatDuration } from '../engine/gameEngine';
-import { scenarioTagLine } from '../services/weather';
-import { defaultPortForRegion, getPortById } from '../data/onboarding';
-import NauticalButton from '../components/NauticalButton';
-import EmptyState from '../components/EmptyState';
-import Segmented from '../components/Segmented';
+import { getBoatById, getCrewById } from '../data';
+import {
+  defaultPortForRegion,
+  getPortById,
+  GOAL_OPTIONS,
+  REGION_OPTIONS,
+} from '../data/onboarding';
+import { hydrateCareer } from '../engine/career';
+import { logbookStats } from '../engine/logbook';
+import { evaluateHonours, sailorRank } from '../engine/honours';
 import { confirmAction } from '../lib/confirm';
+import ProfileCard, { ProfileNamedRef } from './profile/ProfileCard';
+
+// The Profile tab — a thin wrapper that wires game/auth state and computes the
+// career, logbook stats and honours, then hands them to the props-driven
+// ProfileCard (which the render test mounts with plain fixtures). The screen
+// owns the single ScrollView and the two-pane breakpoint.
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'Profile'>,
   NativeStackScreenProps<RootStackParamList>
 >;
 
+const TWO_PANE_WIDTH = 760;
+
 export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
-  const { state, resetCampaign, money, currency, setCurrency } = useGame();
+  const { width } = useWindowDimensions();
+  const {
+    state,
+    resetCampaign,
+    money,
+    currency,
+    setCurrency,
+    setPlayerProfile,
+  } = useGame();
   const { configured, user, displayName } = useAuth();
-  const best = state.history.find((r) => r.finished && r.position === 1);
-  const wins = state.history.filter((r) => r.finished && r.position === 1).length;
-  // The player's home port: the one on the profile, else the default for their
-  // onboarding region. Old profiles (and guests without a region) simply show
-  // nothing — fully back-compatible.
+
   const player = state.profile.player;
+  const signedIn = Boolean(user && configured);
+
+  // The lifetime record (hydrated so the honour SET fields are present), the
+  // logbook analytics, and the honours — all pure reads off persisted state.
+  const career = useMemo(() => hydrateCareer(state.career, state.history), [state.career, state.history]);
+  const stats = useMemo(() => logbookStats(state.history), [state.history]);
+  const awards = useMemo(() => evaluateHonours(career, state.history).awards, [career, state.history]);
+  const rank = useMemo(() => sailorRank(career), [career]);
+
   const homePort = getPortById(player?.homePort ?? defaultPortForRegion(player?.region));
 
-  const confirmReset = () => {
+  const best = state.history.find((r) => r.finished && r.position === 1);
+
+  // Owned boats: the raced/bought ids plus every custom build, deduped.
+  const ownedBoats: ProfileNamedRef[] = useMemo(() => {
+    const byId = new Map<string, ProfileNamedRef>();
+    for (const id of state.ownedBoatIds) {
+      const boat = getBoatById(id) ?? state.profile.fleet.find((b) => b.id === id);
+      if (boat) byId.set(id, { id, name: boat.name });
+    }
+    for (const b of state.profile.fleet) if (!byId.has(b.id)) byId.set(b.id, { id: b.id, name: b.name });
+    return [...byId.values()];
+  }, [state.ownedBoatIds, state.profile.fleet]);
+
+  const crew: ProfileNamedRef[] = useMemo(
+    () =>
+      state.selectedCrewIds
+        .map((id) => getCrewById(id))
+        .filter((c): c is NonNullable<typeof c> => Boolean(c))
+        .map((c) => ({ id: c.id, name: c.name })),
+    [state.selectedCrewIds]
+  );
+
+  const guestName = player?.displayName?.trim();
+  const resolvedName = signedIn
+    ? displayName ?? 'Sailor'
+    : guestName && guestName.length > 0
+      ? player!.displayName!
+      : 'Guest Skipper';
+
+  const confirmReset = () =>
     confirmAction({
       title: 'Reset Campaign',
       message: 'This wipes your funds, fleet history and progress. Are you sure?',
       confirmLabel: 'Reset',
       onConfirm: () => resetCampaign(),
     });
-  };
 
   return (
     <ScrollView
       style={styles.screen}
       contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + spacing.xl }]}
     >
-      {configured ? (
-        <View style={styles.accountBar}>
-          <Text style={styles.accountText}>
-            {user ? `Signed in as ${displayName}` : 'Playing as guest'}
-          </Text>
-          <Text
-            style={styles.accountAction}
-            accessibilityRole="button"
-            onPress={() => navigation.navigate('Auth')}
-          >
-            {user ? 'Account' : 'Sign in'}
-          </Text>
-        </View>
-      ) : null}
-
-      <View style={styles.statsRow}>
-        <View style={styles.statCard}>
-          <Text style={styles.statValue}>{money(state.funds)}</Text>
-          <Text style={styles.statLabel}>Funds</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statValue}>{wins}</Text>
-          <Text style={styles.statLabel}>Wins</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statValue}>{state.history.length}</Text>
-          <Text style={styles.statLabel}>Races</Text>
-        </View>
-      </View>
-
-      {best ? (
-        <View style={styles.bestCard}>
-          <Text style={styles.bestLabel}>Best Result</Text>
-          <Text style={styles.bestRace}>{best.raceName}</Text>
-          <Text style={styles.bestTime}>1st place • {formatDuration(best.elapsedHours)}</Text>
-        </View>
-      ) : null}
-
-      {state.history.length > 0 ? (
-        <View style={styles.logbook}>
-          <Text style={styles.logbookTitle}>Logbook</Text>
-          {state.history.slice(0, 8).map((r) => (
-            <View key={r.timestamp} style={styles.logRow}>
-              <View style={styles.logRaceCol}>
-                <Text style={styles.logRace}>{r.raceName}</Text>
-                {r.scenario ? (
-                  <Text style={styles.logScenario}>{scenarioTagLine(r.scenario)}</Text>
-                ) : null}
-              </View>
-              <Text
-                style={[
-                  styles.logResult,
-                  { color: r.retired ? colors.signalRed : colors.foam },
-                ]}
-              >
-                {r.retired
-                  ? 'Retired'
-                  : `${r.position}/${r.fleetSize} • ${formatDuration(r.elapsedHours)}`}
-              </Text>
-            </View>
-          ))}
-        </View>
-      ) : (
-        <View style={{ marginBottom: spacing.lg }}>
-          <EmptyState
-            title="No races sailed yet."
-            body="Your results and best finishes will appear here."
-          />
-        </View>
-      )}
-
-      {homePort ? (
-        <View style={styles.currencyRow}>
-          <Text style={styles.currencyLabel}>Home port</Text>
-          <Text style={styles.homePortValue}>{homePort.name}</Text>
-        </View>
-      ) : null}
-
-      <View style={styles.currencyRow}>
-        <Text style={styles.currencyLabel}>Currency</Text>
-        <Segmented<'USD' | 'EUR'>
-          value={currency}
-          options={[
-            { value: 'USD', label: '$ USD' },
-            { value: 'EUR', label: '€ EUR' },
-          ]}
-          onSelect={setCurrency}
-          stretch={false}
-          testID="currency-toggle"
-        />
-      </View>
-
-      <View style={styles.actions}>
-        <NauticalButton
-          label="Edit Preferences"
-          variant="secondary"
-          onPress={() => navigation.navigate('Onboarding')}
-        />
-        {state.history.length > 0 ? (
-          <NauticalButton label="Reset Campaign" variant="ghost" onPress={confirmReset} />
-        ) : null}
-      </View>
-
-      <Text style={styles.credits}>Weather data by Open-Meteo.com</Text>
+      <ProfileCard
+        displayName={!signedIn && player ? player.displayName ?? '' : resolvedName}
+        isGuest={!signedIn}
+        club={homePort?.club}
+        homePortName={homePort?.name}
+        rank={rank}
+        career={career}
+        stats={stats}
+        awards={awards}
+        best={best ? { raceName: best.raceName, elapsedHours: best.elapsedHours } : undefined}
+        funds={state.funds}
+        money={money}
+        currency={currency}
+        ownedBoats={ownedBoats}
+        crew={crew}
+        homeWatersLabel={REGION_OPTIONS.find((o) => o.value === player?.region)?.label}
+        goalLabel={GOAL_OPTIONS.find((o) => o.value === player?.goal)?.label}
+        configured={configured}
+        signedIn={signedIn}
+        accountName={displayName ?? undefined}
+        privacyNote="Your logbook lives on this device unless you sign in."
+        creditLine="Weather data by Open-Meteo.com"
+        width={width}
+        twoPane={width >= TWO_PANE_WIDTH}
+        onSetCurrency={(c: Currency) => setCurrency(c)}
+        onEditPreferences={() => navigation.navigate('Onboarding')}
+        onViewTrophyCase={() => navigation.navigate('TrophyCase')}
+        onReset={state.history.length > 0 ? confirmReset : undefined}
+        onAccount={configured ? () => navigation.navigate('Auth') : undefined}
+        onRenameGuest={
+          !signedIn && player
+            ? (name: string) => setPlayerProfile({ ...player, displayName: name })
+            : undefined
+        }
+      />
     </ScrollView>
   );
 };
@@ -158,106 +142,6 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.abyss },
   content: { padding: spacing.lg },
-  accountBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: colors.card,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.hull,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    marginBottom: spacing.lg,
-  },
-  accountText: { color: colors.mist, fontSize: fontSize.sm },
-  accountAction: {
-    color: colors.brassLight,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.bold,
-    textDecorationLine: 'underline',
-  },
-  statsRow: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.lg },
-  statCard: {
-    flex: 1,
-    backgroundColor: colors.card,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.hull,
-    paddingVertical: spacing.md,
-    alignItems: 'center',
-  },
-  statValue: { color: colors.brassLight, fontSize: fontSize.lg, fontWeight: fontWeight.bold },
-  statLabel: {
-    color: colors.mist,
-    fontSize: fontSize.xs,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginTop: 2,
-  },
-  bestCard: {
-    backgroundColor: colors.navy,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    padding: spacing.lg,
-    marginBottom: spacing.lg,
-  },
-  bestLabel: {
-    color: colors.brassLight,
-    fontSize: fontSize.xs,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  bestRace: { color: colors.foam, fontSize: fontSize.lg, fontWeight: fontWeight.bold, marginTop: spacing.xs },
-  bestTime: { color: colors.mist, fontSize: fontSize.sm, marginTop: 2 },
-  logbook: {
-    backgroundColor: colors.card,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.hull,
-    padding: spacing.lg,
-    marginBottom: spacing.lg,
-  },
-  logbookTitle: {
-    color: colors.foam,
-    fontSize: fontSize.md,
-    fontWeight: fontWeight.bold,
-    marginBottom: spacing.md,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  logRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: colors.hull,
-  },
-  logRaceCol: { flex: 1, marginRight: spacing.sm },
-  logRace: { color: colors.mist, fontSize: fontSize.sm },
-  logScenario: { color: colors.brassLight, fontSize: fontSize.xs, marginTop: 2 },
-  logResult: { fontSize: fontSize.sm, fontWeight: fontWeight.medium },
-  credits: {
-    color: colors.slate,
-    fontSize: fontSize.xs,
-    textAlign: 'center',
-    marginTop: spacing.lg,
-  },
-  actions: { gap: spacing.md },
-  currencyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing.md,
-  },
-  currencyLabel: {
-    color: colors.mist,
-    fontSize: fontSize.sm,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  homePortValue: { color: colors.foam, fontSize: fontSize.sm, fontWeight: fontWeight.medium },
 });
 
 export default ProfileScreen;

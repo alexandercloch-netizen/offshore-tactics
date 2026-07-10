@@ -57,7 +57,7 @@ import {
 import { createWindField, sampleWind, weatherFromWind } from '../engine/wind';
 import { createTidalField } from '../engine/current';
 import { createFleet } from '../engine/fleet';
-import { applyRaceToCareer, careerFrom } from '../engine/career';
+import { applyRaceToCareer, hydrateCareer } from '../engine/career';
 import { AppState } from 'react-native';
 import { clearState, loadState, saveState, GUEST_SCOPE } from './storage';
 import { reconcileSaves, isNewerSave } from './reconcile';
@@ -109,6 +109,7 @@ type Action =
       };
     }
   | { type: 'SET_TUTORIAL_SEEN' }
+  | { type: 'MARK_HONOURS_SEEN'; payload: string[] }
   | { type: 'ADD_FLEET_BOAT'; payload: { boat: FleetBoat; cost: number } }
   | { type: 'REMOVE_FLEET_BOAT'; payload: string }
   | { type: 'SET_PLAYER_PROFILE'; payload: PlayerProfile }
@@ -231,6 +232,14 @@ function reducer(state: GameState, action: Action): GameState {
     case 'SET_TUTORIAL_SEEN':
       return { ...state, tutorialSeen: true };
 
+    // Union the shown honours in (display-only, like tutorialSeen) so an
+    // earn-moment fires exactly once.
+    case 'MARK_HONOURS_SEEN':
+      return {
+        ...state,
+        seenHonourIds: [...new Set([...(state.seenHonourIds ?? []), ...action.payload])],
+      };
+
     case 'ADD_FLEET_BOAT':
       return {
         ...state,
@@ -343,12 +352,13 @@ function reducer(state: GameState, action: Action): GameState {
         history: [action.payload.result, ...state.history].slice(0, 50),
         // Fold this finish into the lifetime record (never truncates, unlike the
         // 50-race history). `state.history` here is the PRE-race history, so
-        // `careerFrom` computes the prior floor once for a save with no record
-        // yet, and `applyRaceToCareer` folds the new result exactly once — the
-        // new result is only prepended to `history` in the same return, so it is
-        // never double-counted.
+        // `hydrateCareer` produces a complete prior floor once (recovering the
+        // new distinct-race SET fields for a PR-1-era record, or building from
+        // history when there's no record yet), and `applyRaceToCareer` folds the
+        // new result exactly once — the new result is only prepended to `history`
+        // in the same return, so it is never double-counted.
         career: applyRaceToCareer(
-          state.career ?? careerFrom(state.history),
+          hydrateCareer(state.career, state.history),
           action.payload.result
         ),
         progress: undefined,
@@ -399,6 +409,7 @@ export interface GameContextValue {
   setStrategy: (partial: Partial<PlayerStrategy>) => void;
   applyStart: (outcome: StartOutcome) => void;
   markTutorialSeen: () => void;
+  markHonoursSeen: (ids: string[]) => void;
   addFleetBoat: (boat: FleetBoat, cost: number) => void;
   removeFleetBoat: (id: string) => void;
   buySail: (boatId: string, sailId: string, cost: number) => void;
@@ -692,6 +703,11 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
     dispatch({ type: 'SET_TUTORIAL_SEEN' });
   }, []);
 
+  const markHonoursSeen = useCallback((ids: string[]) => {
+    if (ids.length === 0) return;
+    dispatch({ type: 'MARK_HONOURS_SEEN', payload: ids });
+  }, []);
+
   const addFleetBoat = useCallback((boat: FleetBoat, cost: number) => {
     dispatch({ type: 'ADD_FLEET_BOAT', payload: { boat, cost } });
   }, []);
@@ -927,6 +943,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
       setStrategy,
       applyStart,
       markTutorialSeen,
+      markHonoursSeen,
       addFleetBoat,
       removeFleetBoat,
       buySail,
@@ -959,6 +976,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
       setStrategy,
       applyStart,
       markTutorialSeen,
+      markHonoursSeen,
       addFleetBoat,
       removeFleetBoat,
       buySail,

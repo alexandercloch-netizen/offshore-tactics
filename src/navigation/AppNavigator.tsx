@@ -23,6 +23,7 @@ import BriefingScreen from '../screens/BriefingScreen';
 import StartSequenceScreen from '../screens/StartSequenceScreen';
 import RaceMapScreen from '../screens/RaceMapScreen';
 import ResultsScreen from '../screens/ResultsScreen';
+import TrophyCaseScreen from '../screens/TrophyCaseScreen';
 import FleetScreen from '../screens/FleetScreen';
 import BoatBuilderScreen from '../screens/BoatBuilderScreen';
 import SailLockerScreen from '../screens/SailLockerScreen';
@@ -162,6 +163,11 @@ export const AppNavigator: React.FC = () => {
           name="Results"
           component={ResultsScreen}
           options={{ title: 'Race Result', headerBackVisible: false }}
+        />
+        <Stack.Screen
+          name="TrophyCase"
+          component={TrophyCaseScreen}
+          options={{ title: 'Trophy Case' }}
         />
         <Stack.Screen
           name="BoatBuilder"

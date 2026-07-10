@@ -224,6 +224,44 @@ describe('reconcileSaves — career record is merged exploit-safely', () => {
     expect(merged.updatedAt).toBe(200);
   });
 
+  it('unions the distinct-race SETS and maxes the Corinthian counter', () => {
+    const local = state({
+      savedAt: 200,
+      career: career({
+        wonRaceIds: ['race-fastnet'],
+        finishedRaceIds: ['race-fastnet', 'race-round-island'],
+        historicEditions: ['race-fastnet:2011'],
+        corinthianOffshoreWins: 1,
+      }),
+    });
+    const cloud = state({
+      savedAt: 100,
+      career: career({
+        wonRaceIds: ['race-sydney-hobart'],
+        finishedRaceIds: ['race-sydney-hobart'],
+        historicEditions: ['race-sydney-hobart:2017'],
+        corinthianOffshoreWins: 3,
+      }),
+    });
+    const merged = reconcileSaves(local, cloud)!.career!;
+    expect(merged.wonRaceIds!.sort()).toEqual(['race-fastnet', 'race-sydney-hobart']);
+    expect(merged.finishedRaceIds!.sort()).toEqual([
+      'race-fastnet',
+      'race-round-island',
+      'race-sydney-hobart',
+    ]);
+    expect(merged.historicEditions!.sort()).toEqual(['race-fastnet:2011', 'race-sydney-hobart:2017']);
+    expect(merged.corinthianOffshoreWins).toBe(3); // the higher of the two
+  });
+
+  it('handles a legacy record whose SET fields are absent (no throw, empty unions)', () => {
+    const legacy = state({ savedAt: 200, career: career({ wins: 2 }) }); // no new fields
+    const other = state({ savedAt: 100, career: career({ wonRaceIds: ['race-fastnet'] }) });
+    const merged = reconcileSaves(legacy, other)!.career!;
+    expect(merged.wonRaceIds).toEqual(['race-fastnet']);
+    expect(merged.corinthianOffshoreWins).toBe(0);
+  });
+
   it('takes the present side when only one has a record, undefined when neither does', () => {
     const only = career({ racesSailed: 4 });
     expect(reconcileSaves(state({ savedAt: 200, career: only }), state({ savedAt: 100 }))!.career).toEqual(only);
