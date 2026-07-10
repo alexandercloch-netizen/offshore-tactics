@@ -1454,6 +1454,10 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
     routeBias,
     windDir: wind.fromDeg,
     windSpeedKn: wind.speedKn,
+    // Running peak of the true wind this race — a draw-free Math.max (no RNG, no
+    // chance branch), writing a brand-new field absent from the golden summary,
+    // so it cannot move a pinned stream.
+    peakWindKn: Math.max(prev.peakWindKn ?? 0, wind.speedKn),
     nextDecisionAtNm: prev.nextDecisionAtNm,
     decisionsTaken: prev.decisionsTaken,
     shownEventIds: prev.shownEventIds ?? [],
@@ -2214,6 +2218,9 @@ export function buildResult(state: GameState, outcome: StepResult): RaceResult {
     trail,
     optimalRoute,
     optimalHours,
+    // Peak true wind seen this race, carried onto the result for the career fold
+    // (absent on the finished progress → undefined).
+    peakWindKn: outcome.progress.peakWindKn,
     signatureOutcome,
     storyDebrief,
     nearestCorrectedGapSeconds: nearestGapSeconds,

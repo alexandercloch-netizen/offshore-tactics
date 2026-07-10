@@ -1,4 +1,4 @@
-import { GameState, RaceResult, FleetBoat } from '../types';
+import { CareerRecord, GameState, RaceResult, FleetBoat } from '../types';
 
 // Reconciling a local and a cloud save. Cloud sync is newest-wins on the save
 // as a whole (by savedAt), but signing in must never silently destroy progress
@@ -34,6 +34,38 @@ function union(a: string[] = [], b: string[] = []): string[] {
   return [...new Set([...a, ...b])];
 }
 
+// Merge two lifetime records exploit-safely: a stale device must never LOWER a
+// lifetime total (the same hazard the funds guard addresses). Every counter
+// takes the higher of the two, regions union, the "best" fields take their
+// better extreme (min gap, max pace), and `updatedAt` the later fold. Either
+// side may be absent (an old save with no record yet); the present one wins, or
+// undefined when both are absent.
+function mergeCareer(base?: CareerRecord, other?: CareerRecord): CareerRecord | undefined {
+  if (!base) return other;
+  if (!other) return base;
+  const minDefined = (x?: number, y?: number): number | undefined =>
+    x != null && y != null ? Math.min(x, y) : x ?? y;
+  const maxDefined = (x?: number, y?: number): number | undefined =>
+    x != null && y != null ? Math.max(x, y) : x ?? y;
+  return {
+    racesSailed: Math.max(base.racesSailed, other.racesSailed),
+    racesFinished: Math.max(base.racesFinished, other.racesFinished),
+    wins: Math.max(base.wins, other.wins),
+    podiums: Math.max(base.podiums, other.podiums),
+    nmLogged: Math.max(base.nmLogged, other.nmLogged),
+    handicapSwingWins: Math.max(base.handicapSwingWins, other.handicapSwingWins),
+    photoFinishWins: Math.max(base.photoFinishWins, other.photoFinishWins),
+    cleanSailRaces: Math.max(base.cleanSailRaces, other.cleanSailRaces),
+    galeFinishes: Math.max(base.galeFinishes, other.galeFinishes),
+    boldStoryWins: Math.max(base.boldStoryWins, other.boldStoryWins),
+    scenarioRuns: Math.max(base.scenarioRuns, other.scenarioRuns),
+    regionsSailed: union(base.regionsSailed, other.regionsSailed),
+    bestCorrectedGapSeconds: minDefined(base.bestCorrectedGapSeconds, other.bestCorrectedGapSeconds),
+    bestPaceVsOptimalPct: maxDefined(base.bestPaceVsOptimalPct, other.bestPaceVsOptimalPct),
+    updatedAt: Math.max(base.updatedAt, other.updatedAt),
+  };
+}
+
 // Pick the winning save and fold the other's campaign assets into it. Returns
 // null only if both inputs are null. The result's live/race fields (progress,
 // wind field, fleet, weather, strategy, selections) come wholesale from the
@@ -63,6 +95,7 @@ export function reconcileSaves(
     // union guest→user (otherwise take the newer base's balance).
     funds: unionFunds ? Math.max(base.funds, other.funds) : base.funds,
     history: mergeHistory(base.history ?? [], other.history ?? []),
+    career: mergeCareer(base.career, other.career),
     ownedBoatIds: union(base.ownedBoatIds, other.ownedBoatIds),
     profile: {
       ...base.profile,
