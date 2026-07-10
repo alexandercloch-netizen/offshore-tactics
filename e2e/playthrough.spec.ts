@@ -181,6 +181,21 @@ test('a full race can be played from start to finish in the cockpit', async ({ p
   await expect(page.getByRole('button', { name: 'Enter Another Race' })).toBeVisible({
     timeout: 30_000,
   });
+
+  // The earn-moment: finishing the race unlocks at least First Blood, which is
+  // shown inline on the results as a NEW HONOURS card.
+  await expect(page.getByTestId('results-new-honours')).toBeVisible();
+  await expect(page.getByTestId('new-honour-first-blood')).toBeVisible();
+
+  // Head back to the harbour and open the Sailor's Card — the honours strip is
+  // there, and the Trophy Case is one tap away.
+  await page.getByRole('button', { name: 'Back to Harbour' }).click();
+  await page.getByText('Profile', { exact: true }).first().click();
+  await expect(page.getByTestId('profile-honours-strip')).toBeVisible({ timeout: 10_000 });
+  await page.getByTestId('view-trophy-case').click();
+  await expect(page.getByTestId('trophy-case')).toBeVisible({ timeout: 10_000 });
+  // First Blood is earned, so its tile shows without expanding the locked goals.
+  await expect(page.getByTestId('honour-first-blood')).toBeVisible();
 });
 
 // Phone-portrait structure at the primary reference size (390×844): the flex

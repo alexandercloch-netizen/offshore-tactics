@@ -2,6 +2,15 @@ import { CareerRecord, RaceResult } from '../types';
 import { getRaceById } from '../data';
 import { REGION_RACES } from '../data/onboarding';
 
+// Push a value into a deduped list, returning a fresh array (never mutating the
+// source). Keeps the SET fields honest: distinct entries, insertion order.
+function withUnique(list: string[], value: string): string[] {
+  return list.includes(value) ? list : [...list, value];
+}
+
+// The difficulties that count as "offshore-grade" for the Corinthian honour.
+const OFFSHORE_GRADE = new Set(['Offshore', 'Ocean']);
+
 // The player's lifetime record. `state.history` is hard-capped at 50 races, so
 // cumulative career stats cannot be read off it — a veteran's early races are
 // discarded. This module folds each finished result FORWARD into a record that
@@ -52,6 +61,11 @@ export function emptyCareer(): CareerRecord {
     scenarioRuns: 0,
     regionsSailed: [],
     updatedAt: 0,
+    wonRaceIds: [],
+    podiumRaceIds: [],
+    finishedRaceIds: [],
+    corinthianOffshoreWins: 0,
+    historicEditions: [],
   };
 }
 
@@ -65,16 +79,40 @@ export function applyRaceToCareer(prev: CareerRecord, r: RaceResult): CareerReco
     regionsSailed: [...prev.regionsSailed],
     racesSailed: prev.racesSailed + 1,
     updatedAt: r.timestamp,
+    // Copy the (optionally-absent) sets forward as arrays so a push never
+    // mutates `prev`. Missing on an old PR-1 record → start from [].
+    wonRaceIds: [...(prev.wonRaceIds ?? [])],
+    podiumRaceIds: [...(prev.podiumRaceIds ?? [])],
+    finishedRaceIds: [...(prev.finishedRaceIds ?? [])],
+    corinthianOffshoreWins: prev.corinthianOffshoreWins ?? 0,
+    historicEditions: [...(prev.historicEditions ?? [])],
   };
 
   if (!r.finished || r.retired) return next;
 
   const won = r.position === 1;
+  const race = getRaceById(r.raceId);
 
   next.racesFinished += 1;
   if (won) next.wins += 1;
   if (r.position <= 3) next.podiums += 1;
-  next.nmLogged += getRaceById(r.raceId)?.distanceNm ?? 0;
+  next.nmLogged += race?.distanceNm ?? 0;
+
+  // Distinct-race sets (deduped): sailed-this-course, podiumed-it, won-it.
+  next.finishedRaceIds = withUnique(next.finishedRaceIds!, r.raceId);
+  if (r.position <= 3) next.podiumRaceIds = withUnique(next.podiumRaceIds!, r.raceId);
+  if (won) next.wonRaceIds = withUnique(next.wonRaceIds!, r.raceId);
+
+  // A Corinthian win on an offshore-grade course (the amateur hero honour).
+  if (won && r.division === 'corinthian' && race && OFFSHORE_GRADE.has(race.difficulty)) {
+    next.corinthianOffshoreWins = (next.corinthianOffshoreWins ?? 0) + 1;
+  }
+
+  // A finished historic edition — keyed '<raceId>:<year>' so re-sailing the
+  // same edition doesn't double-count, but each documented running is its own.
+  if (r.scenario?.kind === 'historic' && r.scenario.year != null) {
+    next.historicEditions = withUnique(next.historicEditions!, `${r.raceId}:${r.scenario.year}`);
+  }
 
   if (won && (r.onWaterPosition ?? 1) > 1) next.handicapSwingWins += 1;
   if (
@@ -115,4 +153,41 @@ export function applyRaceToCareer(prev: CareerRecord, r: RaceResult): CareerReco
 export function careerFrom(history: RaceResult[]): CareerRecord {
   const oldestFirst = [...(history ?? [])].reverse();
   return oldestFirst.reduce(applyRaceToCareer, emptyCareer());
+}
+
+function unionLists(a: string[] = [], b: string[] = []): string[] {
+  return [...new Set([...a, ...b])];
+}
+
+// Migration for a PR-1-era record that predates the distinct-race SET fields.
+// When any new field is undefined we recompute the sets from the (capped)
+// history via `careerFrom` and UNION them in — an honest floor that recovers
+// whatever the surviving history still holds, and never lowers a counter. A
+// record already carrying the fields is returned untouched. Pure/deterministic:
+// no RNG, no clock, so it is safe to call in the reducer and in a selector.
+export function hydrateCareer(
+  career: CareerRecord | undefined,
+  history: RaceResult[]
+): CareerRecord {
+  if (!career) return careerFrom(history);
+  const complete =
+    career.wonRaceIds !== undefined &&
+    career.podiumRaceIds !== undefined &&
+    career.finishedRaceIds !== undefined &&
+    career.corinthianOffshoreWins !== undefined &&
+    career.historicEditions !== undefined;
+  if (complete) return career;
+
+  const floor = careerFrom(history);
+  return {
+    ...career,
+    wonRaceIds: unionLists(career.wonRaceIds, floor.wonRaceIds),
+    podiumRaceIds: unionLists(career.podiumRaceIds, floor.podiumRaceIds),
+    finishedRaceIds: unionLists(career.finishedRaceIds, floor.finishedRaceIds),
+    corinthianOffshoreWins: Math.max(
+      career.corinthianOffshoreWins ?? 0,
+      floor.corinthianOffshoreWins ?? 0
+    ),
+    historicEditions: unionLists(career.historicEditions, floor.historicEditions),
+  };
 }

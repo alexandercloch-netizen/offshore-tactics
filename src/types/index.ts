@@ -358,6 +358,7 @@ export interface PlayerProfile {
   boatType?: BoatType; // the class they sail, if any
   currency?: Currency; // preferred money symbol; auto-detected, overridable
   homePort?: PortId; // home harbour; defaulted from the region, optional
+  displayName?: string; // a guest's chosen sailing name (signed-in players use their account name)
   onboardedAt: number; // epoch ms the quiz was completed
 }
 
@@ -764,6 +765,15 @@ export interface CareerRecord {
   bestCorrectedGapSeconds?: number; // smallest recorded (closest duel)
   bestPaceVsOptimalPct?: number; // largest recorded optimalHours/elapsedHours*100
   updatedAt: number; // epoch ms of the last fold (from the result's timestamp)
+  // ---- Distinct-race SETS (all optional/back-compat: an old PR-1 record lacks
+  // them; `hydrateCareer` recovers an honest floor from the capped history).
+  // Honours need "won THIS course", "sailed THIS hazard" — sets the plain
+  // counters above can't express — so we accrue deduped raceId lists too.
+  wonRaceIds?: string[]; // distinct raceIds won on corrected time (a clean, non-retired 1st)
+  podiumRaceIds?: string[]; // distinct raceIds with a corrected podium (position<=3)
+  finishedRaceIds?: string[]; // distinct raceIds finished (drives "sailed this course / hazard")
+  corinthianOffshoreWins?: number; // wins in the Corinthian division of an Offshore/Ocean race
+  historicEditions?: string[]; // distinct historic-edition keys finished ('<raceId>:<year>')
 }
 
 export interface GameState {
@@ -788,6 +798,7 @@ export interface GameState {
   career?: CareerRecord; // forward-accruing lifetime record (optional — back-compat with old saves)
   eventLog: string[];
   tutorialSeen?: boolean; // whether the player has seen the race how-to-play
+  seenHonourIds?: string[]; // honours whose earn-moment has been shown (display-only, like tutorialSeen)
   savedAt?: number; // epoch ms the save was last written; drives cloud sync reconciliation
 }
 
@@ -855,6 +866,7 @@ export type RootStackParamList = {
   StartSequence: undefined;
   RaceMap: undefined;
   Results: undefined;
+  TrophyCase: undefined;
   BoatBuilder: undefined;
   SailLocker: { boatId: string };
 };

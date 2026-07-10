@@ -63,6 +63,13 @@ function mergeCareer(base?: CareerRecord, other?: CareerRecord): CareerRecord | 
     bestCorrectedGapSeconds: minDefined(base.bestCorrectedGapSeconds, other.bestCorrectedGapSeconds),
     bestPaceVsOptimalPct: maxDefined(base.bestPaceVsOptimalPct, other.bestPaceVsOptimalPct),
     updatedAt: Math.max(base.updatedAt, other.updatedAt),
+    // The distinct-race SETS union (a stale device can only ever add), and the
+    // Corinthian counter takes the higher — same exploit-safe shape as above.
+    wonRaceIds: union(base.wonRaceIds, other.wonRaceIds),
+    podiumRaceIds: union(base.podiumRaceIds, other.podiumRaceIds),
+    finishedRaceIds: union(base.finishedRaceIds, other.finishedRaceIds),
+    corinthianOffshoreWins: maxDefined(base.corinthianOffshoreWins, other.corinthianOffshoreWins) ?? 0,
+    historicEditions: union(base.historicEditions, other.historicEditions),
   };
 }
 

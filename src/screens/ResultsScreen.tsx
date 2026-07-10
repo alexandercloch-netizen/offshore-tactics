@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,11 +8,15 @@ import { getRaceById } from '../data';
 import { LANDMASSES } from '../data/landmasses';
 import { useGame } from '../store/GameContext';
 import { formatDuration, formatGap } from '../engine/gameEngine';
+import { hydrateCareer } from '../engine/career';
+import { evaluateHonours } from '../engine/honours';
+import { getHonourById } from '../data/honours';
 import { scenarioTagLine } from '../services/weather';
 import { courseAspect } from '../engine/geo';
 import NauticalButton from '../components/NauticalButton';
 import RouteMap, { clampChartToCoverage } from '../components/RouteMap';
 import EmptyState from '../components/EmptyState';
+import HonourMedal from '../components/profile/HonourMedal';
 import { divisionName } from '../lib/labels';
 
 // A corrected gap this tight (seconds) is a photo finish — rare by design — and
@@ -30,11 +34,27 @@ function ordinal(n: number): string {
 export const ResultsScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const { state, prepareNextRace, money } = useGame();
+  const { state, prepareNextRace, money, markHonoursSeen } = useGame();
   const result = state.lastResult;
   // The staged finish reveal plays once over the results, then reveals the full
   // debrief. A finisher gets the staged sequence; a retirement/DNF skips it.
   const [revealDone, setRevealDone] = useState(!result?.finished);
+
+  // The honours newly earned by THIS race: evaluate the (already-folded) career
+  // and keep only the earned honours the player hasn't been shown yet. Captured
+  // once on mount so marking them seen doesn't clear the card, then dispatched so
+  // the earn-moment fires exactly once. Pure/read-side — no engine RNG touched.
+  const seenRef = useRef(state.seenHonourIds ?? []);
+  const newHonours = useMemo(() => {
+    const career = hydrateCareer(state.career, state.history);
+    const seen = seenRef.current;
+    return evaluateHonours(career, state.history).earned.filter((a) => !seen.includes(a.id));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    if (newHonours.length > 0) markHonoursSeen(newHonours.map((a) => a.id));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const goHome = () => {
     prepareNextRace();
@@ -139,6 +159,25 @@ export const ResultsScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={styles.statLabel}>Prize Money</Text>
         </View>
       </View>
+
+      {newHonours.length > 0 ? (
+        <View style={styles.honoursCard} testID="results-new-honours">
+          <Text style={styles.honoursKicker}>New Honours</Text>
+          {newHonours.map((award) => {
+            const honour = getHonourById(award.id);
+            if (!honour) return null;
+            return (
+              <View key={award.id} style={styles.honourRow} testID={`new-honour-${award.id}`}>
+                <HonourMedal tier={honour.tier} earned size={30} />
+                <View style={styles.honourText}>
+                  <Text style={styles.honourName}>{honour.name}</Text>
+                  <Text style={styles.honourBlurb}>{honour.blurb}</Text>
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      ) : null}
 
       <View style={styles.summaryCard}>
         <Text style={styles.summary}>{result.summary}</Text>
@@ -510,6 +549,39 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
     marginBottom: spacing.lg,
+  },
+  honoursCard: {
+    backgroundColor: colors.navy,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+    gap: spacing.md,
+  },
+  honoursKicker: {
+    color: colors.brassLight,
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.bold,
+    textTransform: 'uppercase',
+    letterSpacing: 2,
+  },
+  honourRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  honourText: { flex: 1 },
+  honourName: {
+    color: colors.foam,
+    fontSize: fontSize.md,
+    fontWeight: fontWeight.bold,
+  },
+  honourBlurb: {
+    color: colors.mist,
+    fontSize: fontSize.xs,
+    lineHeight: 17,
+    marginTop: 1,
   },
   finishLineText: {
     color: colors.foam,
