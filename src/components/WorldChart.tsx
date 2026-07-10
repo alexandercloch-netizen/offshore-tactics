@@ -152,30 +152,51 @@ export const WorldChart: React.FC<WorldChartProps> = ({
       return null;
     }
     const { cells, cols, rows } = flow;
-    const stripH = h / (rows - 1);
+    // Each strip is smooth LEFT-TO-RIGHT (a horizontal gradient across the data
+    // columns) but a single colour top-to-bottom, so one strip per data row
+    // steps hard between rows — visible banding wherever a strip is tall (the
+    // 13-row world lattice paints ~30px bands on a desktop chart). Render finer
+    // DISPLAY rows between the real ones, each column's colour a vertical lerp
+    // of the two bracketing samples: the same interpolation the gradient
+    // already does horizontally, now applied vertically. Display-only — the
+    // data is untouched; sized to the chart's pixels (~14px/strip) so a big
+    // desktop chart smooths while a tiny phone strip never over-renders.
+    const TARGET_STRIP_PX = 9;
+    const MAX_DISPLAY_ROWS = 60;
+    const displayRows = Math.max(rows, Math.min(MAX_DISPLAY_ROWS, Math.round(h / TARGET_STRIP_PX)));
+    const stripH = h / (displayRows - 1);
     const defs: React.ReactNode[] = [];
     const strips: React.ReactNode[] = [];
-    for (let r = 0; r < rows; r += 1) {
-      const gid = `wc-flow-${uid}-${r}`;
+    for (let dr = 0; dr < displayRows; dr += 1) {
+      // The fractional data-row this display row samples, and its bracket.
+      const fr = (dr / (displayRows - 1)) * (rows - 1);
+      const r0 = Math.floor(fr);
+      const r1 = Math.min(r0 + 1, rows - 1);
+      const t = fr - r0;
+      const gid = `wc-flow-${uid}-${dr}`;
       defs.push(
         <LinearGradient key={gid} id={gid} x1="0" y1="0" x2="1" y2="0">
-          {Array.from({ length: cols }, (_, c) => (
-            <Stop
-              key={c}
-              offset={`${((c / (cols - 1)) * 100).toFixed(1)}%`}
-              stopColor={windHeatColor(cells[r * cols + c].speedKn)}
-            />
-          ))}
+          {Array.from({ length: cols }, (_, c) => {
+            const kn =
+              cells[r0 * cols + c].speedKn * (1 - t) + cells[r1 * cols + c].speedKn * t;
+            return (
+              <Stop
+                key={c}
+                offset={`${((c / (cols - 1)) * 100).toFixed(1)}%`}
+                stopColor={windHeatColor(kn)}
+              />
+            );
+          })}
         </LinearGradient>
       );
-      const top = Math.max(0, (r - 0.5) * stripH);
+      const top = Math.max(0, (dr - 0.5) * stripH);
       strips.push(
         <Rect
-          key={`fs-${r}`}
+          key={`fs-${dr}`}
           x={0}
           y={top}
           width={w}
-          height={Math.min(h, (r + 0.5) * stripH) - top}
+          height={Math.min(h, (dr + 0.5) * stripH) - top}
           fill={`url(#${gid})`}
           opacity={washOpacity}
         />
