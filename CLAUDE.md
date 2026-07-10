@@ -147,9 +147,13 @@ The simulation is a **pure, deterministic engine** with a thin React UI on top.
   swarm; a seasonal wash holds perfectly still (baked ERA5 world climatology in
   `data/worldClimatology.ts`, keyed off the `data/worldLattice.ts` ocean grid).
   The **global** map paints a real 36×13 ocean lattice (`fetchWorldFlow`),
-  **never** IDW-across-oceans; a **region** map blends its course samples only
-  where `blendCoverageOk`/`regionBlendAllowed` clears the 500 km honesty gate
-  (else vanes-only), or flies a live per-region lattice (`fetchRegionFlow`).
+  **never** IDW-across-oceans; a **region** map flies a live per-region lattice
+  (`fetchRegionFlow`), else blends its course samples where
+  `blendCoverageOk`/`regionBlendAllowed` clears the 500 km honesty gate, else
+  (an ocean-sized box: usEast/usWest/ausNz) paints the **world field clipped to
+  the box** (`worldField.ts` `regionWorldWash`/`resampleWorldToBounds` — live
+  world lattice or baked seasonal world, real data everywhere, never a blank
+  sea).
   Every painted chart carries a `provenance.ts` chip (live "as of HH:MM" /
   "Seasonal pattern · ERA5 · <Month>" / "Seasonal · indicative"). Reduced-motion
   swaps the swarm for still streamlets. All display-only; the engine and goldens

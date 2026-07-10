@@ -8,6 +8,7 @@ import WorldChart, { WorldPin } from '../WorldChart';
 import WindScaleLegend from '../WindScaleLegend';
 import { windHeatColor } from '../windScale';
 import { blendWindGrid, courseWindPoints, regionBlendAllowed } from './windBlend';
+import { regionWorldWash } from './worldField';
 import { REGION_KEYS, REGION_META, RegionKey, regionRaces, shortRaceName } from './regions';
 import { liveProvenance, seasonalWorldProvenance, SEASONAL_INDICATIVE } from './provenance';
 
@@ -117,8 +118,10 @@ export const WorldSection: React.FC<WorldSectionProps> = ({
       return { flow: lattice, motion: true, provenance: liveProvenance(lattice.fetchedAt) };
     }
     const live = conditions.source === 'live' && conditions.fetchedAt != null;
+    // Ocean-sized region: paint the world field clipped to the box rather than
+    // a blank sea (see worldField / ConditionsHero — the same honest rung).
+    if (!regionBlendAllowed(region)) return regionWorldWash(region, worldFlow, month);
     const provenance = live ? liveProvenance(conditions.fetchedAt as number) : SEASONAL_INDICATIVE;
-    if (!regionBlendAllowed(region)) return { flow: undefined, motion: false, provenance };
     return {
       flow: {
         cells: blendWindGrid(
@@ -133,7 +136,7 @@ export const WorldSection: React.FC<WorldSectionProps> = ({
       motion: live,
       provenance,
     };
-  }, [region, regionFlows, conditions]);
+  }, [region, regionFlows, conditions, worldFlow, month]);
 
   return (
     <View style={styles.section} testID="harbour-world">

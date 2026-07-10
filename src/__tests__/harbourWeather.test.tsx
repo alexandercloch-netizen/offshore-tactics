@@ -166,17 +166,21 @@ describe('the region ladder and the 500 km gate', () => {
     expect(chipText(tree.root, 'region-chart')).toBe('Seasonal · indicative');
   });
 
-  it('usWest seasonal: vanes only — no wash across 4,700 km of Pacific', () => {
+  it('usWest seasonal: the world ERA5 field clipped to the box — painted, never blank', () => {
     const tree = mount();
     press(byTestID(tree.root, 'world-chart-pin-usWest')[0]);
     const chart = byTestID(tree.root, 'region-chart')[0];
-    expect(washGradients(chart)).toHaveLength(0);
-    expect(byTestID(chart, 'flow-streamlets')).toHaveLength(0);
-    // Vanes speak at full strength on a bare chart (locked pins stay dimmer).
+    // The box is ocean-sized so its own courses can't blend it honestly — but
+    // the GLOBAL ERA5 field does cover it, so the region paints (never a blank
+    // sea) and its chip says exactly where the pixels came from.
+    expect(washGradients(chart).length).toBeGreaterThan(0);
+    expect(byTestID(chart, 'flow-streamlets')).toHaveLength(0); // seasonal holds still
+    expect(byTestID(chart, 'flow-swarm')).toHaveLength(0);
+    expect(chipText(tree.root, 'region-chart')).toBe('Seasonal pattern · ERA5 · June');
+    // With a field behind them the vanes step back to 0.6 (locked pins dimmer).
     const open = vanes(chart).filter((v) => v.props.opacity !== 0.35);
     expect(open.length).toBeGreaterThan(0);
-    for (const vane of open) expect(vane.props.opacity).toBe(0.85);
-    expect(chipText(tree.root, 'region-chart')).toBe('Seasonal · indicative');
+    for (const vane of open) expect(vane.props.opacity).toBe(0.6);
   });
 
   it('uk with a live board: the IDW wash moves and is stamped as ECMWF', () => {
