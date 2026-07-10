@@ -19,6 +19,7 @@ import WindParticles from './WindParticles';
 import { FlowCell, FlowLayer } from './flowField';
 import { buildProjector } from './projection';
 import { LandPolygon } from '../data/landmasses';
+import { useReducedMotion } from '../lib/useReducedMotion';
 
 // Re-exported so screens can keep importing it from RouteMap (its historical home).
 export { chartViewportBounds, clampChartToCoverage } from './projection';
@@ -98,6 +99,9 @@ export const RouteMap: React.FC<RouteMapProps> = ({
   height = 200,
 }) => {
   const ready = !!waypoints && waypoints.length >= 2;
+  // Reduced motion swaps the swarm for its still streamlets (WindParticles
+  // handles the render); `animate` stays the caller's on/off (the debrief).
+  const reducedMotion = useReducedMotion();
 
   // SVG ids must be unique per instance: two RouteMaps on the page (the race chart
   // and the decision-cockpit chart) both define a "frame" clip and "sea"/"land"
@@ -330,6 +334,7 @@ export const RouteMap: React.FC<RouteMapProps> = ({
               layer={layer}
               color={flowColor}
               count={particleCount}
+              motion={!reducedMotion}
               width={width}
               height={height}
             />

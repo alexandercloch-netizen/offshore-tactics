@@ -139,6 +139,21 @@ The simulation is a **pure, deterministic engine** with a thin React UI on top.
   There is no racing Modal: `TutorialOverlay` is an inline coach strip.
   Motion comes from `lib/motion.ts` + `lib/useReducedMotion.ts` (core RN
   `Animated` only).
+  **`components/harbour/`** is the home-screen dashboard (`HomeScreen` owns the
+  weather fetch + demotion clocks; the dashboard stays props-driven). Its charts
+  (`WorldChart` + `WindParticles`/`particleSwarm.ts`) paint the PredictWind look:
+  a per-row heat wash + a colour-banded comet swarm. **Motion means live** — a
+  live field (per-course/board/lattice ECMWF, `flowMotion` true) flies the
+  swarm; a seasonal wash holds perfectly still (baked ERA5 world climatology in
+  `data/worldClimatology.ts`, keyed off the `data/worldLattice.ts` ocean grid).
+  The **global** map paints a real 36×13 ocean lattice (`fetchWorldFlow`),
+  **never** IDW-across-oceans; a **region** map blends its course samples only
+  where `blendCoverageOk`/`regionBlendAllowed` clears the 500 km honesty gate
+  (else vanes-only), or flies a live per-region lattice (`fetchRegionFlow`).
+  Every painted chart carries a `provenance.ts` chip (live "as of HH:MM" /
+  "Seasonal pattern · ERA5 · <Month>" / "Seasonal · indicative"). Reduced-motion
+  swaps the swarm for still streamlets. All display-only; the engine and goldens
+  never see any of it.
 - **`src/services/`** — Supabase I/O (`cloudSave`, `leaderboard`, `profile`).
 - **`src/navigation/AppNavigator.tsx`** — the navigator + the auth gate.
 - **`supabase/schema.sql`** — the backend schema (tables, RLS, RPCs). Idempotent.

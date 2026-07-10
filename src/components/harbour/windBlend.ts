@@ -1,6 +1,7 @@
-import { GeoBounds } from '../../data/worldmap';
+import { GeoBounds, REGION_BOUNDS } from '../../data/worldmap';
 import { FlowCell } from '../flowField';
 import { haversineNm } from '../../engine/geo';
+import { RegionKey, regionRaces } from './regions';
 
 // Blend the Harbour's real per-course wind samples into a smooth field over a
 // region chart. This is honest interpolation, not invention: the field is
@@ -107,6 +108,43 @@ export function blendCoverageOk(
     }
   }
   return true;
+}
+
+// The blend's sample set for a region: each course's one honest reading
+// (live board sample or its seasonal fallback), carried at EVERY waypoint of
+// that course — the reading is the course's, so the whole track testifies,
+// and the wash follows the racing water instead of hanging off three start
+// pins. The same points the gate above measures coverage with.
+export function courseWindPoints(
+  races: readonly { id: string; waypoints: readonly { lat: number; lon: number }[]; prevailingWind: { fromDeg: number; speedKn: number } }[],
+  samples: Record<string, { fromDeg: number; speedKn: number }>
+): WindPoint[] {
+  return races.flatMap((race) => {
+    const s = samples[race.id] ?? race.prevailingWind;
+    return race.waypoints.map((w) => ({
+      lat: w.lat,
+      lon: w.lon,
+      fromDeg: s.fromDeg,
+      speedKn: s.speedKn,
+    }));
+  });
+}
+
+// The gate, asked per region with the region's course WAYPOINTS as the
+// samples — not just the start pins: a course's reading holds along its own
+// track, so the whole track counts as coverage (the UK box passes on exactly
+// that margin; usWest fails however you count). Waypoints never change at
+// runtime, so the verdict is cached for the session.
+const blendGateCache = new Map<RegionKey, boolean>();
+export function regionBlendAllowed(region: RegionKey): boolean {
+  const hit = blendGateCache.get(region);
+  if (hit !== undefined) return hit;
+  const anchors = regionRaces(region).flatMap((race) =>
+    race.waypoints.map((w) => ({ lat: w.lat, lon: w.lon }))
+  );
+  const ok = blendCoverageOk(anchors, REGION_BOUNDS[region]);
+  blendGateCache.set(region, ok);
+  return ok;
 }
 
 // The vector-mean direction of a station's courses (the world chart's arrow):

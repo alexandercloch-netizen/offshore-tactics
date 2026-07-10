@@ -1,27 +1,35 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, fontSize, fontWeight, radius, spacing, status } from '../../theme';
 import { REGION_BOUNDS, REGION_LAND, WORLD_BOUNDS, WORLD_LAND } from '../../data/worldmap';
 import { BoardConditions } from '../../engine/sailNow';
+import { LiveFlowGrid, seasonalWorldFlow } from '../../services/weather';
 import WorldChart, { WorldPin } from '../WorldChart';
+import WindScaleLegend from '../WindScaleLegend';
 import { windHeatColor } from '../windScale';
-import { Race } from '../../types';
-import { blendWindGrid, meanFromDeg, WindPoint } from './windBlend';
+import { blendWindGrid, courseWindPoints, regionBlendAllowed } from './windBlend';
 import { REGION_KEYS, REGION_META, RegionKey, regionRaces, shortRaceName } from './regions';
+import { liveProvenance, seasonalWorldProvenance, SEASONAL_INDICATIVE } from './provenance';
 
 // The blended field's grid (shared with the hero): coarse cols, finer rows.
 const FLOW_COLS = 14;
 const FLOW_ROWS = 22;
 
-// §2 The world chart — tap the planet to go racing. World view shows one
-// station pin per sailing region (anchored on its home-port classic, so the
-// pin sits in a real harbour, not a mid-continent centroid); tapping a station
-// re-projects the chart to that region with each course pinned individually,
-// coloured by its current wind band; tapping a course enters the existing
-// race-entry flow. The back arrow returns to the world.
+// §2 The world chart — tap the planet to go racing, over a painted world
+// ocean. The wash is the 10° world lattice: live ECMWF (with the particle
+// swarm — motion means live) or the baked monthly ERA5 climatology (wash and
+// vanes only, holding still). Tapping a station re-projects the chart to that
+// region, which climbs its own ladder: the live per-region lattice → the
+// blended course samples behind the 500 km honesty gate → vanes-only. Every
+// painted chart carries its provenance chip. Tapping a course enters the
+// existing race-entry flow; the back arrow returns to the world.
 
 interface WorldSectionProps {
   conditions: BoardConditions;
+  now: number; // the dashboard's clock — picks the climatology month
+  worldFlow?: LiveFlowGrid | null; // the live world lattice (HomeScreen owns the fetch)
+  regionFlows?: Partial<Record<RegionKey, LiveFlowGrid>>;
+  onRegionView?: (region: RegionKey) => void; // ask the screen to fetch a region's lattice
   onEnterRace: (raceId: string) => void;
   isUnlocked: (raceId: string) => boolean;
   width: number;
@@ -31,6 +39,10 @@ interface WorldSectionProps {
 
 export const WorldSection: React.FC<WorldSectionProps> = ({
   conditions,
+  now,
+  worldFlow,
+  regionFlows,
+  onRegionView,
   onEnterRace,
   isUnlocked,
   width,
@@ -38,6 +50,21 @@ export const WorldSection: React.FC<WorldSectionProps> = ({
   regionHeight = 230,
 }) => {
   const [region, setRegion] = useState<RegionKey | null>(null);
+
+  // A drill-in is the screen's cue to fetch that region's live lattice (lazy,
+  // session-cached up there) — the chart shows the blended rung meanwhile and
+  // the swarm survives the swap-in.
+  useEffect(() => {
+    if (region) onRegionView?.(region);
+  }, [region, onRegionView]);
+
+  // The world's field: the live lattice when it's fresh, else this month's
+  // baked climatology — same 36×13 grid, so the chart can't tell the shapes
+  // apart, only the labels and the motion differ.
+  const month = new Date(now).getMonth();
+  const seasonalWorld = useMemo(() => seasonalWorldFlow(month), [month]);
+  const worldField = worldFlow ?? seasonalWorld;
+  const worldLive = !!worldFlow;
 
   // World-view stations carry NO captions: seven labelled stations cannot pack
   // honestly onto a 124px-tall strip (the declutter turns into a lottery), so
@@ -52,25 +79,18 @@ export const WorldSection: React.FC<WorldSectionProps> = ({
       ) / Math.max(1, races.length);
     return { key, races, meanKn, anchor };
   });
-  const stationPoints = (races: Race[]): WindPoint[] =>
-    races.map((race) => {
-      const s = conditions.samples[race.id] ?? race.prevailingWind;
-      return {
-        lat: race.waypoints[0].lat,
-        lon: race.waypoints[0].lon,
-        fromDeg: s.fromDeg,
-        speedKn: s.speedKn,
-      };
-    });
-  const worldPins: WorldPin[] = worldStations.map(({ key, races, meanKn, anchor }) => ({
-    id: key,
-    lat: anchor.waypoints[0].lat,
-    lon: anchor.waypoints[0].lon,
-    color: windHeatColor(meanKn),
-    // The station's true wind as a small vane — blending a field across whole
-    // oceans would be fiction, so the world chart shows its winds pointwise.
-    fromDeg: meanFromDeg(stationPoints(races)),
-  }));
+  const worldPins: WorldPin[] = worldStations.map(({ key, meanKn, anchor }) => {
+    // The vane is the anchor course's OWN reading (the pin sits in its
+    // harbour) — never a direction averaged across a whole region.
+    const s = conditions.samples[anchor.id] ?? anchor.prevailingWind;
+    return {
+      id: key,
+      lat: anchor.waypoints[0].lat,
+      lon: anchor.waypoints[0].lon,
+      color: windHeatColor(meanKn),
+      fromDeg: s.fromDeg,
+    };
+  });
 
   const regionPins: WorldPin[] = region
     ? regionRaces(region).map((race) => {
@@ -83,24 +103,37 @@ export const WorldSection: React.FC<WorldSectionProps> = ({
           label: shortRaceName(race),
           sublabel: `${Math.round(s.speedKn)} kn`,
           locked: !isUnlocked(race.id),
+          fromDeg: s.fromDeg,
         };
       })
     : [];
 
-  // The zoomed region reads like the hero: the real course samples blended
-  // into a heat wash + particle swarm over the region box.
-  const regionFlow = region
-    ? {
+  // The zoomed region's field, up the ladder — memoised so re-renders keep
+  // the cells' identity and the swarm never reseeds mid-flight.
+  const regionField = useMemo(() => {
+    if (!region) return null;
+    const lattice = regionFlows?.[region];
+    if (lattice) {
+      return { flow: lattice, motion: true, provenance: liveProvenance(lattice.fetchedAt) };
+    }
+    const live = conditions.source === 'live' && conditions.fetchedAt != null;
+    const provenance = live ? liveProvenance(conditions.fetchedAt as number) : SEASONAL_INDICATIVE;
+    if (!regionBlendAllowed(region)) return { flow: undefined, motion: false, provenance };
+    return {
+      flow: {
         cells: blendWindGrid(
-          stationPoints(regionRaces(region)),
+          courseWindPoints(regionRaces(region), conditions.samples),
           REGION_BOUNDS[region],
           FLOW_COLS,
           FLOW_ROWS
         ),
         cols: FLOW_COLS,
         rows: FLOW_ROWS,
-      }
-    : undefined;
+      },
+      motion: live,
+      provenance,
+    };
+  }, [region, regionFlows, conditions]);
 
   return (
     <View style={styles.section} testID="harbour-world">
@@ -121,18 +154,23 @@ export const WorldSection: React.FC<WorldSectionProps> = ({
         {region ? <Text style={styles.regionTitle}>{REGION_META[region].short}</Text> : null}
       </View>
       {region ? (
-        <WorldChart
-          bounds={REGION_BOUNDS[region]}
-          land={REGION_LAND[region] ?? []}
-          pins={regionPins}
-          onPinPress={(id) => {
-            if (isUnlocked(id)) onEnterRace(id);
-          }}
-          width={width}
-          height={regionHeight}
-          flow={regionFlow}
-          testID="region-chart"
-        />
+        <>
+          <WorldChart
+            bounds={REGION_BOUNDS[region]}
+            land={REGION_LAND[region] ?? []}
+            pins={regionPins}
+            onPinPress={(id) => {
+              if (isUnlocked(id)) onEnterRace(id);
+            }}
+            width={width}
+            height={regionHeight}
+            flow={regionField?.flow}
+            flowMotion={regionField?.motion}
+            provenance={regionField?.provenance}
+            testID="region-chart"
+          />
+          <WindScaleLegend layer="wind" />
+        </>
       ) : (
         <>
           <WorldChart
@@ -142,8 +180,17 @@ export const WorldSection: React.FC<WorldSectionProps> = ({
             onPinPress={(id) => setRegion(id as RegionKey)}
             width={width}
             height={worldHeight}
+            flow={worldField}
+            flowMotion={worldLive}
+            washOpacity={0.55}
+            provenance={
+              worldLive
+                ? liveProvenance((worldFlow as LiveFlowGrid).fetchedAt)
+                : seasonalWorldProvenance(month)
+            }
             testID="world-chart"
           />
+          <WindScaleLegend layer="wind" />
           <View style={styles.chipRow}>
             {worldStations.map(({ key, races, meanKn }) => (
               <Pressable
