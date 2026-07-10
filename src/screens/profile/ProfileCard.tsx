@@ -61,6 +61,7 @@ export interface ProfileCardProps {
   onReset?: () => void; // undefined when there is nothing to reset
   onAccount?: () => void; // sign-in / manage account
   onRenameGuest?: (name: string) => void; // editable guest sailing name
+  onNoticeBoard?: () => void; // open the feedback "message to the Race Committee"
 }
 
 const Card: React.FC<{ testID: string; children: React.ReactNode }> = ({ testID, children }) => (
@@ -314,6 +315,16 @@ const AccountSection: React.FC<ProfileCardProps> = (p) => (
         ) : null}
       </View>
     ) : null}
+    {p.onNoticeBoard ? (
+      <Text
+        style={styles.noticeRow}
+        accessibilityRole="button"
+        onPress={p.onNoticeBoard}
+        testID="feedback-entry-profile"
+      >
+        Notice Board — message the Race Committee →
+      </Text>
+    ) : null}
     {p.onReset ? (
       <View style={styles.prefActions}>
         <NauticalButton label="Reset Campaign" variant="ghost" onPress={p.onReset} />
@@ -472,6 +483,13 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     fontWeight: fontWeight.bold,
     textDecorationLine: 'underline',
+  },
+  noticeRow: {
+    color: colors.brassLight,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.bold,
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
   },
   privacy: { color: colors.slate, fontSize: fontSize.xs, marginTop: spacing.md, lineHeight: 16 },
   credit: { color: colors.slate, fontSize: fontSize.xs, marginTop: spacing.xs },

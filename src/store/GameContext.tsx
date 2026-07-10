@@ -65,6 +65,7 @@ import { detectCurrency, formatMoney } from '../lib/currency';
 import { useAuth } from './AuthContext';
 import { supabase } from '../lib/supabase';
 import { loadCloudSave, saveCloud } from '../services/cloudSave';
+import { flushFeedbackQueue } from '../services/feedback';
 import { submitRaceResult } from '../services/leaderboard';
 import { scenarioStamp } from '../services/weather';
 import { applyReseed, ReseedPayload } from './reseed';
@@ -611,6 +612,17 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
     });
     return () => sub.remove();
   }, [configured]);
+
+  // Drain the local Notice Board (feedback) queue best-effort: on mount, whenever
+  // auth becomes available, and whenever the app returns to the foreground. It
+  // no-ops with no Supabase client, so this stays cheap for guests/CI.
+  useEffect(() => {
+    void flushFeedbackQueue();
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') void flushFeedbackQueue();
+    });
+    return () => sub.remove();
+  }, [user]);
 
   // Live multi-device sync: adopt a newer save pushed from another device,
   // unless a race is in progress here (never interrupt a live race).

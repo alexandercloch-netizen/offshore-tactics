@@ -869,4 +869,5 @@ export type RootStackParamList = {
   TrophyCase: undefined;
   BoatBuilder: undefined;
   SailLocker: { boatId: string };
+  NoticeBoard: { fromRoute?: string } | undefined; // the feedback "message to the Race Committee"
 };
