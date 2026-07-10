@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { CompositeScreenProps } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
@@ -10,11 +10,20 @@ import { useGame } from '../store/GameContext';
 import { useAuth } from '../store/AuthContext';
 import { defaultDivision, goalHeadline, recommendedRace } from '../engine/recommend';
 import { BoardConditions, seasonalBoardConditions } from '../engine/sailNow';
-import { fetchBoardConditions, liveWeatherEnabled } from '../services/weather';
+import {
+  fetchBoardConditions,
+  fetchRegionFlow,
+  fetchWorldFlow,
+  LiveFlowGrid,
+  liveWeatherEnabled,
+  LIVE_REFRESH_MS,
+  STALE_DEMOTE_MS,
+} from '../services/weather';
 import { RACES, getRaceById } from '../data';
 import { getClassOption } from '../data/polarLibrary';
 import NauticalButton from '../components/NauticalButton';
 import HarbourDashboard from '../components/harbour/HarbourDashboard';
+import { homeRegion, RegionKey } from '../components/harbour/regions';
 import { confirmAction } from '../lib/confirm';
 
 type Props = CompositeScreenProps<
@@ -44,20 +53,103 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
     }
   }, [ready, player, raceInProgress, navigation]);
 
-  // The dashboard's conditions: live when the flag allows and the fetch lands,
-  // the baked seasonal climatology otherwise — one shape, honestly labelled.
-  // Flag off (CI, guests by default) means the fetch code path never runs.
+  // The Harbour's weather, owned HERE (the dashboard stays props-driven and
+  // network-free): the conditions board and the world flow lattice fetch in
+  // parallel on mount, refetch on focus once LIVE_REFRESH_MS stale, and each
+  // demotes whole-surface to its seasonal rung (and relabels) on a REAL timer
+  // at STALE_DEMOTE_MS — never a live/seasonal mix. Region lattices are lazy
+  // (one GET on first drill-in, session-cached in a ref), so a Harbour mount
+  // costs at most three GETs: board + world + the open (home) region. Flag
+  // off (CI, guests by default) means none of these code paths run.
   const [liveConditions, setLiveConditions] = useState<BoardConditions | null>(null);
+  const [worldFlow, setWorldFlow] = useState<LiveFlowGrid | null>(null);
+  const [regionFlows, setRegionFlows] = useState<Partial<Record<RegionKey, LiveFlowGrid>>>({});
+  const regionCache = useRef(new Map<RegionKey, LiveFlowGrid | 'pending'>());
+  const alive = useRef(true);
   useEffect(() => {
-    if (!liveWeatherEnabled()) return;
-    let cancelled = false;
-    fetchBoardConditions(RACES).then((board) => {
-      if (!cancelled && board) setLiveConditions(board);
-    });
+    alive.current = true;
     return () => {
-      cancelled = true;
+      alive.current = false;
     };
   }, []);
+
+  const requestRegionFlow = useCallback((region: RegionKey) => {
+    if (!liveWeatherEnabled()) return;
+    const cached = regionCache.current.get(region);
+    if (
+      cached === 'pending' ||
+      (cached && Date.now() - cached.fetchedAt < LIVE_REFRESH_MS)
+    ) {
+      return; // in flight or fresh — a drill-in is never a second GET
+    }
+    regionCache.current.set(region, 'pending');
+    fetchRegionFlow(region).then((flow) => {
+      if (!flow) {
+        regionCache.current.delete(region); // a later drill-in may knock again
+        return;
+      }
+      regionCache.current.set(region, flow);
+      if (alive.current) setRegionFlows((prev) => ({ ...prev, [region]: flow }));
+    });
+  }, []);
+
+  const refreshLive = useCallback(() => {
+    if (!liveWeatherEnabled()) return;
+    const stale = (at?: number) => at == null || Date.now() - at >= LIVE_REFRESH_MS;
+    if (stale(liveConditions?.fetchedAt)) {
+      fetchBoardConditions(RACES).then((board) => {
+        if (alive.current && board) setLiveConditions(board);
+      });
+    }
+    if (stale(worldFlow?.fetchedAt)) {
+      fetchWorldFlow().then((flow) => {
+        if (alive.current && flow) setWorldFlow(flow);
+      });
+    }
+    // The home region is the chart on screen from the first frame — its
+    // lattice is the third (and last) mount-time GET.
+    requestRegionFlow(homeRegion(player?.region, recommendedRace(player, state.history)?.id));
+  }, [liveConditions, worldFlow, requestRegionFlow, player, state.history]);
+
+  // Mount + focus, never a background timer: refetch only when stale.
+  useEffect(() => {
+    refreshLive();
+    return navigation.addListener('focus', refreshLive);
+  }, [navigation, refreshLive]);
+
+  // The demotion clocks are real timers (not the frozen per-mount `now`): a
+  // live claim older than STALE_DEMOTE_MS stops being shown as live at all.
+  useEffect(() => {
+    if (liveConditions?.fetchedAt == null) return;
+    const t = setTimeout(
+      () => setLiveConditions(null),
+      Math.max(0, liveConditions.fetchedAt + STALE_DEMOTE_MS - Date.now())
+    );
+    return () => clearTimeout(t);
+  }, [liveConditions]);
+  useEffect(() => {
+    const stamps = [
+      ...(worldFlow ? [worldFlow.fetchedAt] : []),
+      ...Object.values(regionFlows).map((f) => (f as LiveFlowGrid).fetchedAt),
+    ];
+    if (stamps.length === 0) return;
+    const t = setTimeout(() => {
+      const cut = Date.now() - STALE_DEMOTE_MS;
+      setWorldFlow((w) => (w && w.fetchedAt > cut ? w : null));
+      setRegionFlows((prev) => {
+        const next: Partial<Record<RegionKey, LiveFlowGrid>> = {};
+        for (const [key, flow] of Object.entries(prev) as [RegionKey, LiveFlowGrid][]) {
+          if (flow.fetchedAt > cut) next[key] = flow;
+        }
+        return next;
+      });
+      for (const [key, flow] of regionCache.current) {
+        if (flow !== 'pending' && flow.fetchedAt <= cut) regionCache.current.delete(key);
+      }
+    }, Math.max(0, Math.min(...stamps) + STALE_DEMOTE_MS - Date.now()));
+    return () => clearTimeout(t);
+  }, [worldFlow, regionFlows]);
+
   const conditions = useMemo(
     () => liveConditions ?? seasonalBoardConditions(RACES),
     [liveConditions]
@@ -182,6 +274,9 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
           conditions={conditions}
           now={now}
           recommendedId={recommended?.id}
+          worldFlow={worldFlow}
+          regionFlows={regionFlows}
+          onRegionView={requestRegionFlow}
           onEnterRace={enterRace}
           width={chartWidth}
           twoPane={twoPane}

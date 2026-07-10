@@ -1,25 +1,38 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { G, Path } from 'react-native-svg';
-import { buildFlowField, sampleFlow, FlowCell, FlowField, FlowLayer } from './flowField';
+import { buildFlowField, FlowCell, FlowField, FlowLayer } from './flowField';
 import { windHeatColor } from './windScale';
+import {
+  COMET_TIERS,
+  isCompactStage,
+  pxScaleFor,
+  seedSwarm,
+  stepSwarm,
+  streamletPaths,
+  swarmCount,
+  SwarmParticle,
+  TierPaths,
+  trailLenFor,
+} from './particleSwarm';
 
 export type { FlowCell, FlowLayer } from './flowField';
 export { windCells, tideCells } from './flowField';
 
 // A live, PredictWind-style flow animation: hundreds of particles drifting with
 // the wind (or the tide), seeded across the chart and advected by the sampled
-// field. Each streak is tinted by the LOCAL flow speed under its head, quantised
-// into a handful of colour bands so the whole swarm still renders as a bounded
-// set of SVG <Path> nodes (one per band × fade tier — never one per particle),
-// updated on a requestAnimationFrame loop. Pure react-native-svg, identical on
-// iOS, Android and web (no canvas/WebGL, no platform fork). Purely visual: it
-// reads the same field the engine routes on but never feeds back into it, so
-// determinism is untouched.
-
-interface XY {
-  x: number;
-  y: number;
-}
+// field. Each streak is a three-tier comet (faint tail, readable middle, bright
+// head) tinted by the LOCAL flow speed under it, quantised into a handful of
+// colour bands so the whole swarm still renders as a bounded set of SVG <Path>
+// nodes (bands × fade tiers — never one per particle), updated on a
+// requestAnimationFrame loop capped at 30fps. Pure react-native-svg, identical
+// on iOS, Android and web (no canvas/WebGL, no platform fork). Purely visual:
+// it reads the same field the engine routes on but never feeds back into it,
+// so determinism is untouched.
+//
+// With motion off (the player prefers reduced motion — passed as a prop so this
+// stays presentational) or on a host with no rAF at all, the same field renders
+// as STATIC flow-aligned streamlets in the same band paths: direction and speed
+// survive, nothing moves, and nothing crashes.
 
 // Small, fast, *local* PRNG for particle seeding — deliberately NOT the engine's
 // rng (engine/rng.ts), since this is view-only motion that must never perturb the
@@ -32,24 +45,18 @@ function lcg(seed: number): () => number {
   };
 }
 
-interface Particle {
-  x: number;
-  y: number;
-  trail: number[]; // recent [x,y,x,y,…], newest last — the streak the eye follows
-  age: number;
-  life: number; // frames before respawn (staggered so they don't all blink together)
-}
-
-const TRAIL_FADE = 0.6;
-const TRAIL_LEN = 12; // history points per streak — long enough to read as flow in light air
-
 // The wind/gust streak palette: band centres (kn) on the shared kn→colour ramp,
-// lifted well toward white so a streak reads *against* the same ramp painted
-// beneath it as the heatmap — the hue carries the local speed, the lightness
-// keeps it legible. Seven bands is enough hue resolution for the eye while
-// keeping the SVG node count fixed at bands × two fade tiers.
+// lifted almost to foam-white so the streaks read as near-monochrome MOTION over
+// the colour wash beneath them — the paint carries the speed, the streaks carry
+// the flow. Seven bands keeps a whisper of hue while keeping the SVG node count
+// fixed at bands × three fade tiers.
 const WIND_BAND_KN = [3, 8, 12, 16, 21, 28, 40];
-const STREAK_LIGHTEN = 0.62;
+const STREAK_LIGHTEN = 0.8;
+
+// The 30fps cap: with two charts animating, half the setPaths is free headroom
+// — the life survives (PredictWind mobile runs about this) and the main thread
+// breathes. dt accumulates across skipped frames so speed stays true.
+const MIN_FRAME_S = 1 / 30;
 
 function lighten(rgb: string, amount: number): string {
   const m = /rgb\((\d+),\s*(\d+),\s*(\d+)\)/.exec(rgb);
@@ -65,9 +72,9 @@ function bandIndex(kn: number): number {
   return i;
 }
 
-interface BandPaths {
-  head: string;
-  trail: string;
+interface XY {
+  x: number;
+  y: number;
 }
 
 interface WindParticlesProps {
@@ -80,6 +87,10 @@ interface WindParticlesProps {
   count?: number;
   width: number;
   height: number;
+  // false = the player prefers reduced motion: render the static streamlets
+  // instead of running the animation loop. A prop, not a hook — the component
+  // stays a pure function of its inputs plus its own frame clock.
+  motion?: boolean;
 }
 
 export const WindParticles: React.FC<WindParticlesProps> = ({
@@ -89,9 +100,10 @@ export const WindParticles: React.FC<WindParticlesProps> = ({
   project,
   layer,
   color,
-  count = 160,
+  count,
   width,
   height,
+  motion = true,
 }) => {
   const field: FlowField | null = useMemo(
     () => buildFlowField(cells, cols, rows, project, layer),
@@ -108,83 +120,96 @@ export const WindParticles: React.FC<WindParticlesProps> = ({
   );
   const bands = bandColors.length;
 
-  const particles = useRef<Particle[]>([]);
+  const compact = isCompactStage(width, height);
+  const swarm = count ?? swarmCount(width, height);
+
+  // View-only motion degrades, never crashes: a host with no RAF (the node
+  // render tests, SSR) gets the same still streamlets a reduced-motion player
+  // asked for.
+  const still = !motion || typeof requestAnimationFrame === 'undefined';
+
+  const particles = useRef<SwarmParticle[]>([]);
   const rng = useRef(lcg(0x9e3779b1));
-  const [paths, setPaths] = useState<BandPaths[]>([]);
+  const [paths, setPaths] = useState<TierPaths[]>([]);
 
-  // (Re)seed the swarm whenever the swarm size or the drawable area changes.
+  // (Re)seed the swarm whenever the swarm size or the drawable area changes —
+  // and ONLY then: a field swap (a live lattice landing over the instant IDW)
+  // keeps every particle flying.
   useEffect(() => {
-    const next: Particle[] = [];
-    const r = rng.current;
-    for (let i = 0; i < count; i += 1) {
-      const x = r() * width;
-      const y = r() * height;
-      next.push({ x, y, trail: [x, y], age: Math.floor(r() * 90), life: 60 + Math.floor(r() * 90) });
-    }
-    particles.current = next;
-  }, [count, width, height]);
+    if (still) return;
+    particles.current = seedSwarm(swarm, width, height, rng.current);
+  }, [still, swarm, width, height]);
 
   useEffect(() => {
-    if (!field) return undefined;
-    // View-only motion degrades, never crashes: a host with no RAF (the node
-    // render tests, SSR) simply gets a still chart — the streaks are decor.
-    if (typeof requestAnimationFrame === 'undefined') return undefined;
+    if (!field || still) return undefined;
     let raf = 0;
     let last = 0;
-    const r = rng.current;
-
-    const respawn = (p: Particle) => {
-      p.x = r() * width;
-      p.y = r() * height;
-      p.trail = [p.x, p.y]; // start fresh so we don't draw a line across the jump
-      p.age = 0;
-      p.life = 60 + Math.floor(r() * 90);
+    let acc = 0;
+    const stepOpts = {
+      width,
+      height,
+      trailLen: trailLenFor(width, height),
+      pxScale: pxScaleFor(width, height),
+      bands,
+      bandOf: bandIndex,
     };
 
     const frame = (t: number) => {
-      const dt = last ? Math.min((t - last) / 1000, 0.05) : 0.016; // clamp tab-switch gaps
-      last = t;
-      const next: BandPaths[] = [];
-      for (let b = 0; b < bands; b += 1) next.push({ head: '', trail: '' });
-      for (const p of particles.current) {
-        const v = sampleFlow(field, p.x, p.y);
-        p.x += v.vx * dt;
-        p.y += v.vy * dt;
-        p.age += 1;
-        const off = p.x < 0 || p.x > width || p.y < 0 || p.y > height;
-        if (off || p.age > p.life || v.kn < 0.4) {
-          respawn(p);
-        } else {
-          p.trail.push(p.x, p.y);
-          if (p.trail.length > TRAIL_LEN * 2) p.trail.splice(0, p.trail.length - TRAIL_LEN * 2);
-        }
-        if (p.trail.length < 4) continue;
-        // The whole streak (faint) plus its leading two points (bright) — a comet
-        // that reads as flow even in light air — accumulated into its speed
-        // band's two paths, so the node count stays bands × 2 however many
-        // particles fly.
-        const bucket = next[bands === 1 ? 0 : bandIndex(v.kn)];
-        let d = `M${p.trail[0].toFixed(1)} ${p.trail[1].toFixed(1)}`;
-        for (let k = 2; k < p.trail.length; k += 2) d += `L${p.trail[k].toFixed(1)} ${p.trail[k + 1].toFixed(1)}`;
-        bucket.trail += d;
-        const n = p.trail.length;
-        bucket.head += `M${p.trail[n - 4].toFixed(1)} ${p.trail[n - 3].toFixed(1)}L${p.trail[n - 2].toFixed(1)} ${p.trail[n - 1].toFixed(1)}`;
-      }
-      setPaths(next);
       raf = requestAnimationFrame(frame);
+      acc += last ? Math.min((t - last) / 1000, 0.05) : 0.016; // clamp tab-switch gaps
+      last = t;
+      if (acc < MIN_FRAME_S) return; // 30fps cap — carry the dt into the next frame
+      const dt = Math.min(acc, 0.05);
+      acc = 0;
+      setPaths(stepSwarm(particles.current, field, dt, stepOpts, rng.current));
     };
 
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [field, width, height, bands]);
+  }, [field, still, width, height, bands]);
+
+  // The still frame: flow-aligned streamlets in the same band buckets (≤ one
+  // path per band), computed once per field — no state, no clock.
+  const stillPaths = useMemo(
+    () => (still && field ? streamletPaths(field, width, height, bands, bandIndex) : null),
+    [still, field, width, height, bands]
+  );
 
   if (!field) return null;
+  if (stillPaths) {
+    return (
+      <G testID="flow-streamlets">
+        {stillPaths.map((d, i) =>
+          d ? (
+            <Path
+              key={i}
+              d={d}
+              stroke={bandColors[i]}
+              strokeWidth={compact ? 0.9 : 1.1}
+              strokeLinecap="round"
+              fill="none"
+              opacity={0.55}
+            />
+          ) : null
+        )}
+      </G>
+    );
+  }
   return (
-    <G>
+    <G testID="flow-swarm">
       {paths.map((p, i) => (
         <React.Fragment key={i}>
-          <Path d={p.trail} stroke={bandColors[i]} strokeWidth={1} strokeLinecap="round" fill="none" opacity={TRAIL_FADE * 0.5} />
-          <Path d={p.head} stroke={bandColors[i]} strokeWidth={1.6} strokeLinecap="round" fill="none" opacity={TRAIL_FADE} />
+          {COMET_TIERS.map(({ tier, opacity, width: sw, compactWidth }) => (
+            <Path
+              key={tier}
+              d={p[tier]}
+              stroke={bandColors[i]}
+              strokeWidth={compact ? compactWidth : sw}
+              strokeLinecap="round"
+              fill="none"
+              opacity={opacity}
+            />
+          ))}
         </React.Fragment>
       ))}
     </G>

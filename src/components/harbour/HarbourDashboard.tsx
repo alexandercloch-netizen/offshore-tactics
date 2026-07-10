@@ -4,6 +4,7 @@ import { PlayerProfile, RaceResult } from '../../types';
 import { RACES } from '../../data/races';
 import { isRaceUnlocked } from '../../engine/gameEngine';
 import { BoardConditions, rankRaces } from '../../engine/sailNow';
+import { LiveFlowGrid } from '../../services/weather';
 import { logbookStats } from '../../engine/logbook';
 import { spacing } from '../../theme';
 import ConditionsHero from './ConditionsHero';
@@ -11,7 +12,7 @@ import WorldSection from './WorldSection';
 import SailTodayBoard from './SailTodayBoard';
 import LogbookPanel from './LogbookPanel';
 import SeasonStrip from './SeasonStrip';
-import { homeRegion } from './regions';
+import { homeRegion, RegionKey } from './regions';
 
 // The Harbour — the home screen's analytics dashboard. Display-only and
 // props-driven (no navigation, no game context), so the render test can mount
@@ -31,6 +32,11 @@ interface HarbourDashboardProps {
   conditions: BoardConditions;
   now: number; // the dashboard's clock, injected so the ranker stays pure
   recommendedId?: string; // recommend.ts's pick — feeds the ranker's ladder fit
+  // The live weather the screen owns (fetches, caches, demotes) — the
+  // dashboard stays props-driven and network-free.
+  worldFlow?: LiveFlowGrid | null;
+  regionFlows?: Partial<Record<RegionKey, LiveFlowGrid>>;
+  onRegionView?: (region: RegionKey) => void;
   onEnterRace: (raceId: string) => void;
   width: number; // chart width: the full column (phone) or the left pane (two-pane)
   twoPane?: boolean; // desktop chart-table layout (the screen owns the breakpoint)
@@ -44,6 +50,9 @@ export const HarbourDashboard: React.FC<HarbourDashboardProps> = ({
   conditions,
   now,
   recommendedId,
+  worldFlow,
+  regionFlows,
+  onRegionView,
   onEnterRace,
   width,
   twoPane = false,
@@ -76,6 +85,7 @@ export const HarbourDashboard: React.FC<HarbourDashboardProps> = ({
       <ConditionsHero
         region={region}
         conditions={conditions}
+        liveFlow={regionFlows?.[region]}
         onEnterRace={onEnterRace}
         isUnlocked={isUnlocked}
         width={width}
@@ -83,6 +93,10 @@ export const HarbourDashboard: React.FC<HarbourDashboardProps> = ({
       />
       <WorldSection
         conditions={conditions}
+        now={now}
+        worldFlow={worldFlow}
+        regionFlows={regionFlows}
+        onRegionView={onRegionView}
         onEnterRace={onEnterRace}
         isUnlocked={isUnlocked}
         width={width}

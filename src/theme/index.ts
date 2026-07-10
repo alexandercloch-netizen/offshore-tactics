@@ -26,6 +26,11 @@ export const colors = {
   land: '#2C3A2E',
   landHigh: '#3A4B39',
   coastline: '#6E8062',
+  // Weather-chart land (the Harbour's WorldChart ONLY — the race chart keeps
+  // its olive). On a chart whose story is the painted ocean, land must recede:
+  // dark slate sits below every wind hue in luminance, so the sea reads first.
+  weatherLand: '#232B31',
+  weatherLandHigh: '#2E373D',
 };
 
 export const spacing = {

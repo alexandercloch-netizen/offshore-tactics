@@ -1,14 +1,17 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { colors, fontSize, fontWeight, numeric, spacing } from '../../theme';
 import { WindSample } from '../../types';
 import { WEATHER_CLIMATOLOGY } from '../../data/weatherClimatology';
 import { REGION_BOUNDS, REGION_LAND } from '../../data/worldmap';
 import { BoardConditions, compassPoint, harbourRead } from '../../engine/sailNow';
+import { LiveFlowGrid } from '../../services/weather';
 import WorldChart, { WorldPin } from '../WorldChart';
+import WindScaleLegend from '../WindScaleLegend';
 import { windHeatColor } from '../windScale';
-import { blendWindGrid, WindPoint } from './windBlend';
+import { blendWindGrid, courseWindPoints, regionBlendAllowed } from './windBlend';
 import { RegionKey, REGION_META, regionRaces, shortRaceName } from './regions';
+import { liveProvenance, SEASONAL_INDICATIVE } from './provenance';
 
 // The blended field's grid: coarse cols (the strips interpolate), finer rows.
 const FLOW_COLS = 14;
@@ -18,10 +21,16 @@ const FLOW_ROWS = 22;
 // compact chart with the breeze painted on it, plus the headline readout and a
 // sailor's one-line read generated from the numbers. Display-only; tapping a
 // pin routes through the same entry the world chart uses.
+//
+// The chart climbs the same ladder as a region drill-in: the live per-region
+// lattice when it has landed → the blended course samples (moving only when
+// the samples are live — motion means live) behind the 500 km honesty gate →
+// vanes-only. The provenance chip names whichever rung is painting.
 
 interface ConditionsHeroProps {
   region: RegionKey;
   conditions: BoardConditions;
+  liveFlow?: LiveFlowGrid | null; // the home region's live lattice, if fetched
   onEnterRace: (raceId: string) => void;
   isUnlocked: (raceId: string) => boolean;
   width: number;
@@ -31,12 +40,39 @@ interface ConditionsHeroProps {
 export const ConditionsHero: React.FC<ConditionsHeroProps> = ({
   region,
   conditions,
+  liveFlow,
   onEnterRace,
   isUnlocked,
   width,
   chartHeight = 200,
 }) => {
-  const races = regionRaces(region);
+  const races = useMemo(() => regionRaces(region), [region]);
+
+  // The region's field, up the ladder — memoised so a parent re-render keeps
+  // the cells' identity and the swarm never reseeds mid-flight.
+  const field = useMemo(() => {
+    if (liveFlow) {
+      return { flow: liveFlow, motion: true, provenance: liveProvenance(liveFlow.fetchedAt) };
+    }
+    const live = conditions.source === 'live' && conditions.fetchedAt != null;
+    const provenance = live ? liveProvenance(conditions.fetchedAt as number) : SEASONAL_INDICATIVE;
+    if (!regionBlendAllowed(region)) return { flow: undefined, motion: false, provenance };
+    return {
+      flow: {
+        cells: blendWindGrid(
+          courseWindPoints(races, conditions.samples),
+          REGION_BOUNDS[region],
+          FLOW_COLS,
+          FLOW_ROWS
+        ),
+        cols: FLOW_COLS,
+        rows: FLOW_ROWS,
+      },
+      motion: live,
+      provenance,
+    };
+  }, [liveFlow, conditions, region, races]);
+
   const lead = races[0];
   if (!lead) return null;
 
@@ -54,26 +90,11 @@ export const ConditionsHero: React.FC<ConditionsHeroProps> = ({
       color: windHeatColor(s.speedKn),
       label: shortRaceName(race),
       locked: !isUnlocked(race.id),
-    };
-  });
-
-  // The region's breeze, blended from its real course samples (exact at each
-  // anchor, inverse-distance between them) — the heat wash and the particle
-  // swarm both ride it.
-  const points: WindPoint[] = races.map((race) => {
-    const s = conditions.samples[race.id] ?? race.prevailingWind;
-    return {
-      lat: race.waypoints[0].lat,
-      lon: race.waypoints[0].lon,
+      // Each pin's own course reading — under a painted field the vanes step
+      // back; on the vanes-only rung they ARE the weather.
       fromDeg: s.fromDeg,
-      speedKn: s.speedKn,
     };
   });
-  const flow = {
-    cells: blendWindGrid(points, REGION_BOUNDS[region], FLOW_COLS, FLOW_ROWS),
-    cols: FLOW_COLS,
-    rows: FLOW_ROWS,
-  };
 
   return (
     <View style={styles.section} testID="harbour-hero">
@@ -93,12 +114,15 @@ export const ConditionsHero: React.FC<ConditionsHeroProps> = ({
         land={REGION_LAND[region] ?? []}
         pins={pins}
         onPinPress={onEnterRace}
-        windWash={sample}
-        flow={flow}
+        windWash={field.flow ? sample : undefined}
+        flow={field.flow}
+        flowMotion={field.motion}
+        provenance={field.provenance}
         width={width}
         height={chartHeight}
         testID="hero-chart"
       />
+      <WindScaleLegend layer="wind" />
     </View>
   );
 };

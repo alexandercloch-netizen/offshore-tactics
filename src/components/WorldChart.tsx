@@ -8,6 +8,7 @@ import { GeoBounds } from '../data/worldmap';
 import { windHeatColor } from './windScale';
 import { FlowCell } from './flowField';
 import { WindParticles } from './WindParticles';
+import { useReducedMotion } from '../lib/useReducedMotion';
 
 // The Harbour's chart: a lightweight, display-only map of a fixed geographic
 // box (the whole world, or one sailing region) with tappable pins on top. It
@@ -37,11 +38,23 @@ interface WorldChartProps {
   // Paint the current breeze over the water (the conditions hero): a wash of
   // the wind-band colour plus a from-direction arrow.
   windWash?: WindSample;
-  // The blended regional wind field (windBlend.ts over the region's real
-  // course samples): a soft heat wash per row plus the live particle swarm —
-  // the Harbour's charts read like the race charts. Region boxes only; the
-  // world chart stays wash-free (blending across oceans would be fiction).
+  // The wind field over these waters: a heat wash per row plus the particle
+  // swarm. On a region box it is the blended course samples or the live
+  // per-region lattice; on the world chart it is the 10° world lattice, where
+  // every rendered cell IS a real sample (live ECMWF or the baked monthly
+  // ERA5 climatology) — real data superseded the old wash-free ruling at
+  // world scale.
   flow?: { cells: FlowCell[]; cols: number; rows: number };
+  // Motion means live: a seasonal wash passes false and paints WITHOUT the
+  // swarm — the ocean only moves when the data is real-now.
+  flowMotion?: boolean;
+  // The luminance-inverted wash: 0.60 on the hero/region charts, 0.55 on the
+  // world strip (its land-to-sea ratio needs the whisper of restraint).
+  washOpacity?: number;
+  // The on-chart source line ("ECMWF · as of 14:05" / "Seasonal pattern ·
+  // ERA5 · July" / "Seasonal · indicative") — every chart that paints weather
+  // carries one.
+  provenance?: string;
   width: number;
   height: number;
   // Caption block width. The world view packs seven stations onto a short
@@ -111,6 +124,9 @@ export const WorldChart: React.FC<WorldChartProps> = ({
   onPinPress,
   windWash,
   flow,
+  flowMotion = true,
+  washOpacity = 0.6,
+  provenance,
   width,
   height,
   captionWidth = 120,
@@ -120,15 +136,17 @@ export const WorldChart: React.FC<WorldChartProps> = ({
     () => worldProjection(bounds, width, height),
     [bounds, width, height]
   );
+  const reducedMotion = useReducedMotion();
 
   // Scoped SVG ids: two charts share the page (the hero and the world map).
   const uid = React.useId().replace(/[^a-zA-Z0-9]/g, '');
   const seaId = `wc-sea-${uid}`;
   const landId = `wc-land-${uid}`;
 
-  // The blended field as a heat wash: one horizontal gradient per row (the
-  // same strip trick as RouteMap — solid cells read as tiles), quiet enough
-  // that the land, pins and particles stay the chart's voice.
+  // The field as a heat wash: one horizontal gradient per row (the same strip
+  // trick as RouteMap — solid cells read as tiles). Loud on purpose: the
+  // luminous sea over recessive slate land IS the chart's voice now, with the
+  // near-white streaks and the pins reading over it.
   const flowWash = useMemo(() => {
     if (!flow || flow.cols < 2 || flow.rows < 2 || flow.cells.length < flow.cols * flow.rows) {
       return null;
@@ -159,7 +177,7 @@ export const WorldChart: React.FC<WorldChartProps> = ({
           width={w}
           height={Math.min(h, (r + 0.5) * stripH) - top}
           fill={`url(#${gid})`}
-          opacity={0.3}
+          opacity={washOpacity}
         />
       );
     }
@@ -169,7 +187,7 @@ export const WorldChart: React.FC<WorldChartProps> = ({
         {strips}
       </>
     );
-  }, [flow, w, h, uid]);
+  }, [flow, w, h, uid, washOpacity]);
 
   // Land geometry is static per bounds — never re-path it on a re-render.
   const landLayer = useMemo(
@@ -265,12 +283,23 @@ export const WorldChart: React.FC<WorldChartProps> = ({
             <Stop offset="0" stopColor={colors.navy} />
             <Stop offset="1" stopColor={colors.abyss} />
           </LinearGradient>
+          {/* Weather-chart land: dark slate, not the race chart's olive — on a
+              painted ocean the land must sit below every wind hue. */}
           <LinearGradient id={landId} x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor={colors.landHigh} />
-            <Stop offset="1" stopColor={colors.land} />
+            <Stop offset="0" stopColor={colors.weatherLandHigh} />
+            <Stop offset="1" stopColor={colors.weatherLand} />
           </LinearGradient>
         </Defs>
-        <Rect x={0} y={0} width={w} height={h} fill={`url(#${seaId})`} rx={radius.sm} />
+        {/* Under a wash the sea flattens to near-abyss: the navy gradient must
+            not compete with the data's own colour. */}
+        <Rect
+          x={0}
+          y={0}
+          width={w}
+          height={h}
+          fill={flow ? colors.abyss : `url(#${seaId})`}
+          rx={radius.sm}
+        />
         {windWash && !flow ? (
           // The flat wind wash: the sea takes the band's colour, faintly —
           // honest paint (one sample for these waters), superseded wherever a
@@ -286,7 +315,10 @@ export const WorldChart: React.FC<WorldChartProps> = ({
           />
         ) : null}
         {flowWash}
-        {flow ? (
+        {/* Motion means live: only a live field flies the swarm (a reduced-
+            motion player gets its still streamlets); a seasonal wash holds
+            perfectly still. */}
+        {flow && flowMotion ? (
           <WindParticles
             cells={flow.cells}
             cols={flow.cols}
@@ -294,7 +326,7 @@ export const WorldChart: React.FC<WorldChartProps> = ({
             project={project}
             layer="wind"
             color={colors.foam}
-            count={Math.round(Math.min(Math.max((w * h) / 2600, 60), 160))}
+            motion={!reducedMotion}
             width={w}
             height={h}
           />
@@ -307,7 +339,10 @@ export const WorldChart: React.FC<WorldChartProps> = ({
             <G
               key={`vane-${pin.id}`}
               transform={`translate(${at.x}, ${at.y}) rotate(${((pin.fromDeg + 180) % 360).toFixed(0)})`}
-              opacity={pin.locked ? 0.35 : 0.85}
+              // With a painted field behind them the vanes step back — the
+              // field carries the story; a bare (vanes-only) chart lets them
+              // speak at full strength.
+              opacity={pin.locked ? 0.35 : flow ? 0.6 : 0.85}
             >
               <Path
                 d="M 0 -8 L 0 -18 M -3 -13 L 0 -19 L 3 -13"
@@ -366,6 +401,17 @@ export const WorldChart: React.FC<WorldChartProps> = ({
           </Pressable>
         )
       )}
+      {/* The source line lives ON the chart — the paint's honesty is part of
+          the paint. */}
+      {provenance ? (
+        <View
+          pointerEvents="none"
+          style={styles.provenance}
+          testID={`${testID ?? 'chart'}-provenance`}
+        >
+          <Text style={styles.provenanceText}>{provenance}</Text>
+        </View>
+      ) : null}
       {labelled.map(({ pin, cap }) =>
         pin.label && cap ? (
           <Pressable
@@ -463,6 +509,19 @@ const styles = StyleSheet.create({
   },
   pinLabelLocked: {
     color: colors.slate,
+  },
+  provenance: {
+    position: 'absolute',
+    left: spacing.xs,
+    bottom: spacing.xs,
+    backgroundColor: colors.overlay,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+  },
+  provenanceText: {
+    color: colors.mist,
+    fontSize: fontSize.xs,
   },
 });
 
