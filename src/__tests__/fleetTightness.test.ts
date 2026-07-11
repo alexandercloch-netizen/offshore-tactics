@@ -42,6 +42,13 @@ interface SimResult {
 // (as the real game does at beginRace) — caching it across seeds would pace the
 // fleet to a different wind than the player faces. Cache by race+seed+scenario
 // so the two policies for one seed share the (expensive) headless run.
+//
+// Left on the bare club-average benchmark (no crew arg): this test deliberately
+// pits a kitted, pushing player against the fleet's baseline anchor, and its
+// tuned place/gap thresholds are calibrated to that. The faithful per-crew
+// benchmark (crew threading in `fleetBenchmarkHours`) is exercised by
+// `windScenario.test.ts`; wiring it in here re-paces these thresholds and is a
+// coordinated re-tune for a later change.
 const benchCache = new Map<string, number>();
 function benchFor(raceId: string, seed: number, scenario?: WeatherScenario): number {
   const key = `${raceId}:${seed}:${scenario?.label ?? 'seasonal'}`;

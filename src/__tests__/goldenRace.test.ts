@@ -84,7 +84,12 @@ function runGolden(cfg: GoldenConfig): GoldenSummary {
   const fleet = createFleet(
     race,
     raceDivision(race, cfg.division),
-    fleetBenchmarkHours(race, windField, boat),
+    // Mirror beginRace: the fleet is paced off the player's actual boat AND crew
+    // (skill + count via the provisioning-seeded starting condition). This feeds
+    // ONLY the fleet's pace, never the player's own stepRace trajectory — so the
+    // player-trajectory pins below stay byte-identical; only the fleet-relative
+    // pins (position/correctedPos/fleetTop3) move.
+    fleetBenchmarkHours(race, windField, boat, crewIds, provisions),
     boat
   );
 
@@ -152,7 +157,7 @@ function runGolden(cfg: GoldenConfig): GoldenSummary {
     .sort((a, b) => b.distanceNm - a.distanceNm)
     .slice(0, 3)
     .map((c) => c.name);
-  return {
+  const summary = {
     ticks,
     decisions,
     rngDraws,
@@ -172,6 +177,7 @@ function runGolden(cfg: GoldenConfig): GoldenSummary {
     eventIds,
     fleetTop3,
   };
+  return summary;
 }
 
 // A synthetic, fully deterministic gale over the course: a hard sou'wester with
@@ -223,27 +229,27 @@ describe('golden races — the determinism contract', () => {
 // ---------------------------------------------------------------------------
 // The pins. Captured from the engine — byte-exact.
 //
-// RE-BLESSED for the *signed decision reward* (a genuinely good tactical read now
-// GAINS time; see `resolveFieldDelta`/`realisedDecisionHours` in gameEngine.ts).
-// This is a DELIBERATE behaviour change, so the outcome pins legitimately move.
+// PARTIALLY RE-BLESSED for the *faithful fleet benchmark* (`fleetBenchmarkHours`
+// now paces the AI fleet off the player's ACTUAL boat AND crew — skill via
+// `crewSkillFactor`, and crew count/condition via the same `initialCondition` the
+// race seeds; see gameEngine.ts). The benchmark feeds ONLY `createFleet`'s pace,
+// NEVER the player's own `stepRace` trajectory, so this re-bless is tiny and
+// tightly bounded:
 //
-// `rngDraws` ALSO moved here — and that is expected for THIS change, not a stream
-// break. The fix adds/removes NO `rnd()` calls (it only signs two pure deterministic
-// transforms), but a decision's realised hours feed `elapsedHours`, which is the
-// clock the wind field is sampled at every tick (gameEngine `stepRace`, ~line 1300).
-// Crediting time therefore shifts the boat's whole downstream trajectory — a
-// different number of ticks, and different events picked at different arrival times —
-// which consumes a different *count* of the same unchanged draw stream. In other
-// words the trajectory diverged, not the RNG plumbing. (Proof it adds no draws: the
-// draw-free / stream-neutrality unit tests in `decisions.test.ts` and
-// `sailChange.test.ts` are untouched and green.)
+//   • The PLAYER-TRAJECTORY pins are UNCHANGED, byte-for-byte — `ticks`,
+//     `decisions`, `elapsedH`, `distanceNm`, `hull`, `stamina`, `eventIds` — AND so
+//     is `rngDraws` (10670 / 11510 / 4669), in ALL THREE races. The player sails the
+//     exact same race; the fix adds/removes NO `rnd()` calls and `createFleet` still
+//     draws exactly 5 values per boat regardless of the benchmark VALUE. If any of
+//     these had moved, the change would have reached into the player's stream — it
+//     did not (confirmed against the pre-change engine on this branch).
+//   • Exactly ONE pin moves: the OFFSHORE `correctedPos`, 36 → 35. The golden crews
+//     happen to sit near the club average these boats were formerly benchmarked at,
+//     so the faithful benchmark only nudges the fleet's handicap standings by a hair
+//     here (inshore and gale are byte-identical); the fix bites harder for crews/boats
+//     that differ more from the old generic assumption (see windScenario.test.ts).
 //
-// The inshore case is an extreme illustration: seed 101 is a light-air day where a
-// ~0.7 h clock shift lets the boat catch a breeze it otherwise parks in — a ~1.6 h
-// of direct decision credit amplifies into a much larger finish swing via that
-// coupling (realistic breeze-timing, not a code bug). The offshore/gale finishes
-// move only a few percent, as intended. Re-bless the VALUES; never re-bless to hide
-// an added/removed draw.
+// Never re-bless to hide a moved player-trajectory pin or a changed `rngDraws`.
 // ---------------------------------------------------------------------------
 
 const GOLDEN_INSHORE: GoldenSummary = {
@@ -272,6 +278,8 @@ const GOLDEN_INSHORE: GoldenSummary = {
   ],
   fleetTop3: ['Mistral II', 'Northern Child', 'Lucky'],
 };
+// NB: the inshore case is byte-identical to the pre-change engine — the golden
+// crew's faithful benchmark lands on the same fleet pace here, so nothing moved.
 
 const GOLDEN_OFFSHORE: GoldenSummary = {
   ticks: 99,
@@ -282,7 +290,10 @@ const GOLDEN_OFFSHORE: GoldenSummary = {
   elapsedH: 133.099396,
   distanceNm: 688.221188,
   position: 31,
-  correctedPos: 36,
+  // The ONLY pin that moved for this change: correctedPos 36 → 35. The faithful
+  // per-crew benchmark nudged one rival's handicap standing past the player;
+  // everything else (incl. rngDraws 11510 and on-water position 31) is unchanged.
+  correctedPos: 35,
   hull: 63.815566,
   stamina: 34.062182,
   eventIds: [

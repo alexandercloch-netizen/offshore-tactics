@@ -122,6 +122,19 @@ export function defaultStepNm(race: Race): number {
   return Math.max(race.distanceNm * STEP_FRACTION, 0.5);
 }
 
+// The fleet benchmark's clean run walks the course at a coarser step than
+// gameplay to keep setup snappy. A convergence audit (see the PR notes) found the
+// 3× step carries a modest per-boat bias vs the lived tick model — largest for a
+// heavy, hard-tacking hull, whose extra tacking miles a finer step resolves — so a
+// finer step is *more* accurate. It is left at 3× here deliberately: the dominant
+// fairness fix is the crew threading below (which corrects the benchmark far more
+// than the step does), and dropping to 2× both ~1.5×'d benchmark cost everywhere
+// and materially re-paced the tuned fleet-tightness cases through that same
+// tacking-resolution shift. Reducing the step is a sound follow-up once the router
+// is cheaper and the fleet-pacing tests are re-tuned together. The parameter is
+// plumbed through `cleanRunHours` so that change is a one-line flip.
+const CLEAN_RUN_STEP_SCALE = 3;
+
 export function raceDivision(race: Race, division: DivisionKey): RaceDivision {
   return race.divisions[division];
 }
@@ -486,23 +499,34 @@ export function makeWindField(race: Race): WindField {
 
 // A clean headless run of `boat` over the whole course, on the SAME movement
 // model the player sails (`stepRace`'s core: weather-route, advance, re-route on
-// shifts and roundings) but with a fresh hull, a club-average crew and a steady
-// cruise — i.e. the boat's realistic potential, deterministically (no RNG, no
-// decisions, no wear). This is the trustworthy anchor for fleet pacing: a
-// route-only ETA (`estimateRouteHours`) drifts 2–3× off the lived result in
-// light, shifty air, because the live boat sails through holes the snapshot
-// route gets stuck in. Mirrors `stepRace` so the two can't diverge by course.
+// shifts and roundings) at a steady cruise — the boat's realistic potential,
+// deterministically (no RNG, no decisions). Crew is faithful, not generic: the
+// caller passes the crew's `skillMul` and the `startCondition` the race actually
+// seeds (crew stamina/morale + provisioning), so the run tracks what the player
+// will sail; omit them (legacy/tests) and it falls back to a club-average, fresh
+// boat. This is the trustworthy anchor for fleet pacing: a route-only ETA
+// (`estimateRouteHours`) drifts 2–3× off the lived result in light, shifty air,
+// because the live boat sails through holes the snapshot route gets stuck in.
+// Mirrors `stepRace` so the two can't diverge by course.
 export function cleanRunHours(
   race: Race,
   boat: Boat,
   field: WindField,
   skillMul = crewSkillFactor(DEFAULT_CREW_SKILL),
-  effortMul = EFFORT_SPEED.cruise
+  effortMul = EFFORT_SPEED.cruise,
+  startCondition?: BoatCondition,
+  stepScale = CLEAN_RUN_STEP_SCALE
 ): number {
   const marks = race.waypoints;
   const land = LANDMASSES[race.id];
   const wearMul = EFFORT_WEAR.cruise;
-  const condition: BoatCondition = { hullIntegrity: 100, crewStamina: 100, crewMorale: 100 };
+  // Start from the crew+provisions the player will actually cross the line with
+  // (the same `initialCondition` the race seeds), not an idealised fresh boat —
+  // so the benchmark reflects a tired, under-crewed or well-fed boat exactly as
+  // the player sails it. Absent (legacy/tests) it falls back to a fresh hull.
+  const condition: BoatCondition = startCondition
+    ? { ...startCondition }
+    : { hullIntegrity: 100, crewStamina: 100, crewMorale: 100 };
   const total = race.distanceNm;
   // A coarser step than gameplay keeps race setup snappy: the benchmark only
   // needs the total finish time, not a smooth track, and time integrates over
@@ -510,7 +534,7 @@ export function cleanRunHours(
   // benchmark is deliberately tide-FREE — tide is applied symmetrically to the
   // player and the fleet at race time, so it cancels in the standings and the
   // delicate, tide-free balance is preserved.
-  const step = Math.max(defaultStepNm(race) * 3, 1);
+  const step = Math.max(defaultStepNm(race) * stepScale, 1);
   const start = marks[0];
   let pos: GeoPoint = { lat: start.lat, lon: start.lon };
   let nextMarkIndex = 1;
@@ -565,16 +589,39 @@ export function cleanRunHours(
 }
 
 // The benchmark finish time the AI fleet is paced around: the player's own boat
-// sailed a clean cruise on the weather-optimal line, via the SAME tick model the
-// player sails (`cleanRunHours`). Anchoring on the player's boat self-calibrates
-// per course AND per boat, so the fleet is a genuine fight whatever you charter
-// — a runner-up cruiser doesn't get lapped, a maxi doesn't sail away. The edge
-// from a sharper crew, harder effort or a better-rated boat then shows where it
-// should: ground made on the field and on corrected (handicap) time.
-export function fleetBenchmarkHours(race: Race, field: WindField, boat?: Boat): number {
+// AND crew sailed a clean cruise on the weather-optimal line, via the SAME tick
+// model the player sails (`cleanRunHours`). Anchoring on the player's boat+crew
+// self-calibrates per course, per boat AND per crew, so the fleet is a genuine
+// fight whatever you charter and whoever you sign — a runner-up cruiser doesn't
+// get lapped, a maxi doesn't sail away, and a thin or green crew isn't left last
+// on corrected time before a tactic is even played. The edge from HARDER effort,
+// SHARP sail selection or good tactical calls then shows where it should: ground
+// made on the field and on corrected (handicap) time — the levers the player
+// actually works in the race.
+//
+// Crew is threaded exactly as the live race feels it: `crewSkillFactor` scales
+// boat speed, and the starting `initialCondition` folds in crew stamina/morale
+// AND crew count (a short-handed boat provisions differently — the engine's only
+// crew-count-vs-capacity channel, `provisioningPlan` off `crewIds.length`, is the
+// same one `boatSpeedFor` sees at race time via `condition`). Passing no crew
+// (legacy/tests) reproduces the old club-average, fresh-boat benchmark exactly.
+export function fleetBenchmarkHours(
+  race: Race,
+  field: WindField,
+  boat?: Boat,
+  crewIds: string[] = [],
+  provisions: ProvisionSelection[] = []
+): number {
   const ref = boat ?? getBoatById('boat-corsair');
   if (!ref) return race.recordTimeHours * 2.4;
-  return cleanRunHours(race, ref, field);
+  const skillMul = crewSkillFactor(crewSkillAverage(crewIds));
+  // Only seed a real starting condition when a crew is signed; with none, keep
+  // the fresh-boat fallback so the empty-crew call is byte-identical to before.
+  const crew = crewIds
+    .map((id) => getCrewById(id))
+    .filter((c): c is CrewMember => Boolean(c));
+  const startCondition = crew.length ? initialCondition(crew, provisions, race) : undefined;
+  return cleanRunHours(race, ref, field, skillMul, EFFORT_SPEED.cruise, startCondition);
 }
 
 // Geometric distance still to sail toward the finish (mark to mark, ignoring
