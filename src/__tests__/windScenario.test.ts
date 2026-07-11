@@ -163,4 +163,54 @@ describe('createWindField with a scenario', () => {
     expect(galeHours).toBeGreaterThan(0);
     expect(driftHours).toBeGreaterThan(galeHours);
   });
+
+  // The benchmark paces the fleet, so it must self-calibrate to the ACTUAL crew
+  // — skill AND the starting condition crew count drives through provisioning —
+  // not a generic club-average boat. Without this, a config could start
+  // last-by-construction on corrected time before a tactic is even played.
+  // (A short, open-water crossing keeps this benchmark sweep quick for CI.)
+  describe('the fleet benchmark reflects the actual crew', () => {
+    const race = () => getRaceById('race-malta-syracuse')!;
+    const boat = () => getBoatById('boat-corsair')!;
+    // The SAME seasonal field for every arm of a comparison, so only the crew
+    // input differs (cleanRunHours draws no RNG; the field is deterministic).
+    const field = () => {
+      setRng(mulberry32(9));
+      return createWindField(race());
+    };
+
+    it('a sharper crew shortens the benchmark (skill scales boat speed)', () => {
+      // Two crack hands vs a single journeyman — the sharp crew makes the boat
+      // faster, so its clean-run benchmark is quicker.
+      const sharp = fleetBenchmarkHours(race(), field(), boat(), ['crew-vega', 'crew-thorne']);
+      const green = fleetBenchmarkHours(race(), field(), boat(), ['crew-fontaine']);
+      expect(sharp).toBeLessThan(green);
+    });
+
+    it('crew count feeds the benchmark through the provisioning-seeded condition', () => {
+      // The benchmark tracks the actual roster, crew COUNT included. This engine
+      // has NO capacity-handling speed penalty; crew count reaches boat speed the
+      // SAME way the live race applies it — through `initialCondition`'s
+      // provisioning load (crew-days = count × passage). On the SAME thin stores,
+      // a big boat crewed full has more mouths to feed than the same boat sailed
+      // short-handed, so it starts hungrier (worn) and its clean-run benchmark is
+      // slower. (In normal play both arms are auto-provisioned to their own crew,
+      // so an adequately-fed short-handed boat is NOT penalised — matching what the
+      // player actually sails.) The fuller roster here is also a shade less skilled
+      // on average, which pushes the same way; both are honest properties of the
+      // real crew the benchmark must reflect.
+      const thinStores = [{ provisionId: 'prov-rations', quantity: 2 }];
+      const full10 = [
+        'crew-vega', 'crew-thorne', 'crew-okafor', 'crew-halvorsen', 'crew-lindqvist',
+        'crew-mercer', 'crew-tan', 'crew-rossi', 'crew-nakamura', 'crew-mbeki',
+      ];
+      const short5 = full10.slice(0, 5);
+      const fullBench = fleetBenchmarkHours(race(), field(), boat(), full10, thinStores);
+      const shortBench = fleetBenchmarkHours(race(), field(), boat(), short5, thinStores);
+      // More hands on the same rations → bigger shortfall → worn crew → slower.
+      // (This provisioning shortfall is also how a well-fed crew beats an
+      // unprovisioned one — the same `initialCondition` channel, tested via count.)
+      expect(fullBench).toBeGreaterThan(shortBench);
+    });
+  });
 });

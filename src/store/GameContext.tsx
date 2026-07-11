@@ -775,7 +775,10 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
     const fleet = createFleet(
       race,
       raceDivision(race, current.selectedDivision),
-      fleetBenchmarkHours(race, windField, boat),
+      // Pace the fleet off the player's actual boat AND crew (skill + count via
+      // provisioning-seeded condition), so no loadout starts last-by-construction
+      // on corrected time — effort, sails and calls are the levers to win.
+      fleetBenchmarkHours(race, windField, boat, current.selectedCrewIds, current.provisions),
       boat
     );
     dispatch({
@@ -808,7 +811,10 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
     const fleet = createFleet(
       race,
       raceDivision(race, current.selectedDivision),
-      fleetBenchmarkHours(race, windField, boat),
+      // Pace the fleet off the player's actual boat AND crew (skill + count via
+      // provisioning-seeded condition), so no loadout starts last-by-construction
+      // on corrected time — effort, sails and calls are the levers to win.
+      fleetBenchmarkHours(race, windField, boat, current.selectedCrewIds, current.provisions),
       boat
     );
     dispatch({
