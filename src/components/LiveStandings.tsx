@@ -6,10 +6,20 @@ import { liveCorrectedStandings, CorrectedStanding } from '../engine/fleet';
 import { formatGap } from '../engine/gameEngine';
 
 // The navigator's glance at the corrected-time standings: the top few boats on
-// handicap, with the delta to the player. Collapsible (a tap toggles it) and
-// collapsed-friendly so it never obscures the chart. The cadence is deliberately
-// calm — the strip only recomputes when `cadenceKey` changes (the parent bumps it
-// every couple of seconds), so it reads like a glance, not a twitchy ticker.
+// handicap, with the delta to the player. Open from the gun (the corrected place
+// is the honest, scored truth — a well-sailed boat is usually winning it even as
+// rivals stream past on the water), but collapsible for a clear chart. Collapsed
+// it still names the player's OWN corrected place and the fleet size, so the
+// number the player is scored on is never more than a glance away — no tap
+// required. The cadence is deliberately calm — the strip only recomputes when
+// `cadenceKey` changes (the parent bumps it every couple of seconds), so it
+// reads like a glance, not a twitchy ticker.
+function ordinal(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
 interface Props {
   fleet: Competitor[];
   totalNm: number;
@@ -31,7 +41,9 @@ const LiveStandings: React.FC<Props> = ({
   cadenceKey,
   topN = 4,
 }) => {
-  const [collapsed, setCollapsed] = useState(true);
+  // Default OPEN: the corrected place is the loud, always-visible truth from the
+  // gun; a tap can still fold it away for a clean chart.
+  const [collapsed, setCollapsed] = useState(false);
 
   // Recompute only on the calm cadence, not every tick. A held snapshot keeps the
   // displayed order stable between cadence beats so the strip doesn't flicker.
@@ -53,6 +65,12 @@ const LiveStandings: React.FC<Props> = ({
 
   const playerIdx = standings.findIndex((s) => s.isPlayer);
   const playerHours = playerIdx >= 0 ? standings[playerIdx].correctedHours : 0;
+  // Collapsed still shows where the player stands on handicap — computed even
+  // when the body is hidden, so the scored number is always a glance away.
+  const collapsedLabel =
+    playerIdx >= 0
+      ? `${ordinal(playerIdx + 1)} of ${standings.length} · on handicap ▾`
+      : `${standings.length} boats ▾`;
   // The leaders, plus the player's own line if they're outside the top N — so a
   // glance always shows where you stand on handicap.
   const rows = standings.slice(0, topN);
@@ -85,9 +103,11 @@ const LiveStandings: React.FC<Props> = ({
         style={styles.header}
         testID="live-standings-toggle"
       >
-        <Text style={styles.title}>Corrected Standings</Text>
-        <Text style={styles.chevron}>
-          {collapsed ? `${standings.length} boats ▾` : 'Hide ▴'}
+        <Text style={styles.title} numberOfLines={1}>
+          Corrected Standings
+        </Text>
+        <Text style={styles.chevron} numberOfLines={1} testID="live-standings-summary">
+          {collapsed ? collapsedLabel : 'Hide ▴'}
         </Text>
       </Pressable>
       {collapsed ? null : (
@@ -129,10 +149,13 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.bold,
     textTransform: 'uppercase',
     letterSpacing: 1,
+    flexShrink: 1,
   },
   chevron: {
     color: colors.mist,
     fontSize: fontSize.xs,
+    flexShrink: 0,
+    marginLeft: spacing.sm,
   },
   body: {
     paddingHorizontal: spacing.md,
