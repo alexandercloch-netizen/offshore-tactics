@@ -269,3 +269,41 @@ begin
 exception when others then
   raise notice 'leaderboard dedupe constraint not applied: %', sqlerrm;
 end $$;
+
+-- =====================================================================
+-- feedback: the Notice Board — a message to the Race Committee
+-- =====================================================================
+-- Player-submitted suggestions, bug reports and content requests. Insert-only
+-- for everyone (guests included) — the app never lets the player read the board.
+-- Until this table exists (or with no Supabase env at all) the client saves each
+-- note to a local AsyncStorage queue and posts it opportunistically once the
+-- schema is re-run / the app is back online, so nothing is ever lost.
+--
+-- The open anon insert mirrors the leaderboard's open authed insert; a signed-in
+-- user may only stamp their OWN id (never someone else's). Future follow-up:
+-- add rate-limiting (e.g. a per-ip/per-uid throttle) — deliberately not built here.
+create table if not exists public.feedback (
+  id         uuid primary key default gen_random_uuid(),
+  user_id    uuid references auth.users (id) on delete set null,  -- NULL for guests
+  kind       text not null check (kind in ('race_suggestion','bug','content_request','other')),
+  message    text not null check (char_length(message) between 1 and 4000),
+  subject    text,                                  -- "which race", "what you expected", etc.
+  context    jsonb not null default '{}'::jsonb,    -- platform/appVersion/screen/locale/signedIn
+  reply_ok   boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+alter table public.feedback enable row level security;
+
+-- Insert-only for everyone incl. anon; a signed-in user may only stamp their own id.
+drop policy if exists "feedback insertable by anyone" on public.feedback;
+create policy "feedback insertable by anyone"
+  on public.feedback for insert
+  with check (user_id is null or auth.uid() = user_id);
+
+-- No one reads another's feedback; an owner may read their own.
+drop policy if exists "feedback readable by owner" on public.feedback;
+create policy "feedback readable by owner"
+  on public.feedback for select using (auth.uid() = user_id);
+
+grant insert on public.feedback to anon, authenticated;

@@ -27,6 +27,7 @@ import TrophyCaseScreen from '../screens/TrophyCaseScreen';
 import FleetScreen from '../screens/FleetScreen';
 import BoatBuilderScreen from '../screens/BoatBuilderScreen';
 import SailLockerScreen from '../screens/SailLockerScreen';
+import NoticeBoardScreen from '../screens/NoticeBoardScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -178,6 +179,11 @@ export const AppNavigator: React.FC = () => {
           name="SailLocker"
           component={SailLockerScreen}
           options={{ title: 'Sail Locker' }}
+        />
+        <Stack.Screen
+          name="NoticeBoard"
+          component={NoticeBoardScreen}
+          options={{ title: 'Notice Board' }}
         />
       </Stack.Navigator>
       </ErrorBoundary>

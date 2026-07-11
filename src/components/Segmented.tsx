@@ -11,6 +11,8 @@ import { colors, fontSize, fontWeight, radius, spacing, status, surface } from '
 export interface SegmentedOption<T> {
   value: T;
   label: string;
+  // Optional per-segment testID (the control-level testID names the whole row).
+  testID?: string;
 }
 
 interface SegmentedProps<T> {
@@ -41,6 +43,7 @@ export function Segmented<T extends string | number>({
             accessibilityRole="button"
             accessibilityState={{ selected: active }}
             accessibilityLabel={opt.label}
+            testID={opt.testID}
             style={[styles.segment, stretch && styles.segmentStretch, active && styles.segmentActive]}
           >
             <Text style={[styles.label, active && styles.labelActive]}>{opt.label}</Text>

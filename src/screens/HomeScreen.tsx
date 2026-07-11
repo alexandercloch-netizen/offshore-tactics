@@ -246,9 +246,20 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
     >
       <View style={[styles.column, { width: contentWidth }]}>
         <View style={styles.hero}>
-          <Text style={styles.kicker}>
-            {user ? `Welcome aboard, ${displayName}` : 'Offshore Tactics'}
-          </Text>
+          <View style={styles.heroTop}>
+            <Text style={styles.kicker}>
+              {user ? `Welcome aboard, ${displayName}` : 'Offshore Tactics'}
+            </Text>
+            <Text
+              style={styles.pennant}
+              accessibilityRole="button"
+              accessibilityLabel="Notice Board — message the Race Committee"
+              testID="feedback-entry-home"
+              onPress={() => navigation.navigate('NoticeBoard', { fromRoute: 'Home' })}
+            >
+              ⚑
+            </Text>
+          </View>
           <Text style={styles.title}>THE HARBOUR</Text>
           <Text style={styles.tagline}>{goalHeadline(player?.goal)}</Text>
         </View>
@@ -315,6 +326,17 @@ const styles = StyleSheet.create({
   content: { alignItems: 'center' },
   column: { paddingHorizontal: spacing.xl },
   hero: { marginBottom: spacing.xl },
+  heroTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  pennant: {
+    color: colors.brassLight,
+    fontSize: fontSize.lg,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
   kicker: {
     color: colors.brassLight,
     fontSize: fontSize.sm,

@@ -129,6 +129,7 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
         onViewTrophyCase={() => navigation.navigate('TrophyCase')}
         onReset={state.history.length > 0 ? confirmReset : undefined}
         onAccount={configured ? () => navigation.navigate('Auth') : undefined}
+        onNoticeBoard={() => navigation.navigate('NoticeBoard', { fromRoute: 'Profile' })}
         onRenameGuest={
           !signedIn && player
             ? (name: string) => setPlayerProfile({ ...player, displayName: name })
