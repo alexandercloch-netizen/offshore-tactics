@@ -2,7 +2,16 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { GameEvent, GameState, GeoPoint, RootStackParamList, TacticalChoice, VmgPreview } from '../types';
+import {
+  Competitor,
+  GameEvent,
+  GameState,
+  GeoPoint,
+  RaceProgress,
+  RootStackParamList,
+  TacticalChoice,
+  VmgPreview,
+} from '../types';
 import { colors, fontSize, fontWeight, radius, spacing } from '../theme';
 import { getRaceById } from '../data';
 import { LANDMASSES } from '../data/landmasses';
@@ -66,6 +75,30 @@ function ordinal(n: number): string {
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }
 
+// The player's 1-based rank on CORRECTED (handicap) time at a given moment — the
+// standing they're actually scored on, not the line-honours order rivals stream
+// past in on the water. Read-only over existing state; the debrief reports its
+// change across a call so "gained N places" means the result that counts.
+function correctedRank(
+  state: GameState,
+  fleet: Competitor[],
+  progress: RaceProgress
+): number | undefined {
+  const r = getRaceById(state.selectedRaceId);
+  const b = resolveBoatById(state, state.selectedBoatId);
+  if (!r || !b || fleet.length === 0) return undefined;
+  const rows = liveCorrectedStandings(
+    fleet,
+    r.distanceNm,
+    progress.elapsedHours,
+    progress.distanceCoveredNm,
+    ratingTccFor(b),
+    b.name
+  );
+  const idx = rows.findIndex((row) => row.isPlayer);
+  return idx < 0 ? undefined : idx + 1;
+}
+
 export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
@@ -97,7 +130,9 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
   const [showHelp, setShowHelp] = useState(false);
   const [legendUntil, setLegendUntil] = useState(0);
   // The live-standings strip and the ribbon's corrected gap update on a calm
-  // cadence (~2s), not every 150ms tick — a navigator's glance, not a ticker.
+  // cadence (~1s), not every 150ms tick — a navigator's glance, not a ticker.
+  // Kept brisk enough that the honest corrected place doesn't lag the action,
+  // but not so fast it strobes.
   const [standingsBeat, setStandingsBeat] = useState(0);
 
   const race = getRaceById(state.selectedRaceId);
@@ -144,9 +179,10 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
   const activeEventRef = useRef<GameEvent | null>(null);
   activeEventRef.current = activeEvent;
   const standingsTickRef = useRef(0);
-  // The position when the current interruption docked, so the debrief ribbon
-  // can report places gained/lost across the call.
-  const positionBeforeRef = useRef(0);
+  // The player's CORRECTED (handicap) rank when the current interruption docked,
+  // so the debrief ribbon reports places gained/lost on the standing the player
+  // is actually scored on — not the line-honours order rivals stream past in.
+  const correctedRankBeforeRef = useRef<number | undefined>(undefined);
   // The single chart's field cache: the swarm reseeds if the cells array
   // identity changes, so rebuild only when size/layer/hour actually move.
   const fieldCache = useRef<{ key: string; field: FlowField } | null>(null);
@@ -192,12 +228,16 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
       if (paused || eventActiveRef.current || helpRef.current) return;
       const outcome = tickRef.current();
       standingsTickRef.current += 1;
-      if (standingsTickRef.current % 13 === 0) setStandingsBeat((b) => b + 1);
+      if (standingsTickRef.current % 7 === 0) setStandingsBeat((b) => b + 1);
       if (outcome.event) {
         // Dock the opportunity live (evicting a lingering picker/ribbon — the
         // race outranks them). The engine suppresses further events while this
         // one rides on progress.decisionTriggerNm, so the lane never stacks.
-        positionBeforeRef.current = outcome.progress.position;
+        correctedRankBeforeRef.current = correctedRank(
+          stateRef.current,
+          outcome.fleet,
+          outcome.progress
+        );
         const tempState: GameState = {
           ...stateRef.current,
           progress: outcome.progress,
@@ -250,12 +290,19 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
       setActiveRead(null);
       setMobPos(null);
       const res = outcome.resolution;
+      // Report the change in CORRECTED (handicap) rank, not line-honours: a call
+      // that lifts the scored standing must read as a gain even when rivals
+      // physically pass on the water. Positive delta = places gained.
+      const before = correctedRankBeforeRef.current;
+      const after = correctedRank(stateRef.current, outcome.fleet, outcome.progress);
+      const placesDelta =
+        before !== undefined && after !== undefined ? before - after : undefined;
       setDebrief(
         res
           ? {
               summary: res.summary,
               glyph: res.bungled ? '✕' : res.paidOff === false ? '~' : '✓',
-              placesDelta: positionBeforeRef.current - outcome.progress.position,
+              placesDelta,
               lostMinutes: res.lostHours >= 1 / 60 ? Math.round(res.lostHours * 60) : undefined,
             }
           : null
@@ -278,7 +325,11 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
     // and the decision (and its hold) waits underneath, restored on close.
     // Only a MOB outranks a sail change — the swimmer comes first.
     if (activeEventRef.current?.kind === 'mob') return;
-    positionBeforeRef.current = stateRef.current.progress.position;
+    correctedRankBeforeRef.current = correctedRank(
+      stateRef.current,
+      stateRef.current.fleet ?? [],
+      stateRef.current.progress
+    );
     setOverflowOpen(false);
     setDebrief(null);
     setDockMode('sail');
@@ -315,10 +366,15 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
         return;
       }
       const res = outcome.resolution!;
+      // As with a decision: the manoeuvre's effect is reported on the corrected
+      // (handicap) standing the player is scored on, not line-honours.
+      const before = correctedRankBeforeRef.current;
+      const after = correctedRank(stateRef.current, outcome.fleet, outcome.progress);
       setDebrief({
         summary: res.summary,
         glyph: res.bungled ? '✕' : '✓',
-        placesDelta: positionBeforeRef.current - outcome.progress.position,
+        placesDelta:
+          before !== undefined && after !== undefined ? before - after : undefined,
         lostMinutes: Math.round(res.lostHours * 60),
       });
       setDockMode('debrief');
