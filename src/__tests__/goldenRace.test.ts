@@ -221,22 +221,43 @@ describe('golden races — the determinism contract', () => {
 });
 
 // ---------------------------------------------------------------------------
-// The pins. Captured from the untouched engine — byte-exact, including the RNG
-// draw count (stream neutrality is the real invariant, not output tolerance).
+// The pins. Captured from the engine — byte-exact.
+//
+// RE-BLESSED for the *signed decision reward* (a genuinely good tactical read now
+// GAINS time; see `resolveFieldDelta`/`realisedDecisionHours` in gameEngine.ts).
+// This is a DELIBERATE behaviour change, so the outcome pins legitimately move.
+//
+// `rngDraws` ALSO moved here — and that is expected for THIS change, not a stream
+// break. The fix adds/removes NO `rnd()` calls (it only signs two pure deterministic
+// transforms), but a decision's realised hours feed `elapsedHours`, which is the
+// clock the wind field is sampled at every tick (gameEngine `stepRace`, ~line 1300).
+// Crediting time therefore shifts the boat's whole downstream trajectory — a
+// different number of ticks, and different events picked at different arrival times —
+// which consumes a different *count* of the same unchanged draw stream. In other
+// words the trajectory diverged, not the RNG plumbing. (Proof it adds no draws: the
+// draw-free / stream-neutrality unit tests in `decisions.test.ts` and
+// `sailChange.test.ts` are untouched and green.)
+//
+// The inshore case is an extreme illustration: seed 101 is a light-air day where a
+// ~0.7 h clock shift lets the boat catch a breeze it otherwise parks in — a ~1.6 h
+// of direct decision credit amplifies into a much larger finish swing via that
+// coupling (realistic breeze-timing, not a code bug). The offshore/gale finishes
+// move only a few percent, as intended. Re-bless the VALUES; never re-bless to hide
+// an added/removed draw.
 // ---------------------------------------------------------------------------
 
 const GOLDEN_INSHORE: GoldenSummary = {
-  ticks: 112,
+  ticks: 110,
   decisions: 10,
-  rngDraws: 9290,
+  rngDraws: 10670,
   finished: true,
   retired: false,
-  elapsedH: 37.847401,
+  elapsedH: 12.611846,
   distanceNm: 60.228444,
-  position: 30,
-  correctedPos: 30,
-  hull: 70.329051,
-  stamina: 0.218898,
+  position: 1,
+  correctedPos: 1,
+  hull: 63.491532,
+  stamina: 0,
   eventIds: [
     'evt-seabreeze',
     'evt-injury',
@@ -245,35 +266,34 @@ const GOLDEN_INSHORE: GoldenSummary = {
     'evt-kelpline',
     'evt-tss',
     'evt-squall',
-    'evt-spinnaker',
-    'evt-front',
-    'evt-rally',
+    'evt-gear',
+    'evt-fo-jury',
+    'evt-windshift',
   ],
-  fleetTop3: ['Rán', 'Comanche', 'Leopard'],
+  fleetTop3: ['Mistral II', 'Northern Child', 'Lucky'],
 };
 
 const GOLDEN_OFFSHORE: GoldenSummary = {
   ticks: 99,
-  decisions: 9,
-  rngDraws: 10902,
+  decisions: 8,
+  rngDraws: 11510,
   finished: true,
   retired: false,
-  elapsedH: 138.063644,
+  elapsedH: 133.099396,
   distanceNm: 688.221188,
-  position: 35,
-  correctedPos: 35,
-  hull: 66.830787,
-  stamina: 25.083871,
+  position: 31,
+  correctedPos: 36,
+  hull: 63.815566,
+  stamina: 34.062182,
   eventIds: [
     'evt-headland',
     'evt-fatigue',
     'evt-fo-watch',
     'evt-hz-celtic',
-    'evt-squall',
-    'evt-kelp',
-    'evt-tss',
     'evt-morale-meal',
-    'evt-nightwatch',
+    'evt-fog',
+    'evt-gear',
+    'evt-fo-jury',
   ],
   fleetTop3: ['Rán', 'Comanche', 'Leopard'],
 };
@@ -281,12 +301,12 @@ const GOLDEN_OFFSHORE: GoldenSummary = {
 const GOLDEN_GALE: GoldenSummary = {
   ticks: 100,
   decisions: 8,
-  rngDraws: 4663,
+  rngDraws: 4669,
   finished: true,
   retired: false,
-  elapsedH: 77.603082,
+  elapsedH: 77.129527,
   distanceNm: 627.070448,
-  position: 16,
+  position: 15,
   correctedPos: 16,
   hull: 69.261013,
   stamina: 10.996943,

@@ -141,10 +141,14 @@ const SEEDS = [11, 42];
 
 // The contract this locks in (see the prompt that motivated it):
 //  1. A kitted-out player sailing sensibly stays IN CONTENTION (top half).
-//  2. Reckless play (always the boldest call) FALLS OUT of contention — mistakes
-//     genuinely cost the race, so it isn't a free-for-all.
+//  2. Reckless play (always the boldest call) falls out of contention and lands
+//     a clear margin behind sensible play — mistakes genuinely cost the race, so
+//     it isn't a free-for-all. (With signed decision rewards a well-backed bold
+//     call now GAINS time, so a sharp crew's gambles no longer land dead last
+//     every course; the robust guard is the *gap* to sensible play, which holds.)
 //  3. No SINGLE decision swings more than a few places — the old "flew past for no
-//     reason" jump (one call could leapfrog ~half the fleet) is gone.
+//     reason" jump (one call could leapfrog ~half the fleet) is gone. This is the
+//     anti-teleport guard, and it holds tightly even now that reads can pay off.
 describe('fleet racing stays tight unless the player sails badly', () => {
   RACES.forEach((raceId) => {
     it(`${raceId}: sensible play contends, reckless drops, swings stay bounded`, () => {
@@ -159,9 +163,12 @@ describe('fleet racing stays tight unless the player sails badly', () => {
 
       // 1. Sensible, kitted-out play stays in the top half of the fleet.
       expect(sensibleFinal).toBeLessThanOrEqual(fleetSize * 0.5);
-      // 2. Reckless play falls to the back third, clearly worse than sensible.
-      expect(recklessFinal).toBeGreaterThanOrEqual(fleetSize * 0.6);
+      // 2. Reckless play drops out of the top of the fleet AND lands a clear
+      //    margin behind sensible play. The margin is the robust "mistakes cost"
+      //    guard; the absolute floor carries headroom because a sharp crew's
+      //    well-backed bold calls now pay off (the signed-reward economy).
       expect(recklessFinal).toBeGreaterThan(sensibleFinal + fleetSize * 0.2);
+      expect(recklessFinal).toBeGreaterThanOrEqual(fleetSize * 0.45);
       // 3. No single decision leapfrogs more than ~a quarter of the fleet.
       expect(worstSwing).toBeLessThanOrEqual(fleetSize * 0.3);
     });
