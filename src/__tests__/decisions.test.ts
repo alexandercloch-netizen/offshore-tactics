@@ -104,25 +104,89 @@ describe('resolveFieldDelta — the single source of truth', () => {
     expect(resolveFieldDelta(gain, 0)).toBe(-0.7);
   });
 
-  it('charges a field choice by how far the edge falls short of the send line', () => {
-    expect(resolveFieldDelta(boldCall, EDGE_SEND)).toBe(0); // read it right: free
-    expect(resolveFieldDelta(boldCall, 1)).toBe(0); // a screaming edge is still free
+  it('signs a field choice by how far the edge sits either side of the send line', () => {
+    expect(resolveFieldDelta(boldCall, EDGE_SEND)).toBe(0); // exactly the send line: neutral
+    // Read it RIGHT (edge past the send line) and the field GIVES time back — a gain.
+    expect(resolveFieldDelta(boldCall, 1)).toBeCloseTo(0.6 * (EDGE_SEND - 1), 6);
+    expect(resolveFieldDelta(boldCall, 1)).toBeLessThan(0);
+    expect(resolveFieldDelta(boldCall, 0.6)).toBeLessThan(0);
+    // Read it WRONG (edge short of the send line) and it costs, exactly as before.
     expect(resolveFieldDelta(boldCall, 0)).toBeCloseTo(0.6 * EDGE_SEND, 6);
     expect(resolveFieldDelta(boldCall, -0.25)).toBeCloseTo(0.6 * (EDGE_SEND + 0.25), 6);
-    // Monotone: a better edge never costs more.
+    // Monotone across the whole range: a better edge is always worth at least as
+    // much — now sweeping from a real cost down through zero into a real gain.
     let prev = Infinity;
     for (let e = -1; e <= 1; e += 0.1) {
-      const cost = resolveFieldDelta(boldCall, e);
-      expect(cost).toBeLessThanOrEqual(prev + 1e-9);
-      prev = cost;
+      const delta = resolveFieldDelta(boldCall, e);
+      expect(delta).toBeLessThanOrEqual(prev + 1e-9);
+      prev = delta;
     }
+  });
+});
+
+describe('signed decision rewards — a good read GAINS time (the fix)', () => {
+  const CAP = 0.5; // DECISION_TIME_CAP_H
+
+  it('(a) a strong positive edge yields a real gain, capped at −CAP', () => {
+    // The helper is signed: a screaming edge drives the field delta negative…
+    expect(resolveFieldDelta(boldCall, 1)).toBeLessThan(0);
+    // …and that gain is credited on the water (negative realised hours).
+    expect(realisedDecisionHours(resolveFieldDelta(boldCall, 1))).toBeLessThan(0);
+    // The credit is bounded exactly like the cost: no single call teleports.
+    expect(realisedDecisionHours(-100)).toBe(-CAP);
+    expect(realisedDecisionHours(-0.0001)).toBeGreaterThan(-CAP);
+  });
+
+  it('(b) a misread (low/negative edge) still costs, capped at +CAP', () => {
+    expect(resolveFieldDelta(boldCall, -0.25)).toBeGreaterThan(0);
+    expect(realisedDecisionHours(resolveFieldDelta(boldCall, -0.25))).toBeGreaterThan(0);
+    expect(realisedDecisionHours(100)).toBe(CAP);
+  });
+
+  it('(c) Tactician forgiveness eases costs, never gains', () => {
+    const strong = ['crew-nakamura']; // Tactician 90
+    const weak = ['crew-byrne']; // Tactician 68
+    expect(misreadForgiveness(strong)).toBeGreaterThan(misreadForgiveness(weak));
+
+    // A misread cost: the sharp tactician bails early and gives some back.
+    const flat = flatField(START.lat, START.lon);
+    setRng(() => 0.999);
+    const costStrong = applyDecision(baseState({ windField: flat, selectedCrewIds: strong }), boldCall);
+    setRng(() => 0.999);
+    const costWeak = applyDecision(baseState({ windField: flat, selectedCrewIds: weak }), boldCall);
+    expect(costStrong.resolution!.lostHours).toBeGreaterThan(0);
+    expect(costStrong.resolution!.lostHours).toBeLessThan(costWeak.resolution!.lostHours);
+
+    // A paid-off gain: forgiveness has nothing to forgive — the credit is identical.
+    const shift = shiftingField(START.lat, START.lon);
+    setRng(() => 0.999);
+    const gainStrong = applyDecision(baseState({ windField: shift, selectedCrewIds: strong }), boldCall);
+    setRng(() => 0.999);
+    const gainWeak = applyDecision(baseState({ windField: shift, selectedCrewIds: weak }), boldCall);
+    expect(gainStrong.resolution!.lostHours).toBeLessThan(0);
+    expect(gainStrong.resolution!.lostHours).toBeCloseTo(gainWeak.resolution!.lostHours, 9);
+  });
+
+  it('(d) a bungle can flip a genuine gain into a cost', () => {
+    const kite: TacticalChoice = { ...boldCall, id: 'k', risk: 0.4, crewSkill: 'Bowman' };
+    const s = baseState({ windField: shiftingField(START.lat, START.lon) });
+    // Clean hands: the good read banks time (a gain).
+    setRng(() => 0.999);
+    const clean = applyDecision(s, kite);
+    expect(clean.resolution!.bungled).toBe(false);
+    expect(clean.resolution!.lostHours).toBeLessThan(0);
+    // Fumble it: the recovery time stacks on top and buries the gain into a cost.
+    setRng(() => 0);
+    const fumbled = applyDecision(s, kite);
+    expect(fumbled.resolution!.bungled).toBe(true);
+    expect(fumbled.resolution!.lostHours).toBeGreaterThan(0);
   });
 });
 
 describe('applyDecision → typed resolution (edge × bungle × field)', () => {
   beforeEach(() => setRng(mulberry32(11)));
 
-  it('bold + genuine edge + clean hands: paid off, banked the shift', () => {
+  it('bold + genuine edge + clean hands: paid off, banked a real time gain', () => {
     const s = baseState({ windField: shiftingField(START.lat, START.lon) });
     setRng(() => 0.999); // no bungle
     const out = applyDecision(s, boldCall);
@@ -130,7 +194,9 @@ describe('applyDecision → typed resolution (edge × bungle × field)', () => {
     expect(out.resolution!.outcome).toBe('bold');
     expect(out.resolution!.paidOff).toBe(true);
     expect(out.resolution!.bungled).toBe(false);
-    expect(out.resolution!.lostHours).toBeCloseTo(0, 5);
+    // The read was good, so the field CREDITS time — a genuine gain, capped.
+    expect(out.resolution!.lostHours).toBeLessThan(0);
+    expect(out.resolution!.lostHours).toBeGreaterThanOrEqual(-0.5);
     expect(out.resolution!.summary).toBe('Read it right — you banked the shift.');
     expect(out.log).toBe(out.resolution!.summary);
   });
@@ -199,6 +265,9 @@ describe('the honest preview band (item 1)', () => {
     fields.forEach((windField, i) => {
       setRng(mulberry32(100 + i));
       const s = baseState({ windField });
+      // A real race is hours in, so a credited gain lands clear of the elapsed
+      // floor (elapsed ≫ the cap); the band must bracket that signed swing.
+      s.progress = { ...s.progress!, elapsedHours: 6 };
       const preview = vmgPreview(s, fieldEvent);
       const band = preview.band![boldCall.id];
       expect(band).toBeDefined();
@@ -216,7 +285,11 @@ describe('the honest preview band (item 1)', () => {
 
   it('a sharper Navigator projects a tighter band', () => {
     setRng(mulberry32(7));
-    const field = createWindField(getRaceById('race-round-island')!);
+    // A moderate, exploitable shift — a believable in-race edge, not a saturated
+    // screamer. (At a maxed-out edge the clamp pins the optimistic end for every
+    // Navigator and the convex VMG scaling dominates, so the edge-uncertainty
+    // width is only legible where the edge lives in its normal band.)
+    const field = { ...shiftingField(START.lat, START.lon), rotateDegPerH: 10 };
     const strong = baseState({ windField: field, selectedCrewIds: ['crew-lindqvist'] }); // Navigator 94
     const weak = baseState({ windField: field, selectedCrewIds: ['crew-nolan'] }); // Navigator 55
     const strongBand = vmgPreview(strong, fieldEvent).band![boldCall.id];
@@ -469,7 +542,7 @@ describe('the live lane — unanswered opportunities (cockpit PR3)', () => {
     setRng(() => 0.999);
     const late = applyDecision(delayed, boldCall);
     const lostLate = late.progress.elapsedHours - delayed.progress!.elapsedHours;
-    expect(lostNow).toBeCloseTo(0, 5);
+    expect(lostNow).toBeLessThan(0); // the genuine shift, taken fresh, banks time
     expect(lostLate).toBeGreaterThan(lostNow + 0.02); // the moment faded under the cards
   });
 

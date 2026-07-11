@@ -981,9 +981,13 @@ export function tacticalEdge(state: GameState): number {
 export const EDGE_SEND = 0.35;
 export function resolveFieldDelta(choice: TacticalChoice, edge: number): number {
   if (!choice.field) return choice.timeDelta;
-  // A misread bold call costs time, but not catastrophically: tuned so a single
-  // wrong corner is a couple of places against a tight fleet, not the race.
-  return Math.max(0, Math.abs(choice.timeDelta) * (EDGE_SEND - edge));
+  // Signed: read the field RIGHT (edge > EDGE_SEND) and the term goes NEGATIVE —
+  // a genuine time GAIN, the reward the tactical layer was missing (a good call
+  // used to be neutral at best). Read it WRONG (edge < EDGE_SEND) and it's a
+  // positive cost, a couple of places against a tight fleet, not the race. The
+  // magnitude is bounded by |timeDelta| × (EDGE_SEND − edge), edge ∈ ~[-0.25, 1],
+  // so the gain tops out around 0.65·|timeDelta| before the realised cap.
+  return Math.abs(choice.timeDelta) * (EDGE_SEND - edge);
 }
 
 // A spotted shift doesn't wait: the further the boat sails past the point where
@@ -1072,18 +1076,19 @@ export function tacticalRead(state: GameState): TacticalRead {
   return { edge, shiftDeg, buildKn, reliable, hint };
 }
 
-// The on-water cost of a single call, damped and capped. A tightly-packed fleet
-// means a small time loss is many places, so without this one decision could
-// leapfrog the whole field ("flew past for no reason"). Capping keeps any one
-// call to a few recoverable places; the player only falls out of contention by
-// stacking up bad calls (the cost is per-decision, so repeated mistakes still
-// compound) or sailing far off pace. The cap is relative to the race so it
-// scales from a day-race to an ocean passage. Shared by the resolution AND the
-// cockpit preview/downside, so the card projects the realised economy.
+// The on-water swing of a single call, damped and capped — SIGNED and symmetric:
+// a genuinely good read is CREDITED time (down to −CAP), a misread COSTS it (up
+// to +CAP). A tightly-packed fleet means a small time swing is many places, so
+// without the cap one decision could leapfrog the whole field ("flew past for no
+// reason") or bury the boat; capping keeps any one call to a few recoverable
+// places either way. The player only pulls clear — or falls out of contention —
+// by stacking good (or bad) calls; the swing is per-decision, so it compounds.
+// Shared by the resolution AND the cockpit preview/downside, so the card
+// projects the realised economy.
 const DECISION_TIME_SCALE = 0.65;
-const DECISION_TIME_CAP_H = 0.5; // absolute: one call costs ~30 min on the water at most
+const DECISION_TIME_CAP_H = 0.5; // absolute: one call swings ~30 min on the water at most
 export function realisedDecisionHours(extraHours: number): number {
-  return Math.min(Math.max(extraHours, 0) * DECISION_TIME_SCALE, DECISION_TIME_CAP_H);
+  return Math.max(-DECISION_TIME_CAP_H, Math.min(extraHours * DECISION_TIME_SCALE, DECISION_TIME_CAP_H));
 }
 
 // The Tactician's forgiveness on a committed bold call that the field didn't
@@ -1162,9 +1167,11 @@ export function vmgPreview(state: GameState, event: GameEvent): VmgPreview {
       // band always brackets the realised outcome and never shows false
       // precision. Rounded outward so the bracket survives display rounding.
       const project = (edge: number): number => {
-        const extra = realisedDecisionHours(
-          resolveFieldDelta(choice, Math.max(-1, Math.min(1, edge))) * (1 - forgive)
-        );
+        // Mirror the resolution exactly: the raw field delta is signed (a gain
+        // when the read is good), and the Tactician's forgiveness eases a COST
+        // only — it never scales a gain, so the band brackets the realised swing.
+        const raw = resolveFieldDelta(choice, Math.max(-1, Math.min(1, edge)));
+        const extra = realisedDecisionHours(raw > 0 ? raw * (1 - forgive) : raw);
         return stretchNm / Math.max(baseHours + extra, 0.2);
       };
       const hw = edgeHalfWidth(read.reliable);
@@ -1723,11 +1730,11 @@ export function applyDecision(state: GameState, choice: TacticalChoice): StepRes
   let morale = state.condition.crewMorale + choice.moraleDelta;
   let hull = state.condition.hullIntegrity + choice.hullDelta;
   // A bold, field-resolved call pays off only if the wind actually supports it.
-  // Read it right (a real shift/pressure to exploit) and it costs ~nothing — so
-  // you beat the safe option, which always bleeds a little time. Read it wrong
-  // and you've banged a phantom corner: real time lost (a sharp Tactician bails
-  // early and gives some of it back), and the crew feels it. The conservative
-  // option keeps its authored, dependable outcome.
+  // Read it right (a real shift/pressure to exploit) and it GAINS time — you pull
+  // clear of the safe option, which only ever bleeds a little. Read it wrong and
+  // you've banged a phantom corner: real time lost (a sharp Tactician bails early
+  // and gives some of it back — costs only, never a gain), and the crew feels it.
+  // The conservative option keeps its authored, dependable outcome.
   let extraHours = choice.timeDelta;
   let paidOff: boolean | undefined;
   const effEdge = effectiveTacticalEdge(state); // ~[-0.25, 1], decayed if committed late
@@ -1771,7 +1778,9 @@ export function applyDecision(state: GameState, choice: TacticalChoice): StepRes
     hazardEvent.choices.some((c) => c.id === choice.id);
   const progress: RaceProgress = {
     ...state.progress,
-    elapsedHours: state.progress.elapsedHours + lostHours,
+    // lostHours is now signed (a good read credits time); the floor is belt-and-
+    // braces — elapsed is always ≫ the cap by the time a decision fires.
+    elapsedHours: Math.max(0, state.progress.elapsedHours + lostHours),
     // Start a fresh leg from here, keeping the latest sample as its baseline so
     // the next decision's "this leg" trend measures from this point.
     legStartNm: state.progress.distanceCoveredNm,
