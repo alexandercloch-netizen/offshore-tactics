@@ -36,6 +36,25 @@ function field(overrides: Partial<WindField> = {}): WindField {
   };
 }
 
+describe('hole floor', () => {
+  it('a deep hole slows the boat but never parks it (floored to a fraction of base)', () => {
+    // A monster hole centred at the origin: without a floor the summed speed
+    // would collapse toward the old flat 2 kn (a race-ending calm).
+    const f = field({ baseSpeed: 15, feature: { lat: 0, lon: 0, radiusNm: 40, deltaKn: -30, driftDir: 0, driftKn: 0 } });
+    const inHole = sampleWind(f, 0, 0, 0).speedKn;
+    // Floored at ~40% of the race's characteristic wind, not 2 kn — still a big
+    // tactical loss (well below base), but a working breeze, not a dead calm.
+    expect(inHole).toBeGreaterThanOrEqual(15 * 0.4 - 1e-6);
+    expect(inHole).toBeLessThan(15); // the hole is still a real, avoidable loss
+  });
+
+  it('leaves ordinary wind untouched (the floor only clips the deepest calm)', () => {
+    const f = field({ baseSpeed: 15, feature: { lat: 0, lon: 0, radiusNm: 1, deltaKn: 0, driftDir: 0, driftKn: 0 } });
+    // Far from any feature the speed is the base — the floor never binds.
+    expect(sampleWind(f, 5, 5, 0).speedKn).toBeCloseTo(15, 5);
+  });
+});
+
 describe('createWindField', () => {
   it('is deterministic for a given seed', () => {
     const race = getRaceById('race-fastnet')!;

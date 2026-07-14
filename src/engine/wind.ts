@@ -18,6 +18,12 @@ const norm360 = (deg: number): number => ((deg % 360) + 360) % 360;
 const jitter = (center: number, spread: number): number =>
   center + rndRange(-spread, spread);
 
+// The deepest a hole may drop the seeded seasonal breeze, as a fraction of the
+// race's characteristic wind: a hole still costs real time (worth avoiding), but
+// can't collapse to a dead calm that parks a boat for hours and lets weather luck
+// out-decide good sailing. See the floor in `sampleWind`.
+const HOLE_FLOOR_FRAC = 0.4;
+
 // Per-hazard character of the wind field.
 interface HazardProfile {
   speedMul: number;
@@ -355,7 +361,18 @@ export function sampleWind(field: WindField, lat: number, lon: number, hours: nu
     diurnal +
     texture;
 
-  return { fromDeg: norm360(dir), speedKn: Math.max(2, Math.min(50, speed)) };
+  // Hole floor: a hole (stacked features + a frontal drop) still slows the boat
+  // hard — a real tactical loss worth routing around — but it can't collapse the
+  // breeze to a dead calm that parks a single boat for hours and decides the race
+  // by luck instead of sailing. Floored at a fraction of the race's characteristic
+  // wind (not a flat 2 kn), so it scales: a fresh day never drops below a working
+  // breeze, a drifter still gets genuinely light but never truly zero. The
+  // readable landscape (every feature, shift, gradient, front) is unchanged — only
+  // the deepest, race-ending calm is clipped. `base` (a real-model scenario) keeps
+  // its own floor; only the seeded seasonal field is clipped here.
+  const localBase = base ? base.speedKn : field.baseSpeed;
+  const holeFloor = base ? 2 : Math.max(2, localBase * HOLE_FLOOR_FRAC);
+  return { fromDeg: norm360(dir), speedKn: Math.max(holeFloor, Math.min(50, speed)) };
 }
 
 // A wind sample at a position, for drawing the field on the chart.
