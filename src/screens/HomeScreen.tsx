@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { CompositeScreenProps } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -250,15 +250,16 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
             <Text style={styles.kicker}>
               {user ? `Welcome aboard, ${displayName}` : 'Offshore Tactics'}
             </Text>
-            <Text
-              style={styles.pennant}
+            <Pressable
+              style={styles.feedbackChip}
               accessibilityRole="button"
               accessibilityLabel="Notice Board — message the Race Committee"
               testID="feedback-entry-home"
               onPress={() => navigation.navigate('NoticeBoard', { fromRoute: 'Home' })}
+              hitSlop={8}
             >
-              ⚑
-            </Text>
+              <Text style={styles.feedbackChipText}>⚑ Feedback</Text>
+            </Pressable>
           </View>
           <Text style={styles.title}>THE HARBOUR</Text>
           <Text style={styles.tagline}>{goalHeadline(player?.goal)}</Text>
@@ -331,13 +332,25 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  pennant: {
-    color: colors.brassLight,
-    fontSize: fontSize.lg,
+  // A labelled pill, not a bare flag — the flag alone read as decoration, not a
+  // button. Keeps the brass accent and top-right placement, adds the word.
+  feedbackChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: radius.pill,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
+    marginLeft: spacing.sm,
+  },
+  feedbackChipText: {
+    color: colors.brassLight,
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.medium,
   },
   kicker: {
+    flexShrink: 1, // wrap a long welcome name rather than shove the Feedback pill
     color: colors.brassLight,
     fontSize: fontSize.sm,
     fontWeight: fontWeight.medium,
