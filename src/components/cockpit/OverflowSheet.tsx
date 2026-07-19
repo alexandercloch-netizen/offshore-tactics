@@ -14,6 +14,7 @@ import NauticalButton from '../NauticalButton';
 export interface SecondaryMetric {
   label: string;
   value: string;
+  testID?: string;
 }
 
 interface OverflowSheetProps {
@@ -53,7 +54,7 @@ const OverflowSheet: React.FC<OverflowSheetProps> = ({
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <View style={styles.metricsGrid}>
         {metrics.map((m) => (
-          <View key={m.label} style={styles.metric}>
+          <View key={m.label} style={styles.metric} testID={m.testID}>
             <Text style={styles.metricValue}>{m.value}</Text>
             <Text style={styles.metricLabel}>{m.label}</Text>
           </View>

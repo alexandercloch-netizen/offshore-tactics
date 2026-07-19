@@ -26,6 +26,7 @@ import {
   RoutingBias,
   Sail,
   SailCategory,
+  SailMode,
   SignatureOutcome,
   StepResult,
   TacticalChoice,
@@ -852,6 +853,96 @@ export function recommendedSail(state: GameState): Sail | null {
   return bestSailAt(specialists, twa, wind.speedKn);
 }
 
+// ---- The sail auto-helm ----
+//
+// PURE and DRAW-FREE. Given the dial (`strategy.sailMode`), what sail — if any —
+// should the crew be flying right now? Returns the id to call for, or null to
+// leave the flown sail alone. `manual`/undefined short-circuits on the first
+// line, so a manual race never reaches `resolveSailChange` and stays
+// byte-identical to the pre-auto engine (the golden's contract). The dial trades
+// aggression for steadiness: a keener mode calls sooner (a lower hysteresis
+// threshold) and holds a fresh change for less distance (a shorter dwell).
+
+// Nominal dwell (nm since the last change) before the auto-helm will call again
+// — the anti-flap clock. Keener modes settle for less.
+const SAIL_MODE_DWELL_NM: Record<Exclude<SailMode, 'manual'>, number> = {
+  conservative: 12,
+  balanced: 6,
+  aggressive: 3,
+};
+// The pace edge (Δ flown-sail multiplier at the live point) the candidate must
+// clear over the sail already up before it's worth the manoeuvre. Keener modes
+// pull the trigger on a slimmer margin.
+const SAIL_MODE_THRESHOLD: Record<Exclude<SailMode, 'manual'>, number> = {
+  conservative: 0.06,
+  balanced: 0.03,
+  aggressive: 0.012,
+};
+const SAIL_MODE_THRESHOLD_FLOOR = 0.005;
+// A sharp Bowman shortens the dwell (up to 30%) and shaves the threshold — the
+// bow gets canvas up cleanly, so the helm can call more freely.
+const AUTO_BOWMAN_DWELL_RELIEF = 0.3;
+const AUTO_BOWMAN_THRESHOLD_RELIEF = 0.015;
+
+// The dwell for a mode, gently scaled by course length (a long passage tolerates
+// slightly wider spacing) and shortened by a sharp Bowman.
+function dwellNm(mode: Exclude<SailMode, 'manual'>, crewIds: string[], totalNm: number): number {
+  const lengthScale = clamp(totalNm / 200, 0.6, 1.4);
+  const bowman = 1 - roleRelief(crewIds, 'Bowman', AUTO_BOWMAN_DWELL_RELIEF);
+  return SAIL_MODE_DWELL_NM[mode] * lengthScale * bowman;
+}
+
+function sailModeThreshold(mode: Exclude<SailMode, 'manual'>, crewIds: string[]): number {
+  return Math.max(
+    SAIL_MODE_THRESHOLD_FLOOR,
+    SAIL_MODE_THRESHOLD[mode] - roleRelief(crewIds, 'Bowman', AUTO_BOWMAN_THRESHOLD_RELIEF)
+  );
+}
+
+// The auto-helm's call this tick, or null to hold. See the block comment above.
+export function autoSailTarget(state: GameState): string | null {
+  const mode = strategyOf(state).sailMode;
+  if (!mode || mode === 'manual') return null;
+  const p = state.progress;
+  const field = state.windField;
+  if (!p || !field) return null;
+
+  // Dwell gate (anti-flap): sit on a fresh change for the mode's window.
+  const dwell = dwellNm(mode, state.selectedCrewIds, p.totalDistanceNm);
+  if (p.lastSailChangeNm !== undefined && p.distanceCoveredNm - p.lastSailChangeNm < dwell) {
+    return null;
+  }
+
+  // The Navigator's anticipatory call (null = douse to the working set) vs the
+  // sail actually flying. Nothing to do if they already agree.
+  const candidateId = recommendedSail(state)?.id ?? 'working-jib';
+  const flownId = flownSpecialist(p)?.id ?? 'working-jib';
+  if (candidateId === flownId) return null;
+
+  const candSail = candidateId === 'working-jib' ? undefined : getSailById(candidateId);
+  const heldSail = flownId === 'working-jib' ? undefined : getSailById(flownId);
+
+  // Heavy-air gate: hoisting a performance specialist above the heavy-air line
+  // courts a blow-out, so only `aggressive` will do it. A douse to the working
+  // set — or a hoist of storm canvas — is a safety move and is never gated.
+  const isPerformanceHoist =
+    candSail !== undefined && candSail.boost > 0 && candSail.category !== 'stormsail';
+  if (isPerformanceHoist && p.windSpeedKn >= HEAVY_AIR_KN && mode !== 'aggressive') {
+    return null;
+  }
+
+  // Hysteresis: measure both sails at the LIVE angle/breeze and only commit if
+  // the candidate clears the flown sail by the mode's threshold — so a marginal
+  // wobble can't set off a costly flap.
+  const wind = sampleWind(field, p.lat, p.lon, p.elapsedHours);
+  const twa = angularDelta(p.heading, wind.fromDeg);
+  const candMul = flownSailMul(candSail, twa, wind.speedKn);
+  const heldMul = flownSailMul(heldSail, twa, wind.speedKn);
+  if (candMul - heldMul < sailModeThreshold(mode, state.selectedCrewIds)) return null;
+
+  return candidateId;
+}
+
 // The coverage a candidate sail would have at the approach to the next mark —
 // the badge on each picker row (anticipatory, like the recommendation).
 export function sailCoverageAtMark(state: GameState, sail: Sail): number {
@@ -1334,9 +1425,37 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
     throw new Error('Cannot step a race before it has been set up.');
   }
 
+  // The sail auto-helm runs FIRST: draw-free and null on manual/undefined (the
+  // golden path), so a manual race never reaches `resolveSailChange` and the
+  // stream is byte-identical. A committed call runs the UNCHANGED
+  // `resolveSailChange` (its two seeded draws) and the rest of the tick sails
+  // the post-change state (`src`) — its progress/condition/fleet threaded in,
+  // the unchanged weather/windField/tidalField still read off `state`.
+  let src = state;
+  let autoSailChange: DecisionResolution | undefined;
+  const autoId = autoSailTarget(state);
+  if (autoId) {
+    const changed = resolveSailChange(state, autoId);
+    if (changed) {
+      autoSailChange = changed.resolution;
+      src = {
+        ...state,
+        // Tally the auto-helm's share of the change count (engine-inert — only
+        // the debrief reads it). `resolveSailChange` already stamped
+        // `lastSailChangeNm` and bumped `sailChanges`.
+        progress: {
+          ...changed.progress,
+          sailChangesAuto: (changed.progress.sailChangesAuto ?? 0) + 1,
+        },
+        condition: changed.condition,
+        fleet: changed.fleet,
+      };
+    }
+  }
+
   const marks = race.waypoints;
   const field = state.windField;
-  const prev = state.progress;
+  const prev = src.progress!;
   const total = prev.totalDistanceNm;
   const strategy = strategyOf(state);
   const wearMul = EFFORT_WEAR[strategy.effort];
@@ -1357,7 +1476,7 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
   const speedBoat = speedBoatFor(state) ?? boat;
   const baseSpeed = boatSpeedFor(
     speedBoat,
-    state.condition,
+    src.condition,
     prev.heading,
     wind,
     EFFORT_SPEED[strategy.effort],
@@ -1453,10 +1572,10 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
   // protect the hull.
   const riskMul = 1 - prov.safety;
   const condition: BoatCondition = {
-    crewStamina: clamp(state.condition.crewStamina - df * (28 + weather.riskModifier * 45 * riskMul) * wearMul),
-    crewMorale: clamp(state.condition.crewMorale - df * (10 + weather.riskModifier * 40 * riskMul)),
+    crewStamina: clamp(src.condition.crewStamina - df * (28 + weather.riskModifier * 45 * riskMul) * wearMul),
+    crewMorale: clamp(src.condition.crewMorale - df * (10 + weather.riskModifier * 40 * riskMul)),
     hullIntegrity: clamp(
-      state.condition.hullIntegrity -
+      src.condition.hullIntegrity -
         df * (6 + weather.riskModifier * 40 * riskMul) * wearMul * (1 - prov.hullWearResist)
     ),
   };
@@ -1540,8 +1659,10 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
     // write it.
     activeSailId: prev.activeSailId,
     sailChanges: prev.sailChanges,
+    sailChangesAuto: prev.sailChangesAuto,
     sailChangesFumbled: prev.sailChangesFumbled,
     unavailableSails: prev.unavailableSails,
+    lastSailChangeNm: prev.lastSailChangeNm,
     sailFracTotal: prev.sailFracTotal,
     sailFracRight: prev.sailFracRight,
   };
@@ -1563,7 +1684,7 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
   // Advance the AI fleet through the same elapsed time, wind and tide, then rank.
   // The fleet feels the same stream as the player (paced off a tide-free
   // benchmark), so tide cancels in the standings and only sailing it better wins.
-  const fleet = advanceFleet(state.fleet ?? [], race, field, prev.elapsedHours, dtHours, state.tidalField);
+  const fleet = advanceFleet(src.fleet ?? [], race, field, prev.elapsedHours, dtHours, state.tidalField);
   progress.position = finished
     ? finalPosition(fleet, elapsedHours)
     : livePosition(fleet, distanceCoveredNm);
@@ -1684,8 +1805,22 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
   } else if (rounded && marks[nextMarkIndex - 1]) {
     log = `Rounded ${marks[nextMarkIndex - 1].name} — ${weather.label}, ${progress.pointOfSail.toLowerCase()}.`;
   }
+  // Surface the auto-helm's peel on the ship's log when nothing louder happened
+  // this tick (a finish / retirement / rounding line still takes the slot).
+  if (log === undefined && autoSailChange) log = autoSailChange.summary;
 
-  return { progress, condition, weather, fleet, event, log, finished, retired, eventExpired };
+  return {
+    progress,
+    condition,
+    weather,
+    fleet,
+    event,
+    log,
+    finished,
+    retired,
+    eventExpired,
+    autoSailChange,
+  };
 }
 
 // The odds the crew fumbles this call, pure and inspectable. On top of the
@@ -1847,6 +1982,12 @@ export function applyDecision(state: GameState, choice: TacticalChoice): StepRes
       : state.progress.pendingSituation,
     activeSailId: nextSailId,
     sailChanges,
+    // A committed sail set (the kite call, the storm-jib change) stamps the same
+    // dwell clock the manual picker and auto-helm write.
+    lastSailChangeNm:
+      sailChanges !== state.progress.sailChanges
+        ? state.progress.distanceCoveredNm
+        : state.progress.lastSailChangeNm,
   };
 
   // While the player handles the decision, the fleet sails on — a costly call
@@ -1990,6 +2131,9 @@ export function resolveSailChange(state: GameState, sailId: string): StepResult 
     unavailableSails: blown
       ? [...(prev.unavailableSails ?? []), hoisted!.id]
       : prev.unavailableSails,
+    // Stamp the dwell clock (shared by the auto-helm's anti-flap gate) on every
+    // committed change, manual or auto.
+    lastSailChangeNm: prev.distanceCoveredNm,
     pendingSituation,
   };
 
@@ -2288,6 +2432,10 @@ export function buildResult(state: GameState, outcome: StepResult): RaceResult {
     // aboard (only once enough of the race has been measured to be honest),
     // and anything blown out along the way.
     sailChanges: outcome.progress.sailChanges,
+    sailChangesAuto:
+      outcome.progress.sailChanges !== undefined
+        ? (outcome.progress.sailChangesAuto ?? 0)
+        : undefined,
     sailChangesFumbled:
       outcome.progress.sailChanges !== undefined
         ? (outcome.progress.sailChangesFumbled ?? 0)

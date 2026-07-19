@@ -426,10 +426,19 @@ export type PointOfSail = 'Upwind' | 'Reach' | 'Downwind';
 // Player-controlled tactics, adjustable mid-race.
 export type RoutingBias = -1 | 0 | 1; // favour left of course / optimal / right
 export type EffortMode = 'conserve' | 'cruise' | 'push';
+// The sail auto-helm dial: `manual` leaves every change to the picker (the
+// engine default, so a manual race is byte-identical to the pre-auto game); the
+// three auto modes fly the Navigator's recommended sail themselves, trading a
+// keener call (aggressive) for fewer, steadier changes (conservative).
+export type SailMode = 'manual' | 'conservative' | 'balanced' | 'aggressive';
 
 export interface PlayerStrategy {
   bias: RoutingBias;
   effort: EffortMode;
+  // The sail auto-helm. Optional & back-compatible: absent reads as `manual`
+  // (old saves and the engine's DEFAULT_STRATEGY), so the golden stream is
+  // untouched. Players begin a race on `balanced` (seeded in BEGIN_RACE).
+  sailMode?: SailMode;
 }
 
 export interface WeatherCondition {
@@ -619,8 +628,14 @@ export interface RaceProgress {
   // never touches the RNG stream or a golden pin.
   peakWindKn?: number;
   sailChanges?: number; // committed distinct changes this race (the ⇄N counter)
+  sailChangesAuto?: number; // how many of those the auto-helm made (engine-inert)
   sailChangesFumbled?: number; // how many of those the crew bungled
   unavailableSails?: string[]; // sails blown out this race (a bad change in heavy air)
+  // The auto-helm's dwell clock: distance covered at the last committed sail
+  // change (manual OR auto). Written ONLY by the sail-commit path and read ONLY
+  // by `autoSailTarget`'s anti-flap gate — never by movement — so it never
+  // touches the RNG stream or a golden pin.
+  lastSailChangeNm?: number;
   // Right-sail bookkeeping, accumulated by geometric progress like wear (each
   // sums toward ~1 over a full race), so the debrief can say what fraction of
   // the race was sailed under the best canvas aboard.
@@ -739,6 +754,7 @@ export interface RaceResult {
   // ---- Sail-handling debrief (quality, not just frequency). Optional and
   // back-compatible: absent on old saves and on races sailed before wardrobes.
   sailChanges?: number;
+  sailChangesAuto?: number; // how many changes the auto-helm made (for "N changes, M auto")
   sailChangesFumbled?: number;
   rightSailPct?: number; // % of the race sailed under the best canvas aboard
   blownSails?: string[]; // names of sails lost to a bungled heavy-air change
@@ -824,6 +840,10 @@ export interface StepResult {
   finished: boolean;
   retired: boolean;
   resolution?: DecisionResolution; // present when this step resolved a decision
+  // The auto-helm peeled a sail this tick (`sailMode` other than manual): the
+  // committed change's resolution, so the cockpit can flash the debrief ribbon.
+  // Absent on a manual race — the golden never sees it.
+  autoSailChange?: DecisionResolution;
   // A docked opportunity's moment passed this step (its edge decayed out):
   // retracted draw-free — no deltas, no decision spent — the cards should leave
   // the lane. Never set on a step that also resolves or fires an event.

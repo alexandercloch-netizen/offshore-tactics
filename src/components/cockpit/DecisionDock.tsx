@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import { colors, fontSize, fontWeight, numeric, radius, spacing, status } from '../../theme';
-import { GameEvent, Sail, TacticalChoice, VmgPreview } from '../../types';
+import { GameEvent, Sail, SailMode, TacticalChoice, VmgPreview } from '../../types';
 import type { TacticalRead } from '../../engine/gameEngine';
 import { durations, MOB_PULSE_MS, RIBBON_AUTO_CONTINUE_MS } from '../../lib/motion';
 import { CompassIcon } from '../icons';
@@ -59,6 +59,9 @@ interface DecisionDockProps {
   // Sail mode.
   sailOptions?: SailOption[];
   onSailPick?: (sailId: string) => void;
+  // The live auto-helm mode, if any — shows an "Auto: on" note in the picker
+  // header. A manual pick is a one-off override; the dial still owns the mode.
+  sailAutoMode?: SailMode;
   // Debrief mode.
   debrief?: DebriefInfo;
   // Dismiss: a decision's "hold course" (retracts it, draw-free), the picker's
@@ -112,6 +115,7 @@ const DecisionDock: React.FC<DecisionDockProps> = ({
   onChoice,
   sailOptions,
   onSailPick,
+  sailAutoMode,
   debrief,
   onDismiss,
 }) => {
@@ -299,6 +303,15 @@ const DecisionDock: React.FC<DecisionDockProps> = ({
     <>
       <View style={styles.headerRow}>
         <Text style={styles.title}>Which sail?</Text>
+        {sailAutoMode && sailAutoMode !== 'manual' ? (
+          <Text
+            style={styles.autoIndicator}
+            testID="sail-auto-indicator"
+            accessibilityLabel={`Auto-helm on, ${sailAutoMode}. A pick here overrides once.`}
+          >
+            Auto: on
+          </Text>
+        ) : null}
         <Pressable
           onPress={onDismiss}
           testID="sail-dismiss"
@@ -661,6 +674,13 @@ const styles = StyleSheet.create({
     color: colors.slate,
     fontSize: fontSize.xs,
     fontStyle: 'italic',
+  },
+  autoIndicator: {
+    color: colors.brassLight,
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.bold,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
   // Debrief ribbon.
   debriefRow: {

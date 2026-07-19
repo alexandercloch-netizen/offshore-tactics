@@ -330,6 +330,36 @@ describe('the debrief ribbon auto-continue', () => {
   });
 });
 
+describe('the sail-plan dial lives in the control dock', () => {
+  it('renders in the dock and toggling the mode calls onStrategy', () => {
+    const onStrategy = jest.fn();
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = renderer.create(
+        <ControlDock
+          strategy={{ bias: 0, effort: 'cruise', sailMode: 'balanced' }}
+          onStrategy={onStrategy}
+          onCallSailChange={() => undefined}
+          onHelp={() => undefined}
+          onOverflow={() => undefined}
+          compact
+        />
+      );
+    });
+    // The dial is a child of the dock (never an instrument cell).
+    const dial = tree.root.findByProps({ testID: 'sail-plan-control' });
+    expect(dial).toBeTruthy();
+    expect(tree.root.findAllByProps({ testID: 'instrument-cell' })).toHaveLength(0);
+    // Toggling to Aggressive routes through the strategy channel.
+    const seg = dial.findAll(
+      (n) => typeof n.type === 'string' && n.props.accessibilityLabel === 'Aggress.'
+    )[0];
+    act(() => seg.props.onClick?.() ?? seg.props.onPress?.());
+    expect(onStrategy).toHaveBeenCalledWith({ sailMode: 'aggressive' });
+    tree.unmount();
+  });
+});
+
 describe('the sail picker lane', () => {
   it('routes through the same dock with drivable sail-change rows', () => {
     const onPick = jest.fn();

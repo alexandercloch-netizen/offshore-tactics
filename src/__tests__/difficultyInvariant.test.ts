@@ -1,5 +1,4 @@
 import {
-  DEFAULT_STRATEGY,
   EDGE_SEND,
   applyDecision,
   defaultStepNm,
@@ -9,8 +8,6 @@ import {
   initialProgress,
   raceDivision,
   ratingTccFor,
-  recommendedSail,
-  resolveSailChange,
   stepRace,
 } from '../engine/gameEngine';
 import { createWindField, sampleWind, weatherFromWind } from '../engine/wind';
@@ -25,6 +22,7 @@ import {
   EffortMode,
   GameEvent,
   GameState,
+  SailMode,
   StepResult,
   TacticalChoice,
 } from '../types';
@@ -75,8 +73,10 @@ interface Policy {
   name: 'par' | 'good' | 'reckless';
   effort: EffortMode;
   pick(state: GameState, event: GameEvent): TacticalChoice;
-  // Whether to hoist the Navigator's recommended specialist each tick.
-  hoistSails: boolean;
+  // The sail auto-helm mode. The REAL `autoSailTarget` + `resolveSailChange`
+  // path runs INSIDE `stepRace` when this is set, so the harness manages the
+  // wardrobe exactly as the shipped game does — no bespoke hoist-every-tick.
+  sailMode: SailMode;
 }
 
 const lowestRisk = (choices: TacticalChoice[]): TacticalChoice =>
@@ -86,18 +86,19 @@ const highestRisk = (choices: TacticalChoice[]): TacticalChoice => {
   return s[s.length - 1];
 };
 
-// Par: cruise, always the lowest-risk call, never hoist a specialist — the
-// baseline "just complete the race" engagement.
+// Par: cruise, always the lowest-risk call. The Balanced auto-helm manages the
+// wardrobe (the shipped player default) — the baseline "just complete the race"
+// engagement, decisions aside.
 const PAR: Policy = {
   name: 'par',
   effort: 'cruise',
   pick: (_state, event) => lowestRisk(event.choices),
-  hoistSails: false,
+  sailMode: 'balanced',
 };
 
 // Good: push, send the boldest FIELD call only when the read backs it
-// (`effectiveTacticalEdge >= EDGE_SEND`), else play safe — and fly the sail the
-// Navigator recommends. Skilful, disciplined racing.
+// (`effectiveTacticalEdge >= EDGE_SEND`), else play safe — with the same
+// Balanced auto-helm flying the wardrobe. Skilful, disciplined racing.
 const GOOD: Policy = {
   name: 'good',
   effort: 'push',
@@ -108,18 +109,27 @@ const GOOD: Policy = {
     }
     return lowestRisk(event.choices);
   },
-  hoistSails: true,
+  sailMode: 'balanced',
 };
 
-// Reckless: push, always the boldest call whatever the read says. Same sail
-// behaviour as Good (it manages its wardrobe like a real racer would), so the
+// Reckless: push, always the boldest call whatever the read says. Same Balanced
+// auto-helm as Good (it manages its wardrobe like a real racer would), so the
 // ONLY difference from Good is the indiscriminate bold decision — isolating
 // "sends everything regardless of the edge" as the thing that costs the race.
 const RECKLESS: Policy = {
   name: 'reckless',
   effort: 'push',
   pick: (_state, event) => highestRisk(event.choices),
-  hoistSails: true,
+  sailMode: 'balanced',
+};
+
+// The always-on harness smoke test sails MANUAL — draw-neutral and cheap, and it
+// proves the tick loop runs without paying for the auto-helm's changes.
+const PAR_MANUAL: Policy = {
+  name: 'par',
+  effort: 'cruise',
+  pick: (_state, event) => lowestRisk(event.choices),
+  sailMode: 'manual',
 };
 
 // --- One matrix cell: a single seeded headless race → corrected percentile. --
@@ -160,7 +170,7 @@ function runCell(
     ownedBoatIds: [],
     selectedCrewIds: PRO_CREW,
     provisions: PROVISIONS,
-    strategy: { bias: 0, effort: policy.effort },
+    strategy: { bias: 0, effort: policy.effort, sailMode: policy.sailMode },
     profile: { fleet: [] },
     condition: initialCondition(crew, PROVISIONS, race),
     weather,
@@ -193,17 +203,12 @@ function runCell(
       apply(res);
       if (res.retired) break;
     }
-
-    // Manage the wardrobe: hoist the Navigator's recommended specialist when it
-    // differs from what's flying. resolveSailChange is a no-op (null) for a
-    // re-select, so this only draws when a real change commits.
-    if (policy.hoistSails) {
-      const sail = recommendedSail(state);
-      if (sail && sail.id !== state.progress?.activeSailId) {
-        const changed = resolveSailChange(state, sail.id);
-        if (changed) apply(changed);
-      }
-    }
+    // The wardrobe manages itself: `stepRace` runs the REAL auto-helm
+    // (`autoSailTarget` + `resolveSailChange`) each tick from `strategy.sailMode`
+    // above — no bespoke hoist here.
+    // TODO(framework): the custom-boat benchmark asymmetry (a custom hull rates
+    // off its effective, sail-lifted polar while a catalogue boat rates off its
+    // base) is separate, deferred calibration work — not the dial's thresholds.
   }
 
   const p = state.progress!;
@@ -319,7 +324,7 @@ const RUN = process.env.RUN_INVARIANT === '1';
 // ---------------------------------------------------------------------------
 describe('difficulty invariant harness', () => {
   it('runs one cell and returns a finite percentile in [0, 1]', () => {
-    const pct = runCell('race-round-island', 'boat-sprite', 'corinthian', PAR, 7);
+    const pct = runCell('race-round-island', 'boat-sprite', 'corinthian', PAR_MANUAL, 7);
     expect(Number.isFinite(pct)).toBe(true);
     expect(pct).toBeGreaterThanOrEqual(0);
     expect(pct).toBeLessThanOrEqual(1);

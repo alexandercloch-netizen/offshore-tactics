@@ -187,11 +187,15 @@ export const ResultsScreen: React.FC<Props> = ({ navigation }) => {
         <View style={styles.finishLineCard} testID="sail-stats-line">
           <Text style={styles.finishLineText}>
             Sail changes: {result.sailChanges}
-            {result.sailChangesFumbled ? ` (${result.sailChangesFumbled} fumbled)` : ''}
+            {result.sailChangesAuto ? ` (${result.sailChangesAuto} auto)` : ''}
+            {result.sailChangesFumbled ? ` · ${result.sailChangesFumbled} fumbled` : ''}
             {result.rightSailPct !== undefined
               ? ` · ${result.rightSailPct}% of the race in the right sail`
               : ''}
             {result.blownSails?.length ? ` · blew out the ${result.blownSails.join(' and ')}` : ''}
+            {state.strategy.sailMode && state.strategy.sailMode !== 'manual'
+              ? ` · sailed on Auto (${state.strategy.sailMode.charAt(0).toUpperCase()}${state.strategy.sailMode.slice(1)})`
+              : ''}
           </Text>
         </View>
       ) : null}

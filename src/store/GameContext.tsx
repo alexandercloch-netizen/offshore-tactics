@@ -312,7 +312,10 @@ function reducer(state: GameState, action: Action): GameState {
       return {
         ...state,
         funds: state.funds - action.payload.cost,
-        strategy: DEFAULT_STRATEGY,
+        // Players start on the Balanced auto-helm (the engine's DEFAULT_STRATEGY
+        // stays `manual` so the golden stream is untouched; the player race seeds
+        // the dial here). Persisting the chosen mode across races is a v2.
+        strategy: { ...DEFAULT_STRATEGY, sailMode: 'balanced' },
         ownedBoatIds:
           state.selectedBoatId && !state.ownedBoatIds.includes(state.selectedBoatId)
             ? [...state.ownedBoatIds, state.selectedBoatId]
