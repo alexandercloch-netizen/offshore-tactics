@@ -133,6 +133,27 @@ test('a full race can be played from start to finish in the cockpit', async ({ p
   await page.getByTestId('debrief-ribbon').click();
   await expect(dock).not.toBeVisible();
 
+  // --- The sail-plan dial: the auto-helm flies the wardrobe itself -----------
+  // The dial sits in the control console (paused now, so it holds still). Flip
+  // it to the keenest auto-helm and prove the ⇄ counter then climbs with NO
+  // further manual picks — the boat is calling its own sails.
+  const countBadge = page.getByTestId('sail-change-count');
+  const changeCount = async (): Promise<number> =>
+    parseInt(((await countBadge.textContent()) ?? '').replace(/\D/g, ''), 10) || 0;
+  const beforeAuto = await changeCount();
+  await page.getByTestId('sail-plan-control').getByText('Aggress', { exact: false }).click({ timeout: 2_000 });
+  await setSimPaused(page, false);
+  await expect
+    .poll(
+      async () => {
+        await settleAnyDock(page);
+        return (await changeCount()) > beforeAuto;
+      },
+      { timeout: 30_000 }
+    )
+    .toBe(true);
+  await setSimPaused(page, true);
+
   // Resume, and prove the two-speed contract: the sail picker ALONE never
   // holds (the clock runs beneath it), but a docked DECISION stops the watch —
   // and the picker still opens and closes over the held call, handing the

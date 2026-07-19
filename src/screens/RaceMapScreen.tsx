@@ -229,6 +229,19 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
       const outcome = tickRef.current();
       standingsTickRef.current += 1;
       if (standingsTickRef.current % 7 === 0) setStandingsBeat((b) => b + 1);
+      // The auto-helm peeled a sail this tick: flash the debrief ribbon (never a
+      // hold — the sim sails on beneath it). Suppressed while anything else is on
+      // the lane (a decision, the picker, another ribbon), where the SAIL badge
+      // pop carries the news instead.
+      if (outcome.autoSailChange && !outcome.event && dockModeRef.current === null) {
+        const res = outcome.autoSailChange;
+        setDebrief({
+          summary: `Auto: ${res.summary}`,
+          glyph: res.bungled ? '✕' : '✓',
+          lostMinutes: res.lostHours >= 1 / 60 ? Math.round(res.lostHours * 60) : undefined,
+        });
+        setDockMode('debrief');
+      }
       if (outcome.event) {
         // Dock the opportunity live (evicting a lingering picker/ribbon — the
         // race outranks them). The engine suppresses further events while this
@@ -494,6 +507,13 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
   const target = polarTargetSpeed(state);
   const tide = tideRead(state);
   const sail = sailReadout(state);
+  // Right-sail % (only once enough of the race is measured to be honest) and the
+  // auto-helm's share of the change count — for the overflow telemetry.
+  const rightSailPct =
+    (progress.sailFracTotal ?? 0) > 0.2
+      ? Math.round((100 * (progress.sailFracRight ?? 0)) / progress.sailFracTotal!)
+      : undefined;
+  const sailChangesAuto = progress.sailChangesAuto ?? 0;
   const lay = laylines(state);
   const layPaths = lay ? [[lay.mark, lay.ends[0]], [lay.mark, lay.ends[1]]] : undefined;
   const outlook =
@@ -521,7 +541,7 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
     pctWindow.current.length > 0
       ? pctWindow.current.reduce((a, b) => a + b, 0) / pctWindow.current.length
       : report.now.polarPct;
-  const cells = buildPrimaryCells(report, smoothedPct);
+  const cells = buildPrimaryCells(report, smoothedPct, state.strategy.sailMode);
   const health = healthTint(condition.hullIntegrity, condition.crewStamina, condition.crewMorale);
 
   // The single live chart, drawn to the measured stage. The colour/flow field
@@ -683,6 +703,19 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
           },
         ]
       : []),
+    // Sail telemetry: how much of the race has been under the best canvas
+    // aboard, and the change count with the auto-helm's share broken out.
+    ...(rightSailPct !== undefined
+      ? [{ label: 'Right sail', value: `${rightSailPct}%`, testID: 'metric-right-sail-pct' }]
+      : []),
+    ...(sail && sail.changes > 0
+      ? [
+          {
+            label: 'Sail chg',
+            value: `${sail.changes}${sailChangesAuto > 0 ? ` (${sailChangesAuto} auto)` : ''}`,
+          },
+        ]
+      : []),
   ];
 
   const controls = (
@@ -715,6 +748,7 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
         onChoice={handleChoice}
         sailOptions={dockMode === 'sail' ? buildSailOptions() : undefined}
         onSailPick={handleSailPick}
+        sailAutoMode={state.strategy.sailMode}
         debrief={debrief ?? undefined}
         // Only a MOB demands an answer; everything else can be waved off —
         // "hold course" retracts a decision draw-free; the picker hands the

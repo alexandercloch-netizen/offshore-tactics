@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, fontSize, fontWeight, radius, spacing } from '../../theme';
-import { EffortMode, PlayerStrategy, RoutingBias } from '../../types';
+import { EffortMode, PlayerStrategy, RoutingBias, SailMode } from '../../types';
 import NauticalButton from '../NauticalButton';
 
 // The bottom control console — the thumb zone. Everything a racing hand needs
@@ -13,11 +13,12 @@ interface SegmentedProps<T> {
   value: T;
   options: { value: T; label: string }[];
   onSelect: (value: T) => void;
+  testID?: string;
 }
 
-function Segmented<T extends string | number>({ value, options, onSelect }: SegmentedProps<T>) {
+function Segmented<T extends string | number>({ value, options, onSelect, testID }: SegmentedProps<T>) {
   return (
-    <View style={styles.segmented}>
+    <View style={styles.segmented} testID={testID}>
       {options.map((opt) => {
         const active = opt.value === value;
         return (
@@ -119,6 +120,20 @@ const ControlDock: React.FC<ControlDockProps> = ({
           onSelect={(bias) => onStrategy({ bias })}
         />
       </View>
+    </View>
+    <View>
+      <Text style={styles.dialLabel}>Sail Plan</Text>
+      <Segmented<SailMode>
+        testID="sail-plan-control"
+        value={strategy.sailMode ?? 'manual'}
+        options={[
+          { value: 'manual', label: 'Manual' },
+          { value: 'conservative', label: 'Conserv.' },
+          { value: 'balanced', label: 'Balanced' },
+          { value: 'aggressive', label: 'Aggress.' },
+        ]}
+        onSelect={(sailMode) => onStrategy({ sailMode })}
+      />
     </View>
   </View>
 );

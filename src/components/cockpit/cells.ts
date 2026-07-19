@@ -1,5 +1,6 @@
 import { colors, status } from '../../theme';
 import { InstrumentReport } from '../../engine/instruments';
+import { SailMode } from '../../types';
 
 // The instrument band as data: pure functions from the report to exactly six
 // cell descriptors, so the one-home-per-number contract and the honesty rules
@@ -55,15 +56,29 @@ export function healthTint(hull: number, stamina: number, morale: number): strin
   return undefined;
 }
 
+// The auto-helm modes, capitalised for the SAIL a11y label ("… on Balanced
+// auto").
+const SAIL_MODE_WORD: Record<Exclude<SailMode, 'manual'>, string> = {
+  conservative: 'Conservative',
+  balanced: 'Balanced',
+  aggressive: 'Aggressive',
+};
+
 // The phone-primary band — EXACTLY six cells, fixed slot order, identical idle
 // and docked. `smoothedPct` is the screen's short rolling average of %TGT so
-// the hero number doesn't strobe tick to tick.
-export function buildPrimaryCells(report: InstrumentReport, smoothedPct?: number): CellSpec[] {
+// the hero number doesn't strobe tick to tick. `sailMode` marks the SAIL cell
+// when the auto-helm is flying the wardrobe (an `A⇄N` badge, no layout change).
+export function buildPrimaryCells(
+  report: InstrumentReport,
+  smoothedPct?: number,
+  sailMode?: SailMode
+): CellSpec[] {
   const now = report.now;
   const pct = Math.round(smoothedPct ?? now.polarPct ?? 0);
   const sail = now.activeSail;
   const sailName = sail?.name ?? 'Working Sails';
   const changes = sail?.changes ?? 0;
+  const auto = sailMode !== undefined && sailMode !== 'manual';
   return [
     {
       id: 'sog',
@@ -109,10 +124,12 @@ export function buildPrimaryCells(report: InstrumentReport, smoothedPct?: number
       value: shortSailName(sailName),
       tint: sail ? sailTint(sail.isWorking, sail.coverage) : undefined,
       a11y: `Sail ${sailName}, ${changes} changes${
+        auto ? `, ${SAIL_MODE_WORD[sailMode as Exclude<SailMode, 'manual'>]} auto-helm` : ''
+      }${
         sail && !sail.isWorking && sail.coverage < 0.75 ? ', wrong sail for these conditions' : ''
       }. Opens the sail picker`,
       minWidth: 64,
-      badge: `⇄${changes}`,
+      badge: auto ? `A⇄${changes}` : `⇄${changes}`,
     },
   ];
 }

@@ -10,7 +10,7 @@ import {
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { EffortMode, RootStackParamList, RoutingBias, WeatherScenario } from '../types';
+import { EffortMode, RootStackParamList, RoutingBias, SailMode, WeatherScenario } from '../types';
 import { colors, fontSize, fontWeight, radius, spacing, status } from '../theme';
 import { getCrewById, getRaceById, storylineForRace } from '../data';
 import { LANDMASSES } from '../data/landmasses';
@@ -534,6 +534,18 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
                 { value: 1, label: 'Bank Right' },
               ]}
               onSelect={(bias) => setStrategy({ bias })}
+            />
+            <Text style={[styles.planLabel, { marginTop: spacing.sm }]}>Sail plan</Text>
+            <Segmented<SailMode>
+              testID="sail-plan-control"
+              value={state.strategy.sailMode ?? 'manual'}
+              options={[
+                { value: 'manual', label: 'Manual' },
+                { value: 'conservative', label: 'Steady' },
+                { value: 'balanced', label: 'Balanced' },
+                { value: 'aggressive', label: 'Keen' },
+              ]}
+              onSelect={(sailMode) => setStrategy({ sailMode })}
             />
             {mine ? (
               <View style={styles.etaRow}>
