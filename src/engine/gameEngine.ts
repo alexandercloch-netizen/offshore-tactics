@@ -55,10 +55,11 @@ import {
   courseLengthNm,
   haversineNm,
   movePoint,
+  pointAtFraction,
   pointOfSailFor,
 } from './geo';
 import { bestVmgAngles, polarSpeed } from './polar';
-import { orcRating } from './orc';
+import { ORC_BASE_TWS, orcRating, windBandMultiplier } from './orc';
 import {
   bestSailAt,
   bestWardrobeMul,
@@ -2218,9 +2219,41 @@ export function resolveSailChange(state: GameState, sailId: string): StepResult 
 // owes time, a cruiser is given some back, and (unlike the old `baseSpeed`-only
 // guess) the boat's upwind/downwind *character* now shapes its handicap, exactly
 // as an ORC VPP does. See `engine/orc.ts`.
-export function ratingTccFor(boat: Boat): number {
-  if (typeof boat.ratingTcc === 'number') return boat.ratingTcc;
-  return orcRating(boat);
+//
+// Pass the race's characteristic wind (`raceWindBandTws`) to apply ORC-style
+// wind-band ("Triple Number") scoring: a stiff heavy-air boat owes MORE in a blow
+// and less in a drifter, a tender light-air flyer the reverse — see
+// `windBandMultiplier`. Omit `twsKn` for the plain medium-band rating (the old
+// single number, and what the boat lists on its certificate). The band multiplies
+// the base rating and is exactly 1.0 at 12 kn, so a 12 kn race is unchanged.
+export function ratingTccFor(boat: Boat, twsKn?: number): number {
+  const base = typeof boat.ratingTcc === 'number' ? boat.ratingTcc : orcRating(boat);
+  if (twsKn === undefined) return base;
+  // Keep the wind-banded rating inside the fleet's rating band so corrected
+  // scoring stays well-behaved at weather extremes.
+  return Math.max(0.7, Math.min(1.6, base * windBandMultiplier(boat, twsKn)));
+}
+
+// The race's characteristic true wind speed for wind-band scoring — the passage
+// mean TWS, sampled from the analytic wind field across the course and over a
+// representative passage window. A PURE function of the seeded field and the
+// course, so it is identical live and at the finish (the cockpit ribbon and the
+// official result score on the SAME band) and adds no RNG draws. Coarse on
+// purpose: it's a band selector, not a forecast.
+export function raceWindBandTws(field: WindField, race: Race): number {
+  const hours = Math.max(race.recordTimeHours * 2, 1);
+  const FRACS = 6; // sample points along the course
+  const TIMES = 4; // sample instants across the passage window
+  let sum = 0;
+  let n = 0;
+  for (let i = 0; i <= FRACS; i += 1) {
+    const p = pointAtFraction(race.waypoints, i / FRACS);
+    for (let j = 0; j <= TIMES; j += 1) {
+      sum += sampleWind(field, p.lat, p.lon, (hours * j) / TIMES).speedKn;
+      n += 1;
+    }
+  }
+  return n > 0 ? sum / n : ORC_BASE_TWS;
 }
 
 // Evenly thin a polyline to at most `max` points (keeping the ends), so the
@@ -2322,7 +2355,11 @@ export function buildResult(state: GameState, outcome: StepResult): RaceResult {
   // way offshore races are actually scored. Line-honours ("on the water") is
   // kept alongside for the drama of beating a faster boat on handicap.
   const elapsedHours = outcome.progress.elapsedHours;
-  const tcc = boat ? ratingTccFor(boat) : 1;
+  // Score on CORRECTED time at the race's characteristic wind (ORC wind-band /
+  // "Triple Number"): a stiff heavy-air boat owes more in a blow, a tender one
+  // more in the light. Falls back to the plain medium-band rating with no field.
+  const bandTws = boat && state.windField ? raceWindBandTws(state.windField, race) : undefined;
+  const tcc = boat ? ratingTccFor(boat, bandTws) : 1;
   const correctedHours = elapsedHours * tcc;
   const onWaterPosition = retired ? division.fleetSize : outcome.progress.position;
   const position =

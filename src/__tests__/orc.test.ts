@@ -1,6 +1,7 @@
-import { orcGphSecondsPerMile, orcRating, ORC_BASE_TWS } from '../engine/orc';
-import { ratingTccFor } from '../engine/gameEngine';
-import { getBoatById } from '../data';
+import { orcGphSecondsPerMile, orcRating, windBandMultiplier, ORC_BASE_TWS } from '../engine/orc';
+import { ratingTccFor, raceWindBandTws } from '../engine/gameEngine';
+import { createWindField } from '../engine/wind';
+import { getBoatById, getRaceById } from '../data';
 import { Boat } from '../types';
 
 // A parametric (catalogue-style) hull with NO authored rating, so `ratingTccFor`
@@ -77,5 +78,59 @@ describe('ratingTccFor routes through ORC only when unrated', () => {
     const custom = hull({ baseSpeed: 9.4, upwind: 82, downwind: 85 });
     expect(custom.ratingTcc).toBeUndefined();
     expect(ratingTccFor(custom)).toBe(orcRating(custom));
+  });
+});
+
+describe('wind-band ("Triple Number") scoring', () => {
+  // A neutral-stability hull (the reference pivot) has NO band shift at any wind —
+  // its handicap is the same in a drifter and a gale.
+  it('leaves a reference-stability boat flat across the wind range', () => {
+    const neutral = hull({ stability: 68 });
+    expect(windBandMultiplier(neutral, 6)).toBeCloseTo(1, 6);
+    expect(windBandMultiplier(neutral, 12)).toBeCloseTo(1, 6);
+    expect(windBandMultiplier(neutral, 20)).toBeCloseTo(1, 6);
+  });
+
+  it('is exactly 1.0 at the medium anchor for every boat (backward compatible)', () => {
+    for (const s of [45, 60, 68, 80, 92]) {
+      expect(windBandMultiplier(hull({ stability: s }), ORC_BASE_TWS)).toBeCloseTo(1, 6);
+    }
+  });
+
+  it('rates a STIFF boat up in a blow and down in the light (heavy-air weapon)', () => {
+    const stiff = hull({ stability: 92 });
+    expect(windBandMultiplier(stiff, 20)).toBeGreaterThan(1);
+    expect(windBandMultiplier(stiff, 6)).toBeLessThan(1);
+  });
+
+  it('rates a TENDER boat up in the light and down in a blow (light-air flyer)', () => {
+    const tender = hull({ stability: 45 });
+    expect(windBandMultiplier(tender, 6)).toBeGreaterThan(1);
+    expect(windBandMultiplier(tender, 20)).toBeLessThan(1);
+  });
+
+  it('ratingTccFor with no wind is the plain certificate rating (unchanged)', () => {
+    const tempest = getBoatById('boat-tempest')!;
+    expect(ratingTccFor(tempest)).toBe(tempest.ratingTcc);
+    // …and passing the medium anchor changes nothing.
+    expect(ratingTccFor(tempest, ORC_BASE_TWS)).toBeCloseTo(tempest.ratingTcc!, 6);
+  });
+
+  it('ratingTccFor shifts the certificate rating with the race wind', () => {
+    const meridian = getBoatById('boat-meridian')!; // stiff Sydney–Hobart boat
+    const base = meridian.ratingTcc!;
+    // A break in the drifter (owes less), owes more when it honks — its weather.
+    expect(ratingTccFor(meridian, 6)).toBeLessThan(base);
+    expect(ratingTccFor(meridian, 20)).toBeGreaterThan(base);
+  });
+
+  it('raceWindBandTws is a stable, positive passage mean (pure — same twice)', () => {
+    const race = getRaceById('race-fastnet')!;
+    const field = createWindField(race);
+    const a = raceWindBandTws(field, race);
+    const b = raceWindBandTws(field, race);
+    expect(a).toBe(b); // pure: no RNG, identical live and at the finish
+    expect(a).toBeGreaterThan(0);
+    expect(a).toBeLessThan(60);
   });
 });

@@ -26,6 +26,7 @@ import {
   laylines,
   polarTargetSpeed,
   raceDivision,
+  raceWindBandTws,
   ratingTccFor,
   recommendedSail,
   resolveBoatById,
@@ -92,7 +93,7 @@ function correctedRank(
     r.distanceNm,
     progress.elapsedHours,
     progress.distanceCoveredNm,
-    ratingTccFor(b),
+    ratingTccFor(b, state.windField ? raceWindBandTws(state.windField, r) : undefined),
     b.name
   );
   const idx = rows.findIndex((row) => row.isPlayer);
@@ -461,7 +462,7 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
       r.distanceNm,
       current.progress.elapsedHours,
       current.progress.distanceCoveredNm,
-      ratingTccFor(b),
+      ratingTccFor(b, current.windField ? raceWindBandTws(current.windField, r) : undefined),
       b.name
     );
     const idx = rows.findIndex((row) => row.isPlayer);
@@ -613,7 +614,7 @@ export const RaceMapScreen: React.FC<Props> = ({ navigation }) => {
             totalNm={race.distanceNm}
             playerElapsedHours={progress.elapsedHours}
             playerDistanceNm={progress.distanceCoveredNm}
-            playerTcc={ratingTccFor(boat)}
+            playerTcc={ratingTccFor(boat, state.windField ? raceWindBandTws(state.windField, race) : undefined)}
             playerName={boat.name}
             cadenceKey={standingsBeat}
           />
