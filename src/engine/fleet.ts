@@ -70,6 +70,26 @@ const REF_BOAT: Boat =
 const LEVERAGE_FRACTION = 0.05;
 const LEVERAGE_CAP_NM = 30;
 
+// The racing-friction allowance on the fleet's pace. The benchmark (`cleanRunHours`)
+// sails a clean CRUISE with wear but pays NONE of the friction a real race forces
+// on the player: time lost to tactical decisions/events, the cost of every sail
+// change, the extra wear of pushing. The AI, in turn, is advanced on a smooth
+// made-good line (`advanceFleet`) that never fires an event, never changes a sail
+// and never wears from effort. Paced to a *frictionless* benchmark, the tight Pro
+// fleet was uncatchable even sailing a flawless race — reproduced back-third to
+// last on Chicago-Mac (Pro) despite the right sail up 93% of the time, ~6–21% of
+// race time adrift. This allowance restores the missing tax so "par" is a clean
+// run *in an actual race*: a well-sailed Pro race lands mid-fleet and sharp play
+// (effort + calls + sail work) fights for the podium. It is division-keyed on
+// purpose — the loose, slower Corinthian fleet (mean 0.95, spread 0.14) already
+// absorbs the friction and races fair at 1.0 (the Round-Island and Sydney–Hobart
+// goldens confirm it), so only the tight Pro fleet needs the lift. Multiplies each
+// course's own benchmark, so it self-calibrates per race/boat/crew and carries to
+// any future race for free. A finer per-source friction model, and damping the
+// seed-to-seed side-lottery that still swings a good race between 1st and last,
+// are framework follow-ups; this is the honest first cut — tune it here.
+const FLEET_FRICTION: { pro: number; corinthian: number } = { pro: 1.1, corinthian: 1.0 };
+
 // Build the AI fleet (everyone but the player). Each boat is paced to a target
 // finish time built from the race benchmark (a clean run of the player's own
 // boat — the SAME tick model the player sails, so difficulty is consistent
@@ -83,15 +103,18 @@ export function createFleet(
   playerBoat?: Boat
 ): Competitor[] {
   const count = Math.max(division.fleetSize - 1, 0);
-  const bench = benchmarkHours ?? race.recordTimeHours * 2.4;
-  // The benchmark is a bare cruise finish in the player's own boat (see
-  // `cleanRunHours`), so the fleet already tracks boat and course. Pace it around
-  // the benchmark by division: a Corinthian club fleet sails a touch under
-  // benchmark pace, so a clean amateur sail lands upper-mid and a *sharp* one
-  // (better crew, more effort, good calls — all faster than the bare benchmark)
-  // fights for the podium; the Pro fleet sits right on it, so that sharp sail is
-  // the price of contending.
   const pro = division.paceTarget < 1.15;
+  // The benchmark is a bare cruise finish in the player's own boat (see
+  // `cleanRunHours`), so the fleet already tracks boat and course — but a bare
+  // cruise pays none of a real race's friction (decisions, sail changes, effort
+  // wear), so pad par by the division's racing-friction allowance before pacing
+  // the fleet off it (see FLEET_FRICTION).
+  const bench = (benchmarkHours ?? race.recordTimeHours * 2.4) * (pro ? FLEET_FRICTION.pro : FLEET_FRICTION.corinthian);
+  // Pace the fleet around that padded benchmark by division: a Corinthian club
+  // fleet sails a touch under benchmark pace, so a clean amateur sail lands
+  // upper-mid and a *sharp* one (better crew, more effort, good calls — all faster
+  // than the bare benchmark) fights for the podium; the Pro fleet sits right on it,
+  // so that sharp sail is the price of contending.
   const mean = pro ? 1.02 : 0.95;
   // A tight, fast pro fleet; a wider, more mixed club fleet.
   const spread = pro ? 0.1 : 0.14;
