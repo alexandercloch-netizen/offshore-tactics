@@ -58,6 +58,7 @@ import {
   pointOfSailFor,
 } from './geo';
 import { bestVmgAngles, polarSpeed } from './polar';
+import { orcRating } from './orc';
 import {
   bestSailAt,
   bestWardrobeMul,
@@ -2179,11 +2180,14 @@ export function resolveSailChange(state: GameState, sailId: string): StepResult 
 // ---- Results ----
 
 // A boat's handicap rating (corrected time = elapsed × TCC). Catalogue boats
-// carry an explicit rating; custom builds derive one from their pace so a fast
-// hull owes time and a cruiser is given some back.
+// carry an explicit authored rating (kept as a designer override); everything
+// else derives an ORC-style Time-on-Time rating from its own polar — a fast hull
+// owes time, a cruiser is given some back, and (unlike the old `baseSpeed`-only
+// guess) the boat's upwind/downwind *character* now shapes its handicap, exactly
+// as an ORC VPP does. See `engine/orc.ts`.
 export function ratingTccFor(boat: Boat): number {
   if (typeof boat.ratingTcc === 'number') return boat.ratingTcc;
-  return Math.max(0.85, Math.min(1.45, 0.78 + (boat.baseSpeed - 6) * 0.085));
+  return orcRating(boat);
 }
 
 // Evenly thin a polyline to at most `max` points (keeping the ends), so the
