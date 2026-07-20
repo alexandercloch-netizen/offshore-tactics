@@ -78,21 +78,28 @@ export const ResultsScreen: React.FC<Props> = ({ navigation }) => {
 
   const podium = result.finished && result.position <= 3;
   const won = result.finished && result.position === 1;
+  // TRUE line honours = first boat across the water, handicap aside. A fast hull
+  // can take line honours yet lose overall (it owes its rating back on corrected
+  // time), so it's its own result: below the overall (handicap) win, above a plain
+  // finish. The overall win is the one the offshore result turns on.
+  const lineHonours = result.finished && !result.retired && result.onWaterPosition === 1;
 
-  // The facts-only finish line: who took line honours on corrected time, and how
-  // the player fared against their nearest neighbour. Only true facts about THIS
+  // The facts-only finish line: who won overall on corrected time, and how the
+  // player fared against their nearest neighbour. Only true facts about THIS
   // race — never invented tactics or reasons.
   const finishLine = finishDebriefLine(result);
   const headline = result.retired
     ? 'RETIRED'
     : won
-      ? 'LINE HONOURS'
-      : podium
-        ? 'PODIUM'
-        : 'FINISHED';
+      ? 'OVERALL WIN'
+      : lineHonours
+        ? 'LINE HONOURS'
+        : podium
+          ? 'PODIUM'
+          : 'FINISHED';
   const headlineColor = result.retired
     ? colors.signalRed
-    : won
+    : won || lineHonours
       ? colors.brassLight
       : podium
         ? colors.signalGreen
@@ -312,14 +319,23 @@ const FinishReveal: React.FC<{
   );
 };
 
-// The facts-only finish line: line honours on corrected time + the player's
-// nearest neighbour and the margin between them. Strictly true facts captured at
-// the finish — never a reason a boat won, never invented rivalry.
+// The facts-only finish line: true line honours (first across the water) if the
+// player took them, who won overall on corrected time, and the player's nearest
+// neighbour and the margin between them. Strictly true facts captured at the
+// finish — never a reason a boat won, never invented rivalry.
 function finishDebriefLine(result: RaceResult): string | null {
   if (!result.finished || result.retired) return null;
   const parts: string[] = [];
-  if (result.correctedWinnerName) {
-    parts.push(`Line honours to ${result.correctedWinnerName} on corrected time.`);
+  // True line honours — first boat across the water, independent of handicap.
+  if (result.onWaterPosition === 1) {
+    parts.push('You took line honours — first across the finish.');
+  }
+  // The overall (handicap) win. If the player took it, correctedWinnerName is the
+  // player's own boat, so name them in the second person instead.
+  if (result.position === 1) {
+    parts.push('You won overall on corrected time.');
+  } else if (result.correctedWinnerName) {
+    parts.push(`${result.correctedWinnerName} won overall on corrected time.`);
   }
   if (result.nearestRivalName && result.nearestCorrectedGapSeconds != null) {
     const margin = formatGap(result.nearestCorrectedGapSeconds);

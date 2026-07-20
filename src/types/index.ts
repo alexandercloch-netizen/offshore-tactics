@@ -746,7 +746,7 @@ export interface RaceResult {
   nearestCorrectedGapSeconds?: number; // corrected-time gap to the nearest boat (drives the photo-finish hold)
   nearestRivalName?: string; // the boat just ahead/astern of the player on corrected time
   nearestRivalAhead?: boolean; // true if that boat beat the player on corrected time (player chased it)
-  correctedWinnerName?: string; // who took line honours on corrected time (may be the player)
+  correctedWinnerName?: string; // who won overall on corrected time / handicap (may be the player)
   // Weather-scenario provenance: present only when the race sailed real model
   // output ("Today's forecast" / a historic edition). Scenario runs stay in the
   // local logbook — they never post to the global leaderboard.
