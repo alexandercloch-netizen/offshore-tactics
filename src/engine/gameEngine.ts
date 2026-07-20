@@ -113,8 +113,18 @@ const TRAIL_CAP = 400;
 
 export const DEFAULT_STRATEGY: PlayerStrategy = { bias: 0, effort: 'cruise' };
 // Effort dial: speed multiplier and wear multiplier per mode.
+//
+// The trade: push buys +8% boatspeed for extra wear. CRUCIAL BALANCE NOTE — the AI
+// fleet never wears (see `advanceFleet` in fleet.ts: it's a frictionless pace line),
+// so every point of condition the player sheds is ground lost outright, and wear
+// COMPOUNDS through `conditionFactor` over a long passage. At the old push wear of
+// 1.6× that tax reliably overran the +8% on a multi-day race and dropped a first-half
+// leader through the whole (tightly-packed) Pro fleet — "led half the race, finished
+// last." Push wear is now 1.3×: a real risk/reward lever (you still pay for it late),
+// not a self-destruct button. Goldens sail DEFAULT_STRATEGY (cruise), so this
+// push-only coefficient never touches their pins. Tune push here.
 export const EFFORT_SPEED: Record<EffortMode, number> = { conserve: 0.93, cruise: 1, push: 1.08 };
-const EFFORT_WEAR: Record<EffortMode, number> = { conserve: 0.7, cruise: 1, push: 1.6 };
+const EFFORT_WEAR: Record<EffortMode, number> = { conserve: 0.7, cruise: 1, push: 1.3 };
 
 function strategyOf(state: GameState): PlayerStrategy {
   return state.strategy ?? DEFAULT_STRATEGY;
@@ -741,7 +751,16 @@ function appendReading(
 
 // ---- Speed model ----
 
-// Multiplier on polar speed from crew & hull condition.
+// Multiplier on polar speed from crew & hull condition — the fade amplifier.
+// Floors: stamina 0.6, morale 0.85, hull 0.7, so a fully-drained boat sails at
+// ~0.36× its polar. Because the AI fleet never wears (see `advanceFleet`), ALL of
+// this fade is ground lost outright to the fleet, not shared weather — it is what
+// turns a first-half lead into a back-half collapse when the crew empties. The
+// stamina term dominates (0.4 weight, and stamina is the first thing to empty under
+// push + frequent sail changes). Raising these floors is the most direct lever on
+// "led then sank" — but they also gate `cleanRunHours` (the fleet's own benchmark),
+// so a floor change moves the goldens' player-trajectory pins; the golden-safe
+// levers are the wear INPUTS (EFFORT_WEAR, the sail-change tax), not this floor.
 export function conditionFactor(condition: BoatCondition): number {
   const staminaFactor = 0.6 + 0.4 * (condition.crewStamina / 100);
   const moraleFactor = 0.85 + 0.15 * (condition.crewMorale / 100);
@@ -1572,6 +1591,12 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
   // Safety gear takes the edge off the weather-driven wear; spares specifically
   // protect the hull.
   const riskMul = 1 - prov.safety;
+  // Stamina is the first thing to empty and the one that bites: at 0 it pins
+  // `conditionFactor`'s stamina floor and the boat sails ~half its polar for the
+  // rest of the race, while the fleet (frictionless) holds pace — this is the
+  // "led then sank" failure, and it happens without any retirement. Morale wear is
+  // deliberately NOT scaled by `wearMul`: pushing tires bodies and breaks gear, but
+  // doesn't dent spirits the way it does legs. Stamina and hull below DO take it.
   const condition: BoatCondition = {
     crewStamina: clamp(src.condition.crewStamina - df * (28 + weather.riskModifier * 45 * riskMul) * wearMul),
     crewMorale: clamp(src.condition.crewMorale - df * (10 + weather.riskModifier * 40 * riskMul)),
@@ -2105,6 +2130,14 @@ export function resolveSailChange(state: GameState, sailId: string): StepResult 
   const heavy = prev.windSpeedKn >= HEAVY_AIR_KN;
   const blown = bungled && heavy && !!hoisted && blowRoll < BLOWOUT_CHANCE;
 
+  // −2 stamina per committed change, UNCAPPED across the race. KNOWN LEVER: an
+  // aggressive auto-helm firing dozens of changes on a shifty course drains crew
+  // stamina on its own (2×34 ≈ −68), craters `conditionFactor`, and — because the AI
+  // fleet never tires (see `advanceFleet`) — helps drop a first-half leader through
+  // the fleet late. Saturating this tax is a candidate fix, but it perturbs the
+  // managed/auto race trajectories unpredictably (a single-seed parity swing), so it
+  // needs multi-seed validation before it ships; the push-wear reduction (EFFORT_WEAR)
+  // is the cleaner first lever. Leave flat for now.
   const condition: BoatCondition = {
     crewStamina: clamp(state.condition.crewStamina - 2),
     crewMorale: clamp(state.condition.crewMorale + (bungled ? -3 : 0)),
@@ -2460,13 +2493,18 @@ export function buildResult(state: GameState, outcome: StepResult): RaceResult {
 }
 
 export function formatDuration(hours: number): string {
-  if (hours < 24) {
-    const h = Math.floor(hours);
-    const m = Math.round((hours - h) * 60);
+  // Round to whole minutes FIRST, then split — otherwise rounding a remainder can
+  // carry to 60m or (the bug we hit) 24h, e.g. 95.6h printing as "3d 24h" instead
+  // of "4d 0h".
+  const totalMin = Math.max(0, Math.round(hours * 60));
+  if (totalMin < 24 * 60) {
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
     return `${h}h ${m.toString().padStart(2, '0')}m`;
   }
-  const days = Math.floor(hours / 24);
-  const remHours = Math.round(hours - days * 24);
+  const totalH = Math.floor(totalMin / 60);
+  const days = Math.floor(totalH / 24);
+  const remHours = totalH - days * 24;
   return `${days}d ${remHours}h`;
 }
 

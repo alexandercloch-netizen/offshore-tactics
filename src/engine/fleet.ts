@@ -202,6 +202,15 @@ function refMadeGoodHours(race: Race, field: WindField): number {
 // roughly [-1, 1] (positive = the right of the rhumb line, negative = left),
 // scaled by how pronounced the pressure gradient is. A boat whose bias matches
 // this gains; a boat on the wrong side loses.
+//
+// NOTE: this reads ONLY `pressureHint`, which is built from the STATIC seeded
+// gradient plus the slowly-drifting headline feature — it does NOT see the
+// oscillating wind shift, the travelling front, or the rotation (wind.ts). So over
+// a race the favoured side is near-CONSTANT per seed: a boat's `sideBonus` is a
+// persistent bank (ride +8% or bleed −8% the whole way), not a live, flipping
+// battle. That's the seed-to-seed "side lottery"; to make it genuinely tactical,
+// feed the evolving field in here. (It never touches the player, only the fleet's
+// internal spread.)
 function favouredSide(
   field: WindField,
   lat: number,
@@ -239,15 +248,24 @@ function competitorState(race: Race, c: Competitor): { pos: GeoPoint; courseDeg:
 }
 
 // Advance every competitor by the time elapsed this step. Each boat is paced to
-// its benchmark target (which sets the difficulty), but sails through the *same
-// model the player does*: it makes good the reference polar's true speed in the
-// real wind at its own position — fast in pressure, slow in a hole, just like the
-// player's boat — scaled by a per-boat `paceScale` so the tide-free finish still
-// lands on target. The same tide drifts it along its course. Because the fleet's
-// speed swings with the wind exactly as the player's does, tide pushes both the
-// same way and cancels in the standings — only sailing it better wins. The
-// `paceScale` is calibrated once (lazily, on the first step that has the field)
-// and carried thereafter. Pure given RNG.
+// its benchmark target (which sets the difficulty) and makes good the reference
+// polar's true speed in the real wind at its own position — fast in pressure, slow
+// in a hole — scaled by a per-boat `paceScale` so the tide-free finish still lands
+// on target. Only the WIND response matches the player; the same tide drifts it
+// along its course and cancels in the standings.
+//
+// CRUCIAL ASYMMETRY: the fleet is FRICTIONLESS. A competitor has no condition at
+// all (see the `Competitor` type) — it never wears, never tires, never changes a
+// sail and never pays a decision's time. `paceScale` is a fixed scalar for the
+// whole race, so the fleet's mean pace never droops. The PLAYER, by contrast, sheds
+// speed through `conditionFactor` as the crew tires and the hull wears. So every
+// point of condition the player loses is ground lost outright to a fleet that holds
+// pace to the line — which, over a long passage under push, is exactly what turns a
+// first-half lead into a back-half collapse. Tune wear (gameEngine `EFFORT_WEAR` /
+// `conditionFactor`) with this in mind; the fleet has no counterpart to soften.
+//
+// `paceScale` is calibrated once (lazily, on the first step that has the field) and
+// carried thereafter. Pure given RNG.
 export function advanceFleet(
   fleet: Competitor[],
   race: Race,
@@ -275,7 +293,13 @@ export function advanceFleet(
     // one, which is what matches the player's tide sensitivity.
     const mgs = madeGoodSpeed(REF_BOAT, courseDeg, wind.fromDeg, wind.speedKn);
     const align = (c.bias ?? 0) * favouredSide(field, pos.lat, pos.lon, startHours, axisDeg);
+    // ±8% per step, applied EVERY tick the boat's chosen side stays favoured — and
+    // because `favouredSide` is near-constant per seed (see its note), this COMPOUNDS
+    // into large course-long leverage. This directional bank, not `variance`, is the
+    // dominant seed-to-seed standings shuffle; shrink 0.08 to damp the side-lottery.
     const sideBonus = 1 + 0.08 * align;
+    // Per-step gaussish noise (±5%), mean-reverting — roughens the order without
+    // steering it (contrast sideBonus, which is directional and compounds).
     const variance = 1 + gaussish() * 0.05;
     // The same tide the player fights, along the local course direction: a fair
     // stream carries the boat, a foul one holds it up. The benchmark is tide-free,
@@ -298,7 +322,11 @@ export function advanceFleet(
   });
 }
 
-// The player's live standing: 1 + the number of boats currently ahead.
+// The player's live standing on the WATER: 1 + the boats currently further along.
+// RAW distance order, no handicap — this is the "boats ahead on the water" place the
+// cockpit shows live; the corrected (handicap) standing is `correctedPosition` /
+// `liveCorrectedStandings`. The two can diverge, and a first-half water lead that
+// fades is real movement here, not a metric artifact.
 export function livePosition(fleet: Competitor[], playerDistanceNm: number): number {
   const ahead = fleet.filter((c) => !c.retired && c.distanceNm > playerDistanceNm).length;
   return ahead + 1;
@@ -316,6 +344,13 @@ function projectedElapsed(c: Competitor, playerElapsedHours: number, totalNm: nu
 // The player's finish on CORRECTED (handicap) time: rank everyone's
 // elapsed × rating. This is the real offshore result — a slower boat that sails
 // above its rating beats a faster one that doesn't.
+//
+// FINISH-ONLY VALID: `playerElapsedHours` is scored raw while rivals are projected
+// to the line (`projectedElapsed`), so mid-race — with the player on partial elapsed
+// — the number is meaningless (it reads ~1st until the player nearly finishes).
+// Production calls it only once `finished` (where covered == total and the numbers
+// are exact); for a live corrected standing use `liveCorrectedStandings`, which
+// projects the player the same way. Do not call this mid-race.
 export function correctedPosition(
   fleet: Competitor[],
   totalNm: number,
