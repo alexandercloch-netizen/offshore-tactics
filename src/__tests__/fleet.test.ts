@@ -63,6 +63,22 @@ describe('createFleet', () => {
     expect(fleet.every((c) => typeof c.bias === 'number')).toBe(true);
     expect(fleet.every((c) => c.bias! >= -1 && c.bias! <= 1)).toBe(true);
   });
+
+  it('pads only the Pro fleet by the racing-friction allowance (Pro 1.10, Corinthian 1.0)', () => {
+    // With no player boat the on-water edge is 1, so pacedBench = bench × friction,
+    // and pacedBench === targetHours × speedMul for every boat — an exact, RNG-free
+    // invariant that pins the division-keyed friction values. A frictionless cruise
+    // benchmark left the tight Pro fleet uncatchable; padding par by ~10% restores
+    // the tax the player pays but the AI never does. The loose Corinthian fleet
+    // already races fair, so it stays at 1.0 (and its goldens stay byte-identical).
+    const bench = 100;
+    setRng(mulberry32(7));
+    const pro = createFleet(race, race.divisions.pro, bench);
+    setRng(mulberry32(7));
+    const cor = createFleet(race, race.divisions.corinthian, bench);
+    pro.forEach((c) => expect(c.targetHours * c.speedMul).toBeCloseTo(110, 6));
+    cor.forEach((c) => expect(c.targetHours * c.speedMul).toBeCloseTo(100, 6));
+  });
 });
 
 describe('fleet racing dynamics', () => {

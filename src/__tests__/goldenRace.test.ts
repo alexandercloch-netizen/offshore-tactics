@@ -229,27 +229,52 @@ describe('golden races — the determinism contract', () => {
 // ---------------------------------------------------------------------------
 // The pins. Captured from the engine — byte-exact.
 //
-// PARTIALLY RE-BLESSED for the *faithful fleet benchmark* (`fleetBenchmarkHours`
+// PARTIALLY RE-BLESSED (2nd time) for the *Pro racing-friction allowance*
+// (`FLEET_FRICTION` in fleet.ts pads the Pro fleet's benchmark by 1.10 so par is a
+// clean run *in an actual race*, not a frictionless cruise — the Corinthian fleet
+// stays at 1.0). It feeds ONLY `createFleet`'s pace, never the player's own
+// `stepRace` trajectory, so the re-bless is again tightly bounded:
+//
+//   • BOTH Corinthian goldens (INSHORE, GALE) are UNCHANGED, byte-for-byte —
+//     friction 1.0 means their setup is identical.
+//   • The OFFSHORE (Pro) golden's PLAYER-TRAJECTORY pins are UNCHANGED, byte-for-
+//     byte — `ticks`, `decisions`, `elapsedH`, `distanceNm`, `hull`, `stamina`,
+//     `eventIds`. The player sails the exact same race; the allowance adds NO
+//     `rnd()` call to the player's stream.
+//   • What moved is all fleet-dependent: `position` 31 → 8, `correctedPos` 35 → 6
+//     (the fix — a well-sailed Pro boat is no longer buried), `fleetTop3`, and
+//     `rngDraws` 11510 → 12002. The draw-count move is NOT a stream break: a slower
+//     fleet keeps more boats racing each tick, so `advanceFleet` (which draws a
+//     fixed amount PER still-racing boat per tick) simply draws over more boat-ticks
+//     before they finish. Confirmed against the player trajectory, which is intact.
+//
+// Never re-bless to hide a moved player-trajectory pin. A moved `rngDraws` is only
+// acceptable when — as here — the player trajectory is provably byte-identical and
+// the delta is isolated to fleet lifetime; otherwise fix the code.
+//
+// (1st re-bless) for the *faithful fleet benchmark* (`fleetBenchmarkHours`
 // now paces the AI fleet off the player's ACTUAL boat AND crew — skill via
 // `crewSkillFactor`, and crew count/condition via the same `initialCondition` the
 // race seeds; see gameEngine.ts). The benchmark feeds ONLY `createFleet`'s pace,
 // NEVER the player's own `stepRace` trajectory, so this re-bless is tiny and
 // tightly bounded:
 //
-//   • The PLAYER-TRAJECTORY pins are UNCHANGED, byte-for-byte — `ticks`,
-//     `decisions`, `elapsedH`, `distanceNm`, `hull`, `stamina`, `eventIds` — AND so
-//     is `rngDraws` (10670 / 11510 / 4669), in ALL THREE races. The player sails the
-//     exact same race; the fix adds/removes NO `rnd()` calls and `createFleet` still
-//     draws exactly 5 values per boat regardless of the benchmark VALUE. If any of
-//     these had moved, the change would have reached into the player's stream — it
-//     did not (confirmed against the pre-change engine on this branch).
-//   • Exactly ONE pin moves: the OFFSHORE `correctedPos`, 36 → 35. The golden crews
+//   • The PLAYER-TRAJECTORY pins were UNCHANGED, byte-for-byte — `ticks`,
+//     `decisions`, `elapsedH`, `distanceNm`, `hull`, `stamina`, `eventIds`. The player
+//     sails the exact same race; the fix adds/removes NO `rnd()` calls and
+//     `createFleet` still draws exactly 5 values per boat regardless of the benchmark
+//     VALUE. (For THAT change `rngDraws` also held at 10670 / 11510 / 4669 in all
+//     three; the OFFSHORE value has since moved to 12002 under the 2nd re-bless above
+//     — fleet lifetime, not a stream break.)
+//   • Exactly ONE pin moved for that change: the OFFSHORE `correctedPos`, 36 → 35 (it
+//     has since moved again to 6 under the friction allowance). The golden crews
 //     happen to sit near the club average these boats were formerly benchmarked at,
-//     so the faithful benchmark only nudges the fleet's handicap standings by a hair
-//     here (inshore and gale are byte-identical); the fix bites harder for crews/boats
+//     so the faithful benchmark only nudged the fleet's handicap standings by a hair
+//     then (inshore and gale byte-identical); the fix bites harder for crews/boats
 //     that differ more from the old generic assumption (see windScenario.test.ts).
 //
-// Never re-bless to hide a moved player-trajectory pin or a changed `rngDraws`.
+// Never re-bless to hide a moved player-trajectory pin, or a changed `rngDraws` that
+// isn't provably isolated to fleet lifetime.
 // ---------------------------------------------------------------------------
 
 const GOLDEN_INSHORE: GoldenSummary = {
@@ -284,16 +309,22 @@ const GOLDEN_INSHORE: GoldenSummary = {
 const GOLDEN_OFFSHORE: GoldenSummary = {
   ticks: 99,
   decisions: 8,
-  rngDraws: 11510,
+  // RE-BLESSED for the Pro racing-friction allowance (see the note above): the
+  // slower Pro fleet keeps more boats on the course each tick, so `advanceFleet`
+  // draws MORE (11510 → 12002). This is fleet-lifetime divergence, NOT a player
+  // stream break — the player sailed a byte-identical race (ticks/decisions/
+  // elapsedH/distanceNm/hull/stamina/eventIds all UNCHANGED); only fleet-dependent
+  // pins moved.
+  rngDraws: 12002,
   finished: true,
   retired: false,
   elapsedH: 133.099396,
   distanceNm: 688.221188,
-  position: 31,
-  // The ONLY pin that moved for this change: correctedPos 36 → 35. The faithful
-  // per-crew benchmark nudged one rival's handicap standing past the player;
-  // everything else (incl. rngDraws 11510 and on-water position 31) is unchanged.
-  correctedPos: 35,
+  // The fix at work: a well-sailed Pro boat now finishes 8th on the water (was 31st)
+  // and 6th on corrected time (was 35th) — mid-to-upper fleet, no longer buried by a
+  // benchmark that ignored the friction the player pays but the AI never does.
+  position: 8,
+  correctedPos: 6,
   hull: 63.815566,
   stamina: 34.062182,
   eventIds: [
@@ -306,7 +337,7 @@ const GOLDEN_OFFSHORE: GoldenSummary = {
     'evt-gear',
     'evt-fo-jury',
   ],
-  fleetTop3: ['Rán', 'Comanche', 'Leopard'],
+  fleetTop3: ['Comanche', 'Leopard', 'Pyewacket'],
 };
 
 const GOLDEN_GALE: GoldenSummary = {
