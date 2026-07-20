@@ -75,7 +75,15 @@ The simulation is a **pure, deterministic engine** with a thin React UI on top.
     fleet's handicap is centred on the player's boat rating backed out by that
     edge, so **corrected (handicap) time is boat-neutral** — you win it by sailing
     above your rating (crew, effort, calls), not by buying speed. Course-side bias
-    + variance shuffle the standings.
+    + variance shuffle the standings, and `FLEET_FRICTION` (pro 1.10, corinthian
+    1.0) pads par so it's a clean run *in a real race*, not a frictionless cruise.
+    **The fleet advance is FRICTIONLESS** — a competitor has no condition at all
+    (`advanceFleet` carries a constant `paceScale`, no wear/effort/sail/decision
+    time), so it never fades. The player DOES wear, so effort and wear are the
+    player's lever *and* liability: on a long/light course, push + many sail changes
+    can crater `conditionFactor` and turn a first-half lead into a back-half collapse
+    against a fleet that holds pace. Handicap ratings are ORC-style, derived from the
+    boat's polar (`engine/orc.ts`; authored `Boat.ratingTcc` is an override).
   - `geo.ts` — projections, bearings, distances. `rng.ts` — seedable RNG.
   - `recommend.ts` — home-screen race recommendation from the player profile.
   - `start.ts` — the race start: the start-line geometry (`startLineGeo`), the
@@ -291,3 +299,12 @@ effects are covered by `src/__tests__/provisioning.test.ts`.
 - Wear accrues by geometric progress (`df` sums to ~1 over a race), so wear
   coefficients are "points lost over a whole race". Only a destroyed hull
   retires you; an exhausted crew just sails slowly.
+- **The wear-differential trap.** The player wears; the AI fleet never does
+  (`advanceFleet` is frictionless). So an exhausted crew doesn't just "sail slowly"
+  — it bleeds ground to a fleet holding pace, and on a long race can drop a leader
+  through the whole fleet late. `push` (`EFFORT_WEAR`) and each sail change (the
+  saturating stamina tax in `resolveSailChange`) are the drains; the aggressive
+  auto-helm firing many changes was a big one. These wear INPUTS are golden-safe to
+  tune (goldens sail cruise/manual); the `conditionFactor` floors are NOT (they gate
+  `cleanRunHours`, moving every golden's player pins). If push/aggressive "feels like
+  a self-destruct," that's the differential — tune the inputs, not the floor.
