@@ -67,3 +67,43 @@ export function orcRating(boat: Boat, twsKn = ORC_BASE_TWS): number {
   const gph = orcGphSecondsPerMile(boat, twsKn);
   return clamp(referenceGph() / Math.max(gph, 1), RATING_MIN, RATING_MAX);
 }
+
+// ---- Wind-band ("Triple Number") scoring ------------------------------------
+//
+// Real ORC publishes THREE numbers per boat — a light/medium/heavy-air rating —
+// because a hull's handicap isn't a single figure: a stiff heavy-air boat is
+// quick when it honks and slow in the drifter; a tender light-air flyer is the
+// reverse. Our PARAMETRIC polar can't express that — it scales every hull's speed
+// by the same wind response, so a polar-derived band comes out identically 1.0
+// (verified). So the band is carried by FIXED per-boat DATA instead: the boat's
+// `stability`. Stiff boats (high stability) rate UP in a blow — it's their
+// weather, so they owe more — and DOWN in light air (handed a break); tender
+// boats the other way. This MULTIPLIES the base rating and is exactly 1.0 at the
+// medium band, so at 12 kn corrected time is unchanged (backward compatible).
+//
+// It is a RATING-ONLY effect: the speed model never sees it, so the determinism
+// contract (the player's sailed trajectory) is untouched — only corrected
+// standings move. The reference-class AI fleet sits at the neutral stability, so
+// its band ≈ 1.0 at every wind; the band adjudicates the PLAYER's boat character
+// against the fleet, which is what makes choosing a boat for the expected weather
+// a real tactical call.
+
+// The neutral pivot — the reference hull's stability (boat-corsair). A boat here
+// gets no wind-band shift at any wind.
+const BAND_STIFF_REF = 68;
+// Stability points per unit of "stiffness"; spans the catalogue (45..92) to ~±1.
+const BAND_STIFF_SCALE = 24;
+// How hard the band bites: at full stiffness (±1) and the wind-delta cap the
+// rating shifts ~±8%. A modest, playtest-tunable first cut — tune it here.
+const BAND_STRENGTH = 0.1;
+
+// The wind-band multiplier on a boat's base rating at a race's characteristic
+// wind. 1.0 at the medium anchor (12 kn) and for a neutral-stability hull. Pure,
+// draw-free — a fixed function of the boat's stability and the quoted wind.
+export function windBandMultiplier(boat: Boat, twsKn: number): number {
+  const stiffness = clamp((boat.stability - BAND_STIFF_REF) / BAND_STIFF_SCALE, -1.2, 1.2);
+  // Wind relative to the medium anchor, capped so a screaming gale or a glass-off
+  // can't run the multiplier away.
+  const windDelta = clamp((twsKn - ORC_BASE_TWS) / ORC_BASE_TWS, -0.6, 0.8);
+  return 1 + BAND_STRENGTH * stiffness * windDelta;
+}

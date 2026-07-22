@@ -23,6 +23,8 @@ import {
   formatDuration,
   navigatorSkill,
   raceDivision,
+  raceWindBandTws,
+  ratingTccFor,
   resolveBoatById,
 } from '../engine/gameEngine';
 import { planRoute, WindSampler } from '../engine/router';
@@ -190,6 +192,23 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
   const fleetSize = raceDivision(race, state.selectedDivision).fleetSize;
   const outlook = weatherOutlook(windField, progress.lat, progress.lon, 0);
   const hint = pressureHint(windField, progress.lat, progress.lon, 0);
+
+  // Wind-band ("Triple Number") handicap: what THIS boat rates in the conditions
+  // this passage is likely to sail, versus its medium-air certificate. A stiff
+  // heavy-air hull gets a break in a drifter and owes time in a blow; a tender
+  // one is the reverse. The exact same band scores the finish — so this is an
+  // honest preview of the handicap the player will be judged on, and makes
+  // choosing a boat for the weather a real call. See `windBandMultiplier`.
+  const bandTws = raceWindBandTws(windField, race);
+  const nominalTcc = ratingTccFor(boat);
+  const bandedTcc = ratingTccFor(boat, bandTws);
+  const bandDelta = bandedTcc - nominalTcc;
+  const bandNote =
+    bandDelta < -0.004
+      ? `a break in these conditions (owes less than its ${nominalTcc.toFixed(2)} certificate)`
+      : bandDelta > 0.004
+        ? `owes time in these conditions (above its ${nominalTcc.toFixed(2)} certificate)`
+        : `on its ${nominalTcc.toFixed(2)} certificate here`;
 
   // Map sized to the course, centred in a max-width column (as in the race).
   const CONTENT_MAX = 760;
@@ -452,6 +471,9 @@ export const BriefingScreen: React.FC<Props> = ({ navigation }) => {
                 <Text style={styles.firstLeg}>
                   First leg: {progress.pointOfSail.toLowerCase()}
                 </Text>
+                <Text style={styles.handicap} testID="briefing-windband">
+                  Handicap here: {bandedTcc.toFixed(2)} TCC — {bandNote}
+                </Text>
               </View>
             </View>
           </View>
@@ -673,6 +695,12 @@ const styles = StyleSheet.create({
   // "good" keeps its meaning next door.
   hint: { color: status.info, fontSize: fontSize.sm, marginTop: spacing.xs },
   firstLeg: { color: colors.mist, fontSize: fontSize.sm, marginTop: spacing.xs },
+  handicap: {
+    color: colors.brassLight,
+    fontSize: fontSize.sm,
+    marginTop: spacing.sm,
+    lineHeight: 18,
+  },
   hazard: { color: colors.mist, fontSize: fontSize.sm, lineHeight: 20 },
   storyTheme: {
     color: colors.brassLight,
