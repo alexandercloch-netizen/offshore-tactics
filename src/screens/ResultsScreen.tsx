@@ -22,6 +22,10 @@ import { divisionName } from '../lib/labels';
 // A corrected gap this tight (seconds) is a photo finish — rare by design — and
 // earns the extra suspense beat before the corrected result is shown.
 const PHOTO_FINISH_SECONDS = 10;
+// The widest corrected-time margin that still reads as a genuine duel. Beyond
+// this ("edged you by 30 minutes"), the debrief drops the duel verbs for plain
+// distance phrasing — a handful of hours apart is a result, not a photo finish.
+const DUEL_MARGIN_SECONDS = 30 * 60;
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Results'>;
 
@@ -339,12 +343,23 @@ function finishDebriefLine(result: RaceResult): string | null {
   }
   if (result.nearestRivalName && result.nearestCorrectedGapSeconds != null) {
     const margin = formatGap(result.nearestCorrectedGapSeconds);
-    // Truthful framing of the margin: if the nearest boat beat the player on
-    // corrected time the player chased it; otherwise the player held it off.
+    // Duel framing ("edged"/"held off") only reads right at a genuinely close
+    // margin — "edged you by 230h 45m" is absurd. Reserve it for a real fight and
+    // fall back to plain distance phrasing for a wide gap. Truthful either way:
+    // ahead = the rival beat the player on corrected time (the player chased it).
+    const closeDuel = result.nearestCorrectedGapSeconds <= DUEL_MARGIN_SECONDS;
     if (result.nearestRivalAhead) {
-      parts.push(`${result.nearestRivalName} edged you by ${margin} on corrected time.`);
+      parts.push(
+        closeDuel
+          ? `${result.nearestRivalName} edged you by ${margin} on corrected time.`
+          : `You finished ${margin} behind ${result.nearestRivalName} on corrected time.`
+      );
     } else {
-      parts.push(`You held off ${result.nearestRivalName} by ${margin} on corrected time.`);
+      parts.push(
+        closeDuel
+          ? `You held off ${result.nearestRivalName} by ${margin} on corrected time.`
+          : `You finished ${margin} ahead of ${result.nearestRivalName} on corrected time.`
+      );
     }
   }
   return parts.length ? parts.join(' ') : null;

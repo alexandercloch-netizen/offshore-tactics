@@ -45,7 +45,21 @@ The simulation is a **pure, deterministic engine** with a thin React UI on top.
     (`forecastConfidence`/`sampleForecast`) blurs the *displayed* forecast away
     from the true field as you look further ahead — a sharp Navigator
     (`navigatorSkill`) keeps it trustworthy longer; the race still sails the true
-    field, so it stays fair and deterministic.
+    field, so it stays fair and deterministic. **KNOWN ISSUE — the field runs
+    light on several courses** (a travelling-front DC bias + a hazard-`speedMul`
+    double-discount of the already-light baked mean hold ~15/17 courses below
+    baseline). Fixing it is subtle: the obvious repairs (mean-neutral front pulse,
+    tempering `speedMul`, capping the unbounded synoptic rotation) each pass in
+    isolation but **destabilise long OCEAN races** — with the field a hair windier
+    or the rotation bounded, the boat sits at a dead angle while a foul tide holds
+    it, and a 130 h Fastnet balloons past 500 h (a tide-nonlinearity + rotation
+    interaction). So the wind-lightness fix is a DEDICATED follow-up that must be
+    validated against the full `stepRace` loop with tide (not just the tide-free
+    `cleanRunHours`), NOT a quick constant tweak. Tried-and-reverted: front `sech²`
+    pulse, `speedMul` temper, `rotate` tanh-cap and sin-oscillation — all shipped
+    long-race crawls. `racePlausibility.test.ts` guards the STRUCTURAL inputs
+    (distance, dead-calm floor, fleet spread) today; it gains the field-mean-vs-
+    baseline assertion when the lightness fix lands stably.
   - `polar.ts` / `polarTable.ts` / `polarImport.ts` — boat speed from polar
     diagrams (parametric for catalogue boats, real tables for custom boats).
   - `sails.ts` — the wardrobe: `effectivePolar` (base lifted by every owned
@@ -196,7 +210,19 @@ signature hazard is a set-piece tied to its mark (`Race.hazardWaypoint`).
 - **`goldenRace.test.ts` is the determinism contract**: three seeded headless
   playthroughs of the real `stepRace` loop pinned to exact outcomes AND the
   exact RNG draw count. If a pin moves, the change broke stream neutrality —
-  fix it, don't re-bless.
+  fix it, don't re-bless. (A *deliberate* physics change — e.g. the wind-field
+  pacing fixes — does move the pins; re-bless once, and only the pins the change
+  provably explains: a field change re-seeds the whole run, a fleet/benchmark
+  change moves only fleet-relative pins + the fleet-lifetime `rngDraws`. The GALE
+  case sails a synthetic field, so it's the fleet-only canary.)
+- **`racePlausibility.test.ts` is the per-race structural guardrail**: for EVERY
+  race it asserts the structural inputs a fair race needs — declared `distanceNm`
+  matches the waypoint geometry (±10%), the seeded field is never a dead calm, and
+  the fleet is paced to a bounded spread. Cheap and deterministic (no headless race
+  per course). It catches the RORC-600-class distance bug (600 authored vs 461
+  sailed → "finished" at 77% progress). The stronger field-mean-vs-baseline
+  assertion is deferred with the wind-lightness fix (see `wind.ts` above). Add a
+  race → it must pass here (see "Adding content").
 - Cockpit **render tests** (`*.test.tsx`) run under the same node jest against
   the lightweight react-native mock in `src/testing/` (mapped via
   `jest.config.js` moduleNameMapper) — they assert the TREE (no Modal
@@ -237,6 +263,20 @@ missing piece fails loudly — `npm run tsc` and `npm test` are your checklist.
   `distanceNm`/`recordTimeHours` (gameplay-tuned), `corinthianRating` (1–5),
   both `divisions`, a `season`, and an optional `unlockAfter` (an existing race
   id) to slot it into the ladder.
+- **`distanceNm` must match the sailed geometry** — `courseLengthNm(waypoints)`,
+  within ±10% (`racePlausibility.test.ts` enforces it). It's the `total` the
+  progress fraction divides by while the boat sails the *geometric* length, so a
+  mismatch puts the finish line early/late from the gun (the RORC-600 bug: 600
+  authored vs 461 sailed → "77% covered" at the start). Set it to `round(geo)`;
+  the real-event distance is flavour for the description, not this field.
+- **`recordTimeHours`** is the outright course record (often a maxi/multihull),
+  used for provisioning day-count and forecast horizon — NOT a cruise yardstick.
+  The fleet paces off `cleanRunHours` (a real cruise of the player's boat), so the
+  benchmark is legitimately several× the record; don't "fix" a high ratio by
+  slowing the record. `prevailingWind` squares the start line and seeds the start
+  read — keep its direction roughly aligned with the baked climatology
+  (`weatherClimatology.ts`) the race actually sails, or the pre-gun favoured-end
+  read is computed against a breeze the fleet never sees.
 - Pick a `hazard` and set `hazardWaypoint` to **one of the race's waypoint
   names** — the signature decision fires there.
 - **Reusing an existing hazard?** Done. **New hazard?** Add the key to
@@ -262,7 +302,11 @@ missing piece fails loudly — `npm run tsc` and `npm test` are your checklist.
   offline it writes a deterministic `seed` baseline from the prevailing wind, so
   the file is always complete (CI/e2e never touch the network). The `weather
   climatology coverage` test in `src/__tests__/wind.test.ts` fails loudly if a
-  race has no entry.
+  race has no entry. Gotchas: the `sampledAt` field is the *build* date, not the
+  month sampled (the query uses each race's `season`, so the stats ARE season-
+  correct — the label just misleads); and the baseline samples the **waypoint
+  centroid**, which for a long, sheltered course (r2ak up the Inside Passage) can
+  land in dead air and read too light — re-vet the sample point for such courses.
 - See the **Race to Alaska** (`race-r2ak`, hazard `tidal_rapids`) as the worked
   example of a brand-new hazard done end to end.
 
@@ -308,3 +352,13 @@ effects are covered by `src/__tests__/provisioning.test.ts`.
   tune (goldens sail cruise/manual); the `conditionFactor` floors are NOT (they gate
   `cleanRunHours`, moving every golden's player pins). If push/aggressive "feels like
   a self-destruct," that's the differential — tune the inputs, not the floor.
+- **The auto-helm can be its OWN trap** (separate from wear). The real drain from
+  over-trading isn't the stamina tax — it's the **flown-sail speed penalty**: a
+  specialist hoisted then left up as the wind moves outside its envelope multiplies
+  the polar by <1 (`sails.ts` `OUT_OF_BOX_PENALTY`), and the anti-flap **dwell gate**
+  used to trap that losing sail up for the whole dwell window (auto "Balanced" nearly
+  *doubled* a lived race). Fix in `autoSailTarget` (`gameEngine.ts`): a **protective
+  douse** — the flown sail biting below base at the live point — bypasses the dwell
+  and returns to the indestructible working set immediately. All auto-sail knobs are
+  golden-safe (goldens sail `DEFAULT_STRATEGY` = cruise + `sailMode` undefined, so
+  `autoSailTarget`/`resolveSailChange` never fire).

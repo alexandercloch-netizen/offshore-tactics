@@ -290,6 +290,48 @@ describe('the hysteresis threshold widens with conservatism', () => {
   });
 });
 
+describe('protective douse — a losing sail escapes the anti-flap dwell', () => {
+  // The signature auto-helm crater: a specialist hoisted then left up as the wind
+  // moves outside its envelope bites BELOW base (flownSailMul < 1), and the dwell
+  // gate used to trap it there for the whole window — doubling a lived race. A
+  // strike back to the working set is PROTECTIVE and must bypass the dwell.
+  //
+  // Setup: fly the code-zero at TWA 175° in 30 kn (a dead run in a blow → coverage
+  // 0 → mul ≈ 0.88, well below base) and pin `lastSailChangeNm` right on the boat
+  // so the dwell window is wide open.
+  function stuckLosingSail(mode: SailMode): GameState {
+    const st = pinnedAngleState('code-zero', 175, 30, mode);
+    return {
+      ...st,
+      progress: {
+        ...st.progress!,
+        activeSailId: 'code-zero',
+        lastSailChangeNm: st.progress!.distanceCoveredNm, // just changed → dwell blocks
+      },
+    };
+  }
+
+  it('douses to the working set immediately despite the dwell', () => {
+    // Balanced would normally sit out the dwell — but a below-base sail is a safety
+    // strike, so the helm calls the working set now.
+    expect(autoSailTarget(stuckLosingSail('balanced'))).toBe('working-jib');
+    // Even conservative (the slowest to act) protects the boat.
+    expect(autoSailTarget(stuckLosingSail('conservative'))).toBe('working-jib');
+  });
+
+  it('still serves the dwell for a NON-protective swap', () => {
+    // Same fresh-change dwell, but the flown sail is the indestructible working set
+    // (never below base), so there is nothing to protect against — the dwell holds
+    // and the helm makes no call this tick.
+    const st = pinnedAngleState('code-zero', 80, 9, 'balanced'); // code-zero in its envelope
+    const held = {
+      ...st,
+      progress: { ...st.progress!, activeSailId: 'working-jib', lastSailChangeNm: st.progress!.distanceCoveredNm },
+    };
+    expect(autoSailTarget(held)).toBeNull();
+  });
+});
+
 describe('aggressiveness ordering — keener modes change more often', () => {
   it('aggressive ≥ balanced ≥ conservative sail changes on a shifty field', () => {
     // One field, reused across the three runs so only the dial differs.
