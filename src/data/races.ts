@@ -11,6 +11,14 @@ export const RACES: Race[] = [
     location: 'Isle of Wight, England',
     description:
       'A 50-mile dash around the Isle of Wight against a fleet of over a thousand boats. The friendliest grand day out in sailing.',
+    // NOTE: the sailed waypoint geometry is ~60 nm (courseLengthNm) while this reads
+    // 50 (the event's real distance). The player's progress already runs on the
+    // geometric length (initialProgress), so the mismatch only over-counts the
+    // benchmark's wear-per-mile a touch — the race is TUNED around that today, and
+    // correcting it to 60 re-paces the fleet faster (a rebalance, not a pure fix).
+    // Left at 50 for this pass and EXEMPTED in racePlausibility; revisit with a
+    // proper round-island re-tune (the impactful distance bugs — caribbean, r2ak —
+    // are corrected below).
     distanceNm: 50,
     difficulty: 'Inshore',
     recordTimeHours: 4,
@@ -235,7 +243,11 @@ export const RACES: Race[] = [
     location: 'Antigua, around 11 islands',
     description:
       'A fast, warm 600-mile sprint weaving around eleven Caribbean islands. Festive on the dock, ferocious in the acceleration zones.',
-    distanceNm: 600,
+    // The real RORC event is 600 nm; our simplified 11-island track covers ~461 nm
+    // (courseLengthNm). distanceNm follows the sailed geometry so the progress
+    // fraction is honest — a mismatch put the boat at "77% covered" from the gun.
+    // A full-length waypoint set to reach the real 600 nm is a content follow-up.
+    distanceNm: 461,
     difficulty: 'Offshore',
     recordTimeHours: 33,
     corinthianRating: 3,
@@ -372,7 +384,9 @@ export const RACES: Race[] = [
     location: 'Port Townsend, WA → Ketchikan, AK',
     description:
       'The "R2AK" — 750 engineless miles up the Inside Passage. Wind, oars and grit only; first to the $10,000 nailed to a tree wins, second takes a set of steak knives.',
-    distanceNm: 710,
+    // Sailed waypoint geometry ≈ 616 nm (the real event is ~750); distanceNm tracks
+    // the geometry so the progress fraction stays honest (race-plausibility guard).
+    distanceNm: 616,
     difficulty: 'Offshore',
     recordTimeHours: 90,
     corinthianRating: 2,

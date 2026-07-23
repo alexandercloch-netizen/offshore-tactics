@@ -136,16 +136,16 @@ export function defaultStepNm(race: Race): number {
 }
 
 // The fleet benchmark's clean run walks the course at a coarser step than
-// gameplay to keep setup snappy. A convergence audit (see the PR notes) found the
-// 3× step carries a modest per-boat bias vs the lived tick model — largest for a
-// heavy, hard-tacking hull, whose extra tacking miles a finer step resolves — so a
-// finer step is *more* accurate. It is left at 3× here deliberately: the dominant
-// fairness fix is the crew threading below (which corrects the benchmark far more
-// than the step does), and dropping to 2× both ~1.5×'d benchmark cost everywhere
-// and materially re-paced the tuned fleet-tightness cases through that same
-// tacking-resolution shift. Reducing the step is a sound follow-up once the router
-// is cheaper and the fleet-pacing tests are re-tuned together. The parameter is
-// plumbed through `cleanRunHours` so that change is a one-line flip.
+// gameplay to keep setup snappy. A convergence audit found the 3× step carries a
+// modest bias on SHORT, UPWIND courses (it samples wind/heading once per chunk and
+// mis-resolves the tacking angles, over-timing a beat — Cowes–Dinard ~+65% vs a
+// converged 1× run; long reaching courses are step-invariant). Reducing it is a
+// real accuracy win BUT it re-paces the whole fleet — which the tuned
+// fleet-tightness/difficulty cases are calibrated to — so it's deliberately left
+// at 3× here (the short/upwind over-estimate is a bounded, pre-existing bias the
+// fleet is already tuned around). Dropping to 1× is a sound follow-up to land WITH
+// a fleet-pacing re-tune of its own. Plumbed through `cleanRunHours` as a one-line
+// parameter.
 const CLEAN_RUN_STEP_SCALE = 3;
 
 export function raceDivision(race: Race, division: DivisionKey): RaceDivision {
@@ -928,12 +928,6 @@ export function autoSailTarget(state: GameState): string | null {
   const field = state.windField;
   if (!p || !field) return null;
 
-  // Dwell gate (anti-flap): sit on a fresh change for the mode's window.
-  const dwell = dwellNm(mode, state.selectedCrewIds, p.totalDistanceNm);
-  if (p.lastSailChangeNm !== undefined && p.distanceCoveredNm - p.lastSailChangeNm < dwell) {
-    return null;
-  }
-
   // The Navigator's anticipatory call (null = douse to the working set) vs the
   // sail actually flying. Nothing to do if they already agree.
   const candidateId = recommendedSail(state)?.id ?? 'working-jib';
@@ -942,6 +936,31 @@ export function autoSailTarget(state: GameState): string | null {
 
   const candSail = candidateId === 'working-jib' ? undefined : getSailById(candidateId);
   const heldSail = flownId === 'working-jib' ? undefined : getSailById(flownId);
+
+  // Measure both sails at the LIVE angle/breeze up front — we need the flown
+  // sail's bite to decide whether this is a protective douse.
+  const wind = sampleWind(field, p.lat, p.lon, p.elapsedHours);
+  const twa = angularDelta(p.heading, wind.fromDeg);
+  const candMul = flownSailMul(candSail, twa, wind.speedKn);
+  const heldMul = flownSailMul(heldSail, twa, wind.speedKn);
+
+  // Is the sail currently up biting BELOW base at the live point, and the call is
+  // to strike back to the working set? A specialist flown outside its envelope
+  // (the wind built or shifted after the hoist) multiplies the polar by <1 — a
+  // real, ongoing speed loss. Dousing it to the indestructible working set is a
+  // PROTECTIVE move that must NEVER be trapped behind the anti-flap dwell (holding
+  // a losing sail the whole window is the auto-helm crater that doubled a lived
+  // race). This bypass is ONLY the douse-to-working-set — swapping one specialist
+  // for another still serves the dwell, so the bypass can't cause flapping.
+  const protectiveDouse =
+    heldSail !== undefined && heldMul < 1 && candidateId === 'working-jib';
+  if (!protectiveDouse) {
+    // Dwell gate (anti-flap): sit on a fresh change for the mode's window.
+    const dwell = dwellNm(mode, state.selectedCrewIds, p.totalDistanceNm);
+    if (p.lastSailChangeNm !== undefined && p.distanceCoveredNm - p.lastSailChangeNm < dwell) {
+      return null;
+    }
+  }
 
   // Heavy-air gate: hoisting a performance specialist above the heavy-air line
   // courts a blow-out, so only `aggressive` will do it. A douse to the working
@@ -952,13 +971,8 @@ export function autoSailTarget(state: GameState): string | null {
     return null;
   }
 
-  // Hysteresis: measure both sails at the LIVE angle/breeze and only commit if
-  // the candidate clears the flown sail by the mode's threshold — so a marginal
-  // wobble can't set off a costly flap.
-  const wind = sampleWind(field, p.lat, p.lon, p.elapsedHours);
-  const twa = angularDelta(p.heading, wind.fromDeg);
-  const candMul = flownSailMul(candSail, twa, wind.speedKn);
-  const heldMul = flownSailMul(heldSail, twa, wind.speedKn);
+  // Hysteresis: only commit if the candidate clears the flown sail by the mode's
+  // threshold — so a marginal wobble can't set off a costly flap.
   if (candMul - heldMul < sailModeThreshold(mode, state.selectedCrewIds)) return null;
 
   return candidateId;
