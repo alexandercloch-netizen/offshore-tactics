@@ -4,8 +4,9 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Boat, RootStackParamList } from '../types';
 import { colors, fontSize, fontWeight, spacing, status } from '../theme';
-import { BOATS } from '../data';
-import { isBoatOwned } from '../engine/gameEngine';
+import { BOATS, getRaceById } from '../data';
+import { isBoatOwned, ratingTccFor } from '../engine/gameEngine';
+import { courseWindProfile } from '../engine/geo';
 import { useGame } from '../store/GameContext';
 import StatBar from '../components/StatBar';
 import NauticalButton from '../components/NauticalButton';
@@ -14,10 +15,34 @@ import SelectableCard from '../components/SelectableCard';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'BoatSelect'>;
 
+// How a hull suits the dominant point of sail of the chosen course — a plain
+// read that helps the boat pick without pretending more precision than the
+// first-order (prevailing-wind) profile carries. Display-only.
+function fitNote(
+  boat: Boat,
+  profile: { upwind: number; reach: number; downwind: number }
+): { text: string; color: string } {
+  const legs: Array<['upwind' | 'reach' | 'downwind', number, string, number]> = [
+    ['upwind', profile.upwind, 'upwind', boat.upwind],
+    ['reach', profile.reach, 'reaching', (boat.upwind + boat.downwind) / 2],
+    ['downwind', profile.downwind, 'downwind', boat.downwind],
+  ];
+  const [, frac, label, stat] = legs.sort((a, b) => b[1] - a[1])[0];
+  const pct = Math.round(frac * 100);
+  const tone = stat >= 70 ? colors.signalGreen : stat >= 50 ? colors.brassLight : colors.warning;
+  const verdict = stat >= 70 ? 'suits this hull well' : stat >= 50 ? 'a fair match' : 'not this hull’s strength';
+  return { text: `Mostly ${label} (${pct}% of the miles) — ${verdict}.`, color: tone };
+}
+
 export const BoatSelectScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const { state, selectBoat, money } = useGame();
   const selectedId = state.selectedBoatId;
+
+  // The course the player just chose (the flow is Race → Boat), so the cards can
+  // say how each hull fits THIS passage. Absent only if arriving without a race.
+  const race = state.selectedRaceId ? getRaceById(state.selectedRaceId) : undefined;
+  const profile = race ? courseWindProfile(race.waypoints, race.prevailingWind.fromDeg) : undefined;
 
   const proceed = () => {
     if (!selectedId) return;
@@ -64,10 +89,30 @@ export const BoatSelectScreen: React.FC<Props> = ({ navigation }) => {
                 <StatBar label="Downwind" value={boat.downwind} />
                 <StatBar label="Stability" value={boat.stability} />
               </View>
-              <View style={styles.crewNeed}>
-                <Text style={styles.crewNeedValue}>{boat.crewCapacity}</Text>
-                <Text style={styles.crewNeedLabel}>crew berths to fill</Text>
+              <View style={styles.metaRow}>
+                <View style={styles.metaCol}>
+                  <Text style={styles.metaValue}>{ratingTccFor(boat).toFixed(3)}</Text>
+                  <Text style={styles.metaLabel}>Handicap (TCC)</Text>
+                </View>
+                <View style={styles.crewNeed}>
+                  <Text style={styles.crewNeedValue}>{boat.crewCapacity}</Text>
+                  <Text style={styles.crewNeedLabel}>crew berths to fill</Text>
+                </View>
               </View>
+              <Text style={styles.tccGloss}>
+                Corrected time = elapsed × TCC. A higher rating owes more time back —
+                you win by beating your number, not by buying speed.
+              </Text>
+              {profile
+                ? (() => {
+                    const fit = fitNote(boat, profile);
+                    return (
+                      <Text style={[styles.fitNote, { color: fit.color }]} testID={`boat-fit-${boat.id}`}>
+                        {fit.text}
+                      </Text>
+                    );
+                  })()
+                : null}
               {selected ? <Text style={styles.selectedTag}>Selected</Text> : null}
             </SelectableCard>
           );
@@ -127,14 +172,46 @@ const styles = StyleSheet.create({
   stats: {
     marginTop: spacing.sm,
   },
-  crewNeed: {
+  metaRow: {
     flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: spacing.xs,
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    gap: spacing.md,
     marginTop: spacing.md,
     paddingTop: spacing.sm,
     borderTopWidth: 1,
     borderTopColor: colors.hull,
+  },
+  metaCol: {
+    alignItems: 'flex-start',
+  },
+  metaValue: {
+    color: colors.foam,
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.bold,
+    fontVariant: ['tabular-nums'],
+  },
+  metaLabel: {
+    color: status.labelOnPanel,
+    fontSize: fontSize.xs,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  tccGloss: {
+    color: colors.mist,
+    fontSize: fontSize.xs,
+    lineHeight: 16,
+    marginTop: spacing.xs,
+  },
+  fitNote: {
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.medium,
+    marginTop: spacing.sm,
+  },
+  crewNeed: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: spacing.xs,
   },
   crewNeedValue: {
     color: colors.brassLight,
