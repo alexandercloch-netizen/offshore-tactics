@@ -11,9 +11,11 @@ import { Boat, DivisionKey, Race, WindField } from '../types';
 // RACE PLAUSIBILITY — a cross-race guardrail. For EVERY race (now and every race
 // added later) the structural inputs a fair race depends on must hold: the
 // declared distance matches the sailed waypoint geometry, the seeded wind field
-// is never a dead calm, and the AI fleet is paced to a bounded spread. The RORC
-// Caribbean 600 blow-up was a distance authored 30% over its geometry (the boat
-// "finished" at 77% progress); this catches that class loudly.
+// is never a dead calm, the prevailing wind that seeds the start read roughly
+// agrees with the field the fleet actually sails, and the AI fleet is paced to a
+// bounded spread. The RORC Caribbean 600 blow-up was a distance authored 30% over
+// its geometry (the boat "finished" at 77% progress); this catches that class
+// loudly.
 //
 // Deliberately structural and cheap (no headless race per course). NOTE: a
 // stronger FIELD-INTEGRITY check — the seeded field's passage mean tracking the
@@ -34,6 +36,13 @@ const SEED = 4242;
 const DISTANCE_TOL = 0.1; // |geo − declared| / declared
 const FIELD_FLOOR_KN = 1.5; // a course's typical wind is never a dead calm
 const FLEET_SPREAD_MAX = 2.2; // max/min targetHours (a bounded, paced fleet)
+const PREVAILING_WIND_TOL_DEG = 90; // authored prevailingWind vs the start-line field
+
+// --- Self-expiring exemptions -------------------------------------------------
+// An exemption is DEBT, not a licence. Each set below is checked for staleness:
+// an exempted race must STILL trip its check, or the test fails and forces the
+// exemption's removal. So the day the underlying data is corrected, the exemption
+// can't be silently left behind — CI points at it.
 
 // Round-the-Island's declared 50 nm (the real event's distance) is ~17% under its
 // simplified 60 nm waypoint geometry. The player's progress already runs on the
@@ -44,7 +53,15 @@ const FLEET_SPREAD_MAX = 2.2; // max/min targetHours (a bounded, paced fleet)
 // (caribbean, r2ak) are corrected in races.ts and DO get checked.
 const DISTANCE_EXEMPT = new Set(['race-round-island']);
 
-// Passage-mean wind over the course × a representative window.
+// Three courses' authored prevailingWind points >90° off the breeze their baked
+// climatology actually seeds at the start line, so the pre-gun favoured-end read
+// is computed against a wind the fleet never sees. Reconciling the direction moves
+// the start read (and its pins) — a coordinated content change, not a safety-net
+// edit — so they're exempted here and slated for the content pass. The field is
+// still real and sailable; only the start read's premise is skewed.
+const PREVAILING_WIND_EXEMPT = new Set(['race-sydney-hobart', 'race-r2ak', 'race-tri-state']);
+
+// Passage-mean wind speed over the course × a representative window.
 function fieldMeanWind(race: Race, field: WindField): number {
   const hours = Math.max(race.recordTimeHours * 2, 6);
   let sum = 0;
@@ -59,9 +76,32 @@ function fieldMeanWind(race: Race, field: WindField): number {
   return sum / n;
 }
 
+// Circular mean of the field's FROM-direction at the start line over the opening
+// hours — the breeze the start read is genuinely computed against.
+function startLineDir(race: Race, field: WindField): number {
+  const wp = race.waypoints[0];
+  let sx = 0;
+  let sy = 0;
+  for (let h = 0; h <= 6; h += 1) {
+    const r = (sampleWind(field, wp.lat, wp.lon, h).fromDeg * Math.PI) / 180;
+    sx += Math.cos(r);
+    sy += Math.sin(r);
+  }
+  return ((Math.atan2(sy, sx) * 180) / Math.PI + 360) % 360;
+}
+
+function angleDiffDeg(a: number, b: number): number {
+  const d = Math.abs(a - b) % 360;
+  return d > 180 ? 360 - d : d;
+}
+
 describe('race plausibility — structural guardrail for every race', () => {
-  it('every race has sane distance, a sailable wind field and bounded fleet pacing', () => {
+  it('every race has sane distance, breeze, an honest start read and bounded fleet pacing', () => {
     const failures: string[] = [];
+    // Which exempted races still actually trip their check — used to catch a
+    // stale exemption once the data is fixed.
+    const distanceStillOff = new Set<string>();
+    const windStillOff = new Set<string>();
     const r2 = (n: number): number => Number(n.toFixed(2));
 
     for (const race of RACES) {
@@ -71,20 +111,34 @@ describe('race plausibility — structural guardrail for every race', () => {
       // 1. Distance integrity — the declared distance matches the sailed geometry
       //    (a mismatch corrupts the progress fraction and ETA from the gun).
       const distErr = Math.abs(geoLen - race.distanceNm) / race.distanceNm;
-      if (distErr > DISTANCE_TOL && !DISTANCE_EXEMPT.has(tag)) {
-        failures.push(
-          `${tag}: distanceNm ${race.distanceNm} vs geometry ${r2(geoLen)} (${r2(distErr * 100)}% off)`
-        );
+      if (distErr > DISTANCE_TOL) {
+        if (DISTANCE_EXEMPT.has(tag)) distanceStillOff.add(tag);
+        else
+          failures.push(
+            `${tag}: distanceNm ${race.distanceNm} vs geometry ${r2(geoLen)} (${r2(distErr * 100)}% off)`
+          );
       }
 
       // 2. Not a dead calm — the seeded field's passage mean has real breeze.
       setRng(mulberry32(SEED));
-      const meanWind = fieldMeanWind(race, createWindField(race));
+      const field = createWindField(race);
+      const meanWind = fieldMeanWind(race, field);
       if (meanWind < FIELD_FLOOR_KN) {
         failures.push(`${tag}: field mean ${r2(meanWind)} kn is a dead calm (< ${FIELD_FLOOR_KN} kn)`);
       }
 
-      // 3. Fleet pacing — a bounded spread of target finishes, none parked. The
+      // 3. Honest start read — the authored prevailingWind that squares the line
+      //    and seeds the favoured-end read agrees with the start-line field.
+      const windErr = angleDiffDeg(startLineDir(race, field), race.prevailingWind.fromDeg);
+      if (windErr > PREVAILING_WIND_TOL_DEG) {
+        if (PREVAILING_WIND_EXEMPT.has(tag)) windStillOff.add(tag);
+        else
+          failures.push(
+            `${tag}: prevailingWind ${race.prevailingWind.fromDeg}° vs start-line field ${r2(startLineDir(race, field))}° (${r2(windErr)}° off)`
+          );
+      }
+
+      // 4. Fleet pacing — a bounded spread of target finishes, none parked. The
       //    spread is independent of the benchmark VALUE (targetHours = bench ÷
       //    speedMul, so bench cancels), so pass the record as a stand-in and avoid
       //    a headless clean-run per race here.
@@ -96,6 +150,21 @@ describe('race plausibility — structural guardrail for every race', () => {
       } else if (Math.max(...ts) / Math.min(...ts) > FLEET_SPREAD_MAX) {
         failures.push(
           `${tag}: fleet target spread ${r2(Math.max(...ts) / Math.min(...ts))}× > ${FLEET_SPREAD_MAX}×`
+        );
+      }
+    }
+
+    // A stale exemption is a bug: it means the data was fixed but the exemption
+    // was left behind, quietly weakening the guard. Fail and name it.
+    for (const tag of DISTANCE_EXEMPT) {
+      if (!distanceStillOff.has(tag)) {
+        failures.push(`${tag}: in DISTANCE_EXEMPT but distance now passes — remove the stale exemption`);
+      }
+    }
+    for (const tag of PREVAILING_WIND_EXEMPT) {
+      if (!windStillOff.has(tag)) {
+        failures.push(
+          `${tag}: in PREVAILING_WIND_EXEMPT but the start read now agrees — remove the stale exemption`
         );
       }
     }

@@ -8,7 +8,7 @@ import { GameState } from '../types';
 const BASE_KEY = '@offshore_tactics/state_v1';
 export const GUEST_SCOPE = 'local';
 
-function keyFor(scope: string): string {
+export function keyFor(scope: string): string {
   return scope === GUEST_SCOPE ? BASE_KEY : `${BASE_KEY}:${scope}`;
 }
 
