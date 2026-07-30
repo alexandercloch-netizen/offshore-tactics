@@ -1,6 +1,42 @@
-import { recommendedRace, defaultDivision, goalHeadline } from '../engine/recommend';
+import {
+  recommendedRace,
+  defaultDivision,
+  goalHeadline,
+  raceOfTheWeek,
+  weekIndex,
+} from '../engine/recommend';
 import { isRaceUnlocked } from '../engine/gameEngine';
-import { PlayerProfile, RaceResult, SailingRegion } from '../types';
+import { RACES } from '../data/races';
+import { PlayerProfile, Race, RaceResult, SailingRegion } from '../types';
+
+describe('raceOfTheWeek', () => {
+  const races = RACES;
+  it('is stable within a week and rotates across weeks', () => {
+    const w = 12345;
+    expect(raceOfTheWeek(w)?.id).toBe(raceOfTheWeek(w)?.id); // same week → same race
+    // Over a full cycle of weeks, every race is featured exactly once.
+    const seen = new Set<string>();
+    for (let k = 0; k < races.length; k += 1) seen.add(raceOfTheWeek(w + k)!.id);
+    expect(seen.size).toBe(races.length);
+  });
+
+  it('wraps safely for any week index and never returns undefined for a non-empty catalogue', () => {
+    for (const w of [0, 1, -1, -7, 999999]) {
+      expect(raceOfTheWeek(w)).toBeDefined();
+    }
+  });
+
+  it('returns undefined only for an empty catalogue', () => {
+    expect(raceOfTheWeek(3, [] as Race[])).toBeUndefined();
+  });
+
+  it('weekIndex advances by one every 7 days and is stable within a week', () => {
+    const day = 24 * 60 * 60 * 1000;
+    const base = 20 * 7 * day; // an exact week boundary
+    expect(weekIndex(base)).toBe(weekIndex(base + 6 * day)); // same week
+    expect(weekIndex(base + 7 * day)).toBe(weekIndex(base) + 1); // next week
+  });
+});
 
 function player(region: SailingRegion, over: Partial<PlayerProfile> = {}): PlayerProfile {
   return { role: 'skipper', region, goal: 'compete', experience: 'club', onboardedAt: 1, ...over };

@@ -45,6 +45,23 @@ export function defaultDivision(experience: ExperienceLevel | undefined): Divisi
   return experience === 'pro' ? 'pro' : 'corinthian';
 }
 
+// The ISO-style week number since the epoch, so "this week" is one stable integer
+// the whole app agrees on. Pure — the clock reading is passed in.
+export function weekIndex(nowMs: number): number {
+  return Math.floor(nowMs / (7 * 24 * 60 * 60 * 1000));
+}
+
+// A deterministic, weekly-rotating featured race — a reason to come back and sail
+// something off the usual ladder. Display-only: it touches no economy or engine
+// RNG, so it can spotlight even a locked, aspirational race. Pure and stable per
+// week (the week index is supplied), so it's trivially testable and identical on
+// every device in the same week.
+export function raceOfTheWeek(week: number, races: Race[] = RACES): Race | undefined {
+  if (races.length === 0) return undefined;
+  const i = ((week % races.length) + races.length) % races.length;
+  return races[i];
+}
+
 const GOAL_HEADLINES: Record<SailingGoal, string> = {
   destress: 'Cast off and unwind — a race to clear your head.',
   tactics: 'Sharpen your tactical calls against a live fleet.',
