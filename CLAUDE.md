@@ -139,9 +139,16 @@ The simulation is a **pure, deterministic engine** with a thin React UI on top.
   `provisions.ts`, `events.ts` (tactical decisions), `weather.ts`,
   `landmasses.ts`, `polarLibrary.ts`, `sails.ts`, `onboarding.ts`. `index.ts`
   re-exports and holds economy constants.
-- **`src/store/`** — `GameContext` (the game state reducer + persistence + cloud
-  sync), `AuthContext` (Supabase auth + the login gate), `storage.ts`
-  (AsyncStorage), `reconcile.ts` (local↔cloud save merge).
+- **`src/store/`** — `gameReducer.ts` (the PURE economy/progression state machine:
+  `(state, action) => state`, no React/Supabase — imports types/data/engine/reseed
+  only, so it unit-tests in isolation; holds `INITIAL_STATE`, the affordability
+  guards, and every persistent flag like `tutorialSeen`/`scoringSeen`), `GameContext`
+  (wraps that reducer with persistence, cloud sync and the imperative race
+  lifecycle), `authValidation.ts` (pure `validateCredentials`/`mapAuthError`, no
+  Supabase), `AuthContext` (Supabase auth + the login gate), `storage.ts`
+  (AsyncStorage; `keyFor` namespaces each account's cache), `reconcile.ts`
+  (local↔cloud save merge). New persistent state folds in `gameReducer`, NEVER in
+  `stepRace`/`applyDecision` (the determinism contract).
 - **`src/screens/`** — one per screen; bottom tabs (Race/Fleet/Leaderboard/
   Profile) live under `Main`, with setup/race screens pushed over them. The
   setup→race flow is Provisioning → Briefing → **StartSequence** (the pre-gun
