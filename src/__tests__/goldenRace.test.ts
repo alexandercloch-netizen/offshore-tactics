@@ -177,6 +177,11 @@ function runGolden(cfg: GoldenConfig): GoldenSummary {
     eventIds,
     fleetTop3,
   };
+  // Re-bless helper: `DUMP_GOLDEN=1 npx jest goldenRace` prints each summary as a
+  // pasteable literal. A deliberate physics change moves pins — re-bless once, with
+  // the reason, and only the pins it provably explains (see the comment above the
+  // pins). Zero cost when unset.
+  if (process.env.DUMP_GOLDEN) console.log('GOLDEN_DUMP', cfg.raceId, JSON.stringify(summary));
   return summary;
 }
 

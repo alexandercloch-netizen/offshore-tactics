@@ -10,8 +10,9 @@
     "web": "expo start --web",
     "build:web": "node scripts/check-deploy-branch.mjs && expo export --platform web",
     "tsc": "tsc --noEmit",
-    "test": "jest",
-    "test:ci": "jest --ci --runInBand",
+    "test": "jest --testPathIgnorePatterns /node_modules/ land fleetTightness storyline current sailAuto windScenario",
+    "test:full": "jest",
+    "test:ci": "jest --ci --maxWorkers=2",
     "e2e": "playwright test"
   },
   "dependencies": {

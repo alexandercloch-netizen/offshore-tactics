@@ -506,10 +506,6 @@ export function initialCondition(
   };
 }
 
-export function makeWindField(race: Race): WindField {
-  return createWindField(race);
-}
-
 // A clean headless run of `boat` over the whole course, on the SAME movement
 // model the player sails (`stepRace`'s core: weather-route, advance, re-route on
 // shifts and roundings) at a steady cruise — the boat's realistic potential,
