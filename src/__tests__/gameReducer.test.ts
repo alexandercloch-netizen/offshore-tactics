@@ -110,3 +110,17 @@ describe('campaign lifecycle', () => {
     expect(reducer(s, { type: 'NONSENSE' } as unknown as Action)).toBe(s);
   });
 });
+
+describe('display-only "seen" flags', () => {
+  it('SET_SCORING_SEEN and SET_TUTORIAL_SEEN set their flag and touch nothing else', () => {
+    const s0 = base({ funds: 4242, scoringSeen: false, tutorialSeen: false });
+    const s1 = reducer(s0, { type: 'SET_SCORING_SEEN' });
+    expect(s1.scoringSeen).toBe(true);
+    expect(s1.tutorialSeen).toBe(false);
+    expect(s1.funds).toBe(4242);
+
+    const s2 = reducer(s1, { type: 'SET_TUTORIAL_SEEN' });
+    expect(s2.tutorialSeen).toBe(true);
+    expect(s2.scoringSeen).toBe(true); // still set
+  });
+});

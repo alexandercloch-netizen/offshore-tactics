@@ -109,6 +109,7 @@ export function reconcileSaves(
       fleet: mergeFleet(base.profile?.fleet ?? [], other.profile?.fleet ?? []),
     },
     tutorialSeen: Boolean(base.tutorialSeen || other.tutorialSeen),
+    scoringSeen: Boolean(base.scoringSeen || other.scoringSeen),
   };
 }
 

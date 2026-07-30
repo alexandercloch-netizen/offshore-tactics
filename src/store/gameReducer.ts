@@ -44,6 +44,7 @@ export const INITIAL_STATE: GameState = {
   history: [],
   eventLog: [],
   tutorialSeen: false,
+  scoringSeen: false,
 };
 
 export type Action =
@@ -66,6 +67,7 @@ export type Action =
       };
     }
   | { type: 'SET_TUTORIAL_SEEN' }
+  | { type: 'SET_SCORING_SEEN' }
   | { type: 'MARK_HONOURS_SEEN'; payload: string[] }
   | { type: 'ADD_FLEET_BOAT'; payload: { boat: FleetBoat; cost: number } }
   | { type: 'REMOVE_FLEET_BOAT'; payload: string }
@@ -188,6 +190,9 @@ export function reducer(state: GameState, action: Action): GameState {
 
     case 'SET_TUTORIAL_SEEN':
       return { ...state, tutorialSeen: true };
+
+    case 'SET_SCORING_SEEN':
+      return { ...state, scoringSeen: true };
 
     // Union the shown honours in (display-only, like tutorialSeen) so an
     // earn-moment fires exactly once.

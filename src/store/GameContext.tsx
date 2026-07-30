@@ -85,6 +85,7 @@ export interface GameContextValue {
   setStrategy: (partial: Partial<PlayerStrategy>) => void;
   applyStart: (outcome: StartOutcome) => void;
   markTutorialSeen: () => void;
+  markScoringSeen: () => void;
   markHonoursSeen: (ids: string[]) => void;
   addFleetBoat: (boat: FleetBoat, cost: number) => void;
   removeFleetBoat: (id: string) => void;
@@ -390,6 +391,10 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
     dispatch({ type: 'SET_TUTORIAL_SEEN' });
   }, []);
 
+  const markScoringSeen = useCallback(() => {
+    dispatch({ type: 'SET_SCORING_SEEN' });
+  }, []);
+
   const markHonoursSeen = useCallback((ids: string[]) => {
     if (ids.length === 0) return;
     dispatch({ type: 'MARK_HONOURS_SEEN', payload: ids });
@@ -636,6 +641,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
       setStrategy,
       applyStart,
       markTutorialSeen,
+      markScoringSeen,
       markHonoursSeen,
       addFleetBoat,
       removeFleetBoat,
@@ -669,6 +675,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
       setStrategy,
       applyStart,
       markTutorialSeen,
+      markScoringSeen,
       markHonoursSeen,
       addFleetBoat,
       removeFleetBoat,
