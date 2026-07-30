@@ -5,6 +5,16 @@ import { rndRange } from './rng';
 // The standard semidiurnal tidal period (one flood + one ebb ≈ 12h25m).
 const SEMI_DIURNAL_H = 12.42;
 
+// The absolute made-good-speed floor (kn) under a foul stream, shared by the
+// player (`stepRace`) and the AI fleet (`advanceFleet`). A boat is never held at
+// LESS than a slow crawl over the ground, no matter how hard the tide sets against
+// it. It MUST be the same value on both sides: the player's floor was historically
+// RELATIVE (20% of its own tide-free speed), so in light air the boat could crawl
+// far slower than the fleet's absolute floor and a long race would balloon —
+// exactly the interaction that blocked the wind-lightness fix. Keeping one shared
+// absolute floor makes the tide symmetric, so a windier field can't reopen that gap.
+export const TIDE_FLOOR_KN = 0.2;
+
 // Build the tidal field for a race from its authored `tide` profile. The stream
 // oscillates flood↔ebb over the tidal period; a phase is seeded at setup so the
 // gun fires at a different point in the cycle each time (deterministic under the

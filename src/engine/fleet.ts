@@ -2,7 +2,7 @@ import { Boat, Competitor, GeoPoint, Race, RaceDivision, TidalField, WindField }
 import { angularDelta, bearing, movePoint, pointAtFraction } from './geo';
 import { bestVmgAngles, polarSpeed } from './polar';
 import { pressureHint, sampleWind } from './wind';
-import { tideAlong } from './current';
+import { TIDE_FLOOR_KN, tideAlong } from './current';
 import { clearPolyline } from './router';
 import { snapToWater } from './land';
 import { LANDMASSES } from '../data/landmasses';
@@ -305,7 +305,7 @@ export function advanceFleet(
     // stream carries the boat, a foul one holds it up. The benchmark is tide-free,
     // so over the fleet this is shared weather, not a difficulty knob.
     const tide = tideAlong(tidalField, pos.lat, pos.lon, startHours, courseDeg);
-    const smg = Math.max(mgs * paceScale * sideBonus * variance + tide, 0.2);
+    const smg = Math.max(mgs * paceScale * sideBonus * variance + tide, TIDE_FLOOR_KN);
 
     // Rare retirement, more likely when it is blowing hard.
     if (rnd() < 0.00025 * dtHours * (1 + wind.speedKn / 20)) {

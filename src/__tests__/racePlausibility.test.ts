@@ -18,12 +18,14 @@ import { Boat, DivisionKey, Race, WindField } from '../types';
 // loudly.
 //
 // Deliberately structural and cheap (no headless race per course). NOTE: a
-// stronger FIELD-INTEGRITY check — the seeded field's passage mean tracking the
-// baked climatology within a tolerance — is intentionally NOT here yet: several
-// courses currently run light (a travelling-front / hazard-speedMul interaction),
-// and fixing that in the wind model without destabilising long ocean races is a
-// dedicated follow-up. This file guards the structural inputs today and gains the
-// field-integrity assertion when that lands.
+// stronger MADE-GOOD-EFFICIENCY check — a headless stepRace+tide finish tracking a
+// plausible multiple of the record — is intentionally NOT here yet: a couple of
+// long courses (notably Middle Sea) finish too slowly, but a probe showed the
+// FIELD is healthy (means near baseline) and the loss is in made-good efficiency
+// (deep VMG angles / fickle-shift re-tacks), a per-race routing subtlety that's a
+// dedicated follow-up. The tide-balloon half of that is already fixed (the absolute
+// tide floor; see CLAUDE.md). This file guards the structural inputs today and
+// gains the efficiency assertion when that lands.
 // ---------------------------------------------------------------------------
 
 afterEach(() => resetRng());
