@@ -39,14 +39,17 @@ export const EXPERIENCE_OPTIONS: Choice<ExperienceLevel>[] = [
 // accessible, always-open local race — leads each list as the region's on-ramp;
 // the crown jewels follow.
 export const REGION_RACES: Record<SailingRegion, string[]> = {
+  // The FIRST id in each list is the region's home race (see the Port note
+  // below) — new races join BEHIND the established leads so nobody's home race
+  // silently changes.
   uk: ['race-cowes-dinard', 'race-round-island', 'race-fastnet'],
-  med: ['race-malta-syracuse', 'race-giraglia', 'race-middle-sea'],
+  med: ['race-malta-syracuse', 'race-middle-sea', 'race-giraglia'],
   caribbean: ['race-antigua-360', 'race-caribbean-600'],
-  usEast: ['race-block-island', 'race-annapolis-newport', 'race-marion-bermuda', 'race-newport-bermuda'],
-  usWest: ['race-ensenada', 'race-islands-race', 'race-transpac', 'race-swiftsure', 'race-van-isle', 'race-r2ak'],
-  greatLakes: ['race-tri-state', 'race-bayview-mac', 'race-chicago-mac'],
-  ausNz: ['race-cabbage-tree', 'race-sydney-goldcoast', 'race-sydney-hobart'],
-  other: ['race-faerder', 'race-round-island', 'race-chicago-mac'],
+  usEast: ['race-annapolis-newport', 'race-newport-bermuda', 'race-block-island', 'race-marion-bermuda'],
+  usWest: ['race-islands-race', 'race-transpac', 'race-swiftsure', 'race-r2ak', 'race-ensenada', 'race-van-isle'],
+  greatLakes: ['race-tri-state', 'race-chicago-mac', 'race-bayview-mac'],
+  ausNz: ['race-cabbage-tree', 'race-sydney-hobart', 'race-sydney-goldcoast'],
+  other: ['race-round-island', 'race-chicago-mac', 'race-faerder'],
 };
 
 // ---- Home ports ----
