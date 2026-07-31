@@ -815,6 +815,12 @@ export interface GameState {
   eventLog: string[];
   tutorialSeen?: boolean; // whether the player has seen the race how-to-play
   scoringSeen?: boolean; // whether the corrected-time (handicap) primer has been shown (display-only, like tutorialSeen)
+  // Free Sailing: the budget layer switched off — no fees, prices, wages or
+  // prizes; every boat and sailor is available and funds are frozen. A PREFERENCE
+  // (two-way, newest save wins in reconcile — unlike the one-way "seen" flags).
+  // Neutralised entirely inside the gameReducer money cases; the engine never
+  // reads it, so the race sim and the goldens are untouched either way.
+  freeSailing?: boolean;
   seenHonourIds?: string[]; // honours whose earn-moment has been shown (display-only, like tutorialSeen)
   savedAt?: number; // epoch ms the save was last written; drives cloud sync reconciliation
 }

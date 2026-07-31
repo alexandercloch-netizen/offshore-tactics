@@ -107,6 +107,17 @@ describe('reconcileSaves', () => {
     expect(reconcileSaves(local, cloud)!.tutorialSeen).toBe(true);
   });
 
+  it('freeSailing follows the NEWEST save (a two-way preference, never OR-union)', () => {
+    // The player turned the mode off on the newer device — off must win, or the
+    // mode could never be left again after a sync.
+    const turnedOff = state({ savedAt: 200, freeSailing: false });
+    const stillOn = state({ savedAt: 100, freeSailing: true });
+    expect(reconcileSaves(turnedOff, stillOn)!.freeSailing).toBe(false);
+    // …and a pre-flag save on the newer side doesn't drop a set preference.
+    const preFlag = state({ savedAt: 200 });
+    expect(reconcileSaves(preFlag, stillOn)!.freeSailing).toBe(true);
+  });
+
   it('treats a missing savedAt as oldest', () => {
     const noStamp = state({ selectedRaceId: 'nostamp' });
     const stamped = state({ savedAt: 1, selectedRaceId: 'stamped' });

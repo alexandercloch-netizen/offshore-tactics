@@ -60,7 +60,8 @@ export const SailLockerScreen: React.FC<Props> = ({ route, navigation }) => {
         <Text style={styles.boatName}>{boat.name}</Text>
         <Text style={styles.intro}>
           {boat.className} · {owned.length} specialist{' '}
-          {owned.length === 1 ? 'sail' : 'sails'} aboard. Funds: {money(state.funds)}
+          {owned.length === 1 ? 'sail' : 'sails'} aboard.
+          {state.freeSailing ? ' Free Sailing — the loft is open.' : ` Funds: ${money(state.funds)}`}
         </Text>
 
         <View style={styles.viewer}>
@@ -75,7 +76,7 @@ export const SailLockerScreen: React.FC<Props> = ({ route, navigation }) => {
           const isOwned = owned.includes(sail.id);
           const cost = sailCost(boat.boatType, sail);
           const refund = sailRefund(boat.boatType, sail);
-          const affordable = state.funds >= cost;
+          const affordable = state.freeSailing || state.funds >= cost;
           return (
             <View key={sail.id} style={[styles.card, isOwned && styles.cardOwned]}>
               <View style={styles.cardHeader}>
@@ -95,8 +96,10 @@ export const SailLockerScreen: React.FC<Props> = ({ route, navigation }) => {
                     accessibilityLabel={`Sell the ${sail.name} for ${money(refund)}`}
                     onPress={() => sellSail(boat.id, sail.id, refund)}
                   >
-                    <Text style={styles.btnSellText}>Sell</Text>
-                    <Text style={styles.btnSubPriceSell}>+{money(refund)}</Text>
+                    <Text style={styles.btnSellText}>{state.freeSailing ? 'Return' : 'Sell'}</Text>
+                    {!state.freeSailing ? (
+                      <Text style={styles.btnSubPriceSell}>+{money(refund)}</Text>
+                    ) : null}
                   </Pressable>
                 ) : (
                   <Pressable
@@ -107,8 +110,10 @@ export const SailLockerScreen: React.FC<Props> = ({ route, navigation }) => {
                     accessibilityLabel={`Buy the ${sail.name} for ${money(cost)}`}
                     onPress={() => buySail(boat.id, sail.id, cost)}
                   >
-                    <Text style={styles.btnBuyText}>Buy</Text>
-                    <Text style={styles.btnSubPrice}>{money(cost)}</Text>
+                    <Text style={styles.btnBuyText}>{state.freeSailing ? 'Take' : 'Buy'}</Text>
+                    {!state.freeSailing ? (
+                      <Text style={styles.btnSubPrice}>{money(cost)}</Text>
+                    ) : null}
                   </Pressable>
                 )}
               </View>

@@ -70,8 +70,12 @@ export const CrewSelectScreen: React.FC<Props> = ({ navigation }) => {
           </Text>
         </View>
         <View style={{ alignItems: 'flex-end' }}>
-          <Text style={styles.bannerWages}>{isCorinthian ? 'Unpaid' : money(wages)}</Text>
-          <Text style={styles.bannerSub}>{isCorinthian ? 'No crew wages' : 'Total wages'}</Text>
+          <Text style={styles.bannerWages}>
+            {state.freeSailing ? 'Free Sailing' : isCorinthian ? 'Unpaid' : money(wages)}
+          </Text>
+          <Text style={styles.bannerSub}>
+            {state.freeSailing ? 'No wages' : isCorinthian ? 'No crew wages' : 'Total wages'}
+          </Text>
         </View>
       </View>
 
@@ -127,7 +131,11 @@ export const CrewSelectScreen: React.FC<Props> = ({ navigation }) => {
                 </View>
                 <View style={styles.wageBox}>
                   <Text style={styles.wage}>
-                    {member.tier === 'pro' ? money(member.wage) : 'Amateur'}
+                    {member.tier === 'pro'
+                      ? state.freeSailing
+                        ? 'Pro'
+                        : money(member.wage)
+                      : 'Amateur'}
                   </Text>
                   {isSelected ? <Text style={styles.signed}>Signed</Text> : null}
                 </View>

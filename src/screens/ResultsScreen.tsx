@@ -187,17 +187,19 @@ export const ResultsScreen: React.FC<Props> = ({ navigation }) => {
             <Text style={styles.statLabel}>Corrected Time</Text>
           </View>
         ) : null}
-        <View style={styles.statCard}>
-          <Text
-            style={[
-              styles.statValue,
-              { color: result.prizeMoney > 0 ? colors.signalGreen : colors.mist },
-            ]}
-          >
-            {money(result.prizeMoney)}
-          </Text>
-          <Text style={styles.statLabel}>Prize Money</Text>
-        </View>
+        {!state.freeSailing ? (
+          <View style={styles.statCard}>
+            <Text
+              style={[
+                styles.statValue,
+                { color: result.prizeMoney > 0 ? colors.signalGreen : colors.mist },
+              ]}
+            >
+              {money(result.prizeMoney)}
+            </Text>
+            <Text style={styles.statLabel}>Prize Money</Text>
+          </View>
+        ) : null}
       </View>
 
       {newHonours.length > 0 ? (
@@ -255,6 +257,7 @@ export const ResultsScreen: React.FC<Props> = ({ navigation }) => {
 
       <Debrief result={result} width={width} />
 
+      {state.freeSailing ? null : (
       <View style={styles.fundsCard} testID="cost-ledger">
         {entryFee != null ? (
           <View style={styles.ledgerRow}>
@@ -287,6 +290,7 @@ export const ResultsScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={styles.fundsValue}>{money(state.funds)}</Text>
         </View>
       </View>
+      )}
 
       {state.eventLog.length > 0 ? (
         <View style={styles.logCard}>

@@ -56,6 +56,10 @@ export interface ProfileCardProps {
   width: number;
   twoPane?: boolean;
   onSetCurrency: (c: Currency) => void;
+  // Free Sailing: the budget layer switched off (see gameReducer). Optional so
+  // older fixtures/mounts without the toggle still render.
+  freeSailing?: boolean;
+  onSetFreeSailing?: (on: boolean) => void;
   onEditPreferences: () => void;
   onViewTrophyCase: () => void;
   onReset?: () => void; // undefined when there is nothing to reset
@@ -150,7 +154,10 @@ const CareerSection: React.FC<ProfileCardProps> = (p) => {
         <StatCell value={`${c.wins}`} label="Wins" />
       </View>
       <StatRow label="Miles logged" value={`${Math.round(c.nmLogged).toLocaleString()} nm`} />
-      <StatRow label="Campaign funds" value={p.money(p.funds)} />
+      <StatRow
+        label="Campaign funds"
+        value={p.freeSailing ? 'Free Sailing' : p.money(p.funds)}
+      />
       {p.best ? (
         <StatRow
           label={`Best result — ${p.best.raceName}`}
@@ -280,6 +287,28 @@ const ShedSection: React.FC<ProfileCardProps> = (p) => {
 const PrefsSection: React.FC<ProfileCardProps> = (p) => (
   <Card testID="profile-prefs">
     <Kicker>Preferences</Kicker>
+    {p.onSetFreeSailing ? (
+      <>
+        <View style={styles.prefRow}>
+          <Text style={styles.rowLabel}>Game mode</Text>
+          <Segmented<'career' | 'free'>
+            value={p.freeSailing ? 'free' : 'career'}
+            options={[
+              { value: 'career', label: 'Career' },
+              { value: 'free', label: 'Free Sailing' },
+            ]}
+            onSelect={(v) => p.onSetFreeSailing!(v === 'free')}
+            stretch={false}
+            testID="free-sailing-toggle"
+          />
+        </View>
+        <Text style={styles.prefHint}>
+          {p.freeSailing
+            ? 'No fees, prices or prizes — every boat and sailor is available, and your campaign funds are frozen until you return to Career.'
+            : 'Career runs the full campaign budget: entry fees, boats, wages and prize money. Switch to Free Sailing to just race.'}
+        </Text>
+      </>
+    ) : null}
     <View style={styles.prefRow}>
       <Text style={styles.rowLabel}>Currency</Text>
       <Segmented<Currency>
@@ -471,6 +500,13 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   prefActions: { marginTop: spacing.md, gap: spacing.md },
+  prefHint: {
+    color: colors.mist,
+    fontSize: fontSize.xs,
+    lineHeight: 17,
+    marginTop: -2,
+    marginBottom: spacing.md,
+  },
   accountBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',

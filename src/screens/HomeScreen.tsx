@@ -193,7 +193,8 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
     const race = getRaceById(raceId);
     if (!race) return;
     const division = defaultDivision(player?.experience);
-    const affordable = state.funds >= race.divisions[division].entryFee;
+    const affordable =
+      state.freeSailing || state.funds >= race.divisions[division].entryFee;
     const go = () => {
       prepareNextRace();
       if (affordable) {
