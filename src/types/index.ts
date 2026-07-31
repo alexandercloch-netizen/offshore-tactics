@@ -27,7 +27,9 @@ export type HazardKey =
   | 'doldrums'
   | 'tidal_rapids'
   | 'eac_coastal'
-  | 'strait_fog';
+  | 'strait_fog'
+  | 'monsoon_squall'
+  | 'ocean_high';
 
 export type WaypointType = 'start' | 'turn' | 'island' | 'mark' | 'finish';
 

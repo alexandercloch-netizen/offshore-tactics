@@ -40,13 +40,13 @@ export const EXPERIENCE_OPTIONS: Choice<ExperienceLevel>[] = [
 // the crown jewels follow.
 export const REGION_RACES: Record<SailingRegion, string[]> = {
   uk: ['race-cowes-dinard', 'race-round-island', 'race-fastnet'],
-  med: ['race-malta-syracuse', 'race-middle-sea'],
+  med: ['race-malta-syracuse', 'race-giraglia', 'race-middle-sea'],
   caribbean: ['race-antigua-360', 'race-caribbean-600'],
-  usEast: ['race-annapolis-newport', 'race-newport-bermuda'],
-  usWest: ['race-islands-race', 'race-transpac', 'race-swiftsure', 'race-r2ak'],
-  greatLakes: ['race-tri-state', 'race-chicago-mac'],
-  ausNz: ['race-cabbage-tree', 'race-sydney-hobart'],
-  other: ['race-round-island', 'race-chicago-mac'],
+  usEast: ['race-block-island', 'race-annapolis-newport', 'race-marion-bermuda', 'race-newport-bermuda'],
+  usWest: ['race-ensenada', 'race-islands-race', 'race-transpac', 'race-swiftsure', 'race-van-isle', 'race-r2ak'],
+  greatLakes: ['race-tri-state', 'race-bayview-mac', 'race-chicago-mac'],
+  ausNz: ['race-cabbage-tree', 'race-sydney-goldcoast', 'race-sydney-hobart'],
+  other: ['race-faerder', 'race-round-island', 'race-chicago-mac'],
 };
 
 // ---- Home ports ----

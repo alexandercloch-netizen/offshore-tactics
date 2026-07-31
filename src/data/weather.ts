@@ -93,6 +93,14 @@ const HAZARD_WEATHER_BIAS: Record<HazardKey, Partial<Record<string, number>>> = 
   eac_coastal: { 'wx-light': 1.5, 'wx-moderate': 2, 'wx-fresh': 1.5, 'wx-gale': 0.5 },
   // A confined strait under fog: light, patchy and grey far more often than fresh.
   strait_fog: { 'wx-calm': 2, 'wx-light': 2.5, 'wx-moderate': 2, 'wx-strong': 0.6, 'wx-gale': 0.3 },
+  // Monsoon trade sailing punctuated by violent rain squalls: solid pressure most
+  // of the time, with the squall line spiking it — rarely a true gale, never calm
+  // for long.
+  monsoon_squall: { 'wx-moderate': 2, 'wx-fresh': 2.5, 'wx-strong': 1.8, 'wx-calm': 0.5 },
+  // An ocean high-pressure ridge on the course: glassy in the middle, honest
+  // trades round the edge — the race is won by how much of the light stuff you
+  // let it feed you.
+  ocean_high: { 'wx-calm': 2, 'wx-light': 2.5, 'wx-moderate': 1.5, 'wx-fresh': 1.2, 'wx-gale': 0.3 },
 };
 
 function weightedPick(weights: Record<string, number>): WeatherCondition {
