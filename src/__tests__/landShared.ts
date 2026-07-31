@@ -113,7 +113,10 @@ export function inlandIncursions(
 
 // The sub-resolution channels — courses whose real channels are narrower than the
 // 1:10m coastline can represent (R2AK's Inside Passage ~750 m; the Middle Sea's
-// Strait of Messina / Aeolian gaps). The polygon shows navigable water as land, so
-// a weather-routed track unavoidably "clips" it — a coastline-resolution limit
-// (tide-independent), tracked in docs/TIDE-NOTES.md, not a movement bug.
-export const SUBRESOLUTION_COAST = new Set(['race-r2ak', 'race-middle-sea']);
+// Strait of Messina / Aeolian gaps; Van Isle 360 threads the SAME Discovery
+// Passage / Johnstone Strait waters as R2AK, so it inherits the same limit). The
+// polygon shows navigable water as land, so a weather-routed track unavoidably
+// "clips" it — a coastline-resolution limit (tide-independent), tracked in
+// docs/TIDE-NOTES.md, not a movement bug. (Van Isle passes the coarse per-race
+// land audit in land.test.ts; only the fine-step tide run trips the channels.)
+export const SUBRESOLUTION_COAST = new Set(['race-r2ak', 'race-middle-sea', 'race-van-isle']);

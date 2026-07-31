@@ -60,6 +60,14 @@ function hazardProfile(hazard: HazardKey, baseSpeed: number): HazardProfile {
     case 'celtic_weather':
     case 'bass_strait':
       return { speedMul: 1.15, shiftAmp: 20, rotatePerH: 2.2, featureDeltaMul: 0.6, featureRadiusNm: 80 };
+    case 'monsoon_squall':
+      // Monsoon trades with violent squall cells riding through: solid pressure,
+      // hard-edged puffs, honest gusty texture.
+      return { speedMul: 1.05, shiftAmp: 20, rotatePerH: 0.6, featureDeltaMul: 0.55, featureRadiusNm: 35 };
+    case 'ocean_high':
+      // A parked ocean ridge: the headline feature is a huge soft hole the route
+      // must respect; outside it the breeze is workmanlike, not wild.
+      return { speedMul: 0.8, shiftAmp: 16, rotatePerH: 0.3, featureDeltaMul: -0.6, featureRadiusNm: 110 };
     default:
       return { speedMul: 1.0, shiftAmp: 18, rotatePerH: 0.5, featureDeltaMul: 0.2, featureRadiusNm: 50 };
   }

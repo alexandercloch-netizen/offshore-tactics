@@ -627,6 +627,366 @@ export const STORYLINES: Storyline[] = [
       },
     ],
   },
+
+  // -- Rolex Giraglia: the dusk rounding at the rock -------------------------
+  {
+    raceId: 'race-giraglia',
+    theme: 'The Ligurian crossing — and a lighthouse rock where the wind goes to die.',
+    stakes:
+      'Two hundred miles from the gulf of Saint-Tropez to Genoa, hinged on a lonely rock off Cap Corse. The Giraglia is rounded at dusk more often than not, just as the sea breeze folds — and the boats that read the night wind first are gone before the rest know it has arrived.',
+    coached:
+      'Navigator: the thermal quits with the sun, and the night gradient fills from seaward of Cap Corse — usually. Round wide and hunt it, or take the short water up the Corsican shore and pray the island does not park us.',
+    beats: [
+      {
+        kind: 'briefing',
+        body: 'The gulf empties in a spinnaker haze and the fleet strings out across the Ligurian Sea, Corsica a blue shadow on the bow. Everyone is doing the same arithmetic: hull speed against sunset, and the rock arriving exactly when the wind leaves.',
+      },
+      {
+        kind: 'beat',
+        pinnedWaypoint: 'Giraglia Rock',
+        body: 'The lighthouse takes shape in the last of the light, the sea breeze soft and softening. Off to seaward there is a darker line of water that might be the night wind arriving. Round wide and go find it — or take the short rounding under the island and trust the fjord-flat calm to spare you.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'bold',
+        body: 'You gave the rock searoom and sailed out into the dark after a rumour of wind — and found it, heeling to the night gradient while the inshore boats sat mirrored under Cap Corse. The long way round the Giraglia was the short way to Genoa.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'safe',
+        body: 'You rounded clean and kept your options, neither betting the race on the shore nor spending miles on a rumour. The dusk lottery paid some boats and parked others; you sailed through the middle of it, unspectacular and still racing.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'hedge',
+        body: 'You shaded seaward without fully committing — a rounding with one hand on the shore route and one eye on the dark water. When the night wind came you were half a mile from perfect, which at the Giraglia at dusk counts as seamanship.',
+      },
+    ],
+  },
+
+  // -- Sydney–Gold Coast: north against the river ----------------------------
+  {
+    raceId: 'race-sydney-goldcoast',
+    theme: 'Winter miles north — with the East Australian Current running the wrong way.',
+    stakes:
+      'Three hundred and eighty miles from the Heads to Southport, every one of them against the EAC. The current is a river two knots strong and forty miles wide, and the whole race is one long argument about where to cross it, dodge it, or pay it.',
+    coached:
+      'Navigator: the current line shows hard at Smoky Cape. Inside is out of the river but starved of breeze under the land at night; outside is two knots foul and full of wind. We will not win this by sailing the rhumb line.',
+    beats: [
+      {
+        kind: 'briefing',
+        body: 'Out through the Heads into a bright winter southerly, the fleet turns left and the arithmetic starts: the shortest way to the Gold Coast is up the beach, and the beach is where the sea breeze dies at dark. The EAC waits offshore like a toll gate.',
+      },
+      {
+        kind: 'beat',
+        pinnedWaypoint: 'Smoky Cape',
+        body: 'Smoky Cape light on the bow and the sea surface split in two: confused warm water offshore where the current runs, long dark lanes inshore where the back-eddies live. The night is coming. Thread the eddies in the dark, or stand out and pay the river for its breeze?',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'bold',
+        body: 'You went beach-crawling in the dark, boat-length by boat-length through the back-eddies while the offshore boats paid their two knots. It took nerve and a depth sounder — and it bought you the cape while the fleet fought the river.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'safe',
+        body: 'You stood offshore and took the current on the bow as the price of honest pressure all night. The log flattered and the ground made good sulked — but the boat kept sailing while the inshore gamblers sat in the holes under the land.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'hedge',
+        body: 'You rode the current line itself, where the water is lumpy and undecided — half out of the river, half in the breeze. A navigator\'s compromise: nobody aboard was ever thrilled, and nothing ever went badly wrong.',
+      },
+    ],
+  },
+
+  // -- China Sea Race: the squall line -----------------------------------------
+  {
+    raceId: 'race-china-sea',
+    theme: 'Across the South China Sea on the dying monsoon — through whatever it throws.',
+    stakes:
+      'Five hundred and seventy miles from Victoria Harbour to Subic Bay, on a monsoon that is fading but not finished. The squall lines come through like freight trains — forty knots on the face, a glass hole behind — and the podium usually belongs to whoever kept sailing through both.',
+    coached:
+      'Skipper\'s note: when the squall line shows, we choose fast — carry sail and surf its face for free miles, shorten early and keep the boat whole, or duck the cell and sail round the worst. The radar gives us minutes, not hours.',
+    beats: [
+      {
+        kind: 'briefing',
+        body: 'Hong Kong falls astern in a grey northeast breeze and the fleet spreads onto the great empty reach of the South China Sea. The forecast is the same as it has been for sixty years of this race: trades, squalls, and a windless hole behind every one of them.',
+      },
+      {
+        kind: 'beat',
+        pinnedWaypoint: 'Mid-Channel (South China Sea)',
+        body: 'A black wall walks down the trade toward you, rain smoking under it, the breeze going cold and fitful ahead of it. Under that cloud is forty knots for twenty minutes — and behind it, nothing at all. Sail plan, skipper: carry, shorten, or run round it?',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'bold',
+        body: 'You carried sail into the squall and took the ride — rail buried, helm loaded, the log touching numbers the boat may never see again. It spat you out ahead of the fleet and slightly bent, which around here is called a good trade.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'safe',
+        body: 'You reefed before it hit and went through the squall line like a well-run ship: wet, upright, and unbroken. The surfers made miles on you; the swimmers, further down the fleet, made none at all.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'hedge',
+        body: 'You bore away round the blackest of the cell and re-crossed behind it, trading distance for dry decks. Not the hero\'s line, not the coward\'s: the navigator logged it as "avoiding action", and the boat never noticed it happened.',
+      },
+    ],
+  },
+
+  // -- Cape to Rio: the South Atlantic High ----------------------------------
+  {
+    raceId: 'race-cape2rio',
+    theme: 'The great southern crossing — with a continent of calm parked in the road.',
+    stakes:
+      'Three thousand three hundred miles from Table Bay to Guanabara, and the South Atlantic High sits somewhere in the middle of all of them, moving when it pleases. Sail round it and the trades carry you to Brazil; cut through it and you may write letters home from the middle of a mirror.',
+    coached:
+      'Navigator: the High is the race. The gribs age fast out here — by the time we reach the gate the ridge will have moved. The wide arc is insurance we pay in miles; the rhumb line is a loan the High may never let us repay.',
+    beats: [
+      {
+        kind: 'briefing',
+        body: 'Table Mountain drops astern under its cloth of cloud and the Benguela lifts the fleet north into the trade. Ahead lies the emptiest racecourse on earth, and in the middle of it — somewhere — the High, drawn on every chart aboard as a circle of nothing.',
+      },
+      {
+        kind: 'beat',
+        pinnedWaypoint: 'High Gate',
+        body: 'This is the gate: the last position report puts the ridge dead on the rhumb line, mirror-calm at its heart. The router wants the long arc west with pressure the whole road. The shortest way to Rio is straight through the glass. Commit.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'bold',
+        body: 'You committed to the arc and sailed the extra hundred miles with the trade never dropping below a working breeze. The rhumb-line boats parked in the ridge and watched their water run low; you came round the outside with the kite up the whole way to Brazil.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'safe',
+        body: 'You held the rhumb line and took the glass as it came, the crew swimming at noon and whistling for wind at midnight. Patience is also a tactic: the High moved off in its own time, and you had banked the miles the arc boats spent.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'hedge',
+        body: 'You skirted the ridge\'s shoulder — close enough to smell the calm, far enough to keep steerage — and shaved the arc without ever quite stopping. The navigator called it threading the isobars; the crew called it three slow days; Rio called it a finish.',
+      },
+    ],
+  },
+
+  // -- Bayview Mac: the Huron glass-off --------------------------------------
+  {
+    raceId: 'race-bayview-mac',
+    theme: 'The other Mac — up a lake that sleeps at sunset.',
+    stakes:
+      'Two hundred miles up Lake Huron from Port Huron to the island, and the lake keeps its own hours: sea breeze by afternoon, dead calm by midnight, and a private land breeze under the Michigan shore for the boats bold enough to go find it in the dark.',
+    coached:
+      'Navigator: Huron shuts down at dusk, regular as a diner. The play is the night land breeze off the dunes — if it drains. Commit to the shore and we ghost while the lake sleeps; stay out and we trust the rhumb line to keep a pulse.',
+    beats: [
+      {
+        kind: 'briefing',
+        body: 'The fleet funnels out of the river and opens onto a Huron afternoon, all sparkle and sea breeze. Every navigator aboard is already thinking about ten o\'clock tonight, when the lake will hold its breath — because that is when this race is actually sailed.',
+      },
+      {
+        kind: 'beat',
+        pinnedWaypoint: 'Thunder Bay offing',
+        body: 'The sun goes down off Thunder Bay and takes the wind with it, the lake flattening to pewter. Under the Michigan shore there is a rumour: the night drain off the dunes, a private breeze for whoever closes the beach. Commit to the shore, or hold the rhumb and keep ghosting?',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'bold',
+        body: 'You closed the shore in the dark and the land breeze came down off the dunes like a favour — a private six knots while the mid-lake fleet sat on a mirror. By dawn you were gone, and the rhumb-line boats were still explaining the night to each other.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'safe',
+        body: 'You held the rhumb line and kept the boat ghosting on what the night left behind. No jackpot under the shore, no glue either — just patient trimming through the small hours, and a boat still moving when the morning breeze arrived to count the survivors.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'hedge',
+        body: 'You angled shoreward without betting everything on the beach, and caught the edge of the drain when it came — half the private breeze, none of the total shutdown. A each-way ticket on the Huron night, cashed for a modest, honest gain.',
+      },
+    ],
+  },
+
+  // -- Van Isle 360: the Narrows with an ocean to follow ---------------------
+  {
+    raceId: 'race-van-isle',
+    theme: 'Around the island — rapids first, then the whole Pacific.',
+    stakes:
+      'Five hundred and twenty miles around Vancouver Island: a tide-gated sprint up the inside, a surf-swept rounding at Cape Scott, and the long Pacific slide home. Seymour Narrows gates the whole affair — and unlike the sprint races, whatever you spend there you will miss on the west coast.',
+    coached:
+      'Navigator: the Narrows window is the same as ever — but this time the race does not end in Ketchikan-style relief. The west coast is three hundred miles of open Pacific, and the crew we burn shooting the gate is crew we will want off Brooks Peninsula.',
+    beats: [
+      {
+        kind: 'briefing',
+        body: 'Nanaimo slips astern and the inside passage closes in, green and tide-ruled. Somewhere ahead the Narrows is running its sixteen knots, and beyond it — the thing the inside boats try not to think about — the open Pacific side of the island, waiting with its own weather.',
+      },
+      {
+        kind: 'beat',
+        pinnedWaypoint: 'Seymour Narrows',
+        body: 'The Narrows again: the ebb easing, the window opening, the boil flattening by the minute. But this is a lap of the whole island — spend the crew shooting the last of the gate, slip through neat on the turn, or anchor, bank the rest, and start the west coast whole?',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'bold',
+        body: 'You shot the closing gate at full stretch and the Narrows slung you into Johnstone Strait ahead of the tide and the fleet. The price came due off Cape Scott, where the Pacific met a crew already spent — but the miles were banked, and miles are what this lap is made of.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'safe',
+        body: 'You anchored out the foul stream and let the gate have its tantrum without you, the crew fed and horizontal. The bold boats bought an hour; you bought a west coast sailed fresh — and the island\'s outside third is where that trade pays out.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'hedge',
+        body: 'You timed the turn and slipped through on the slack, no heroics, no anchor — the seamanlike middle of the Narrows ledger. Through with the tide\'s permission rather than against its will, and the whole Pacific side still ahead with a crew to sail it.',
+      },
+    ],
+  },
+
+  // -- Newport–Ensenada: the Coronados at midnight ---------------------------
+  {
+    raceId: 'race-ensenada',
+    theme: 'The tequila run — with a black hole parked on the rhumb line.',
+    stakes:
+      'A hundred and twenty-eight miles from Newport Beach to Ensenada, most of them easy — and then the Coronados at midnight, where the gradient dies and the islands cast a wind shadow you can anchor in. Whole fleets have parked there within sight of the finish.',
+    coached:
+      'Navigator: the islands arrive at exactly the wrong hour. Inside is the rhumb line and the famous glass; outside costs a mile and keeps what breeze the night leaves. The margaritas taste the same either way — the trophies do not.',
+    beats: [
+      {
+        kind: 'briefing',
+        body: 'The start off Newport is a postcard — a thousand sails on a westerly sparkle, Mexico somewhere under the afternoon haze. The old hands are not looking at the postcard; they are looking at the clock, doing the arithmetic that ends with the Coronados at midnight.',
+      },
+      {
+        kind: 'beat',
+        pinnedWaypoint: 'Islas Coronados',
+        body: 'The islands stand black against the last of the light, dead on the rhumb line, and the breeze is already going soft. Inside is shorter and famously still; outside keeps the gradient alive. Midnight at the Coronados — choose your lane.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'bold',
+        body: 'You cut inside the islands and the night air held — barely, a whisper down the channel that kept the boat sliding while the offshore boats sailed their insurance miles. The shortest road to Ensenada, sailed on nerve and a depth contour.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'safe',
+        body: 'You stood offshore of the lee, paid the extra mile, and kept sailing all night while the inside gamblers sat under the islands watching their tell-tales hang. The gradient survived out there, exactly as promised — and so did your race.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'hedge',
+        body: 'You shaved the windward shore of the islands, close enough to save most of the distance, far enough to duck out if the shadow reached for you. It half-worked, which off the Coronados at midnight is better than most boats managed.',
+      },
+    ],
+  },
+
+  // -- Block Island Race: The Race, twice ------------------------------------
+  {
+    raceId: 'race-block-island',
+    theme: 'Down the Sound and back — through the sluice gate both ways.',
+    stakes:
+      'A hundred and eighty-three miles from Stamford round Block Island and home, with The Race — the tide-gate at the Sound\'s eastern door — standing in the road both directions. Four knots of stream run through it at strength; the whole racecourse turns on catching it fair.',
+    coached:
+      'Navigator: the ebb serves The Race for the run out — if we are there when it runs. Miss the window and the options are the overfalls against the flood, or Plum Gut\'s side door and the extra miles. We will meet the same gate again coming home.',
+    beats: [
+      {
+        kind: 'briefing',
+        body: 'The Sound opens ahead in the Friday evening light, and every navigator aboard every boat is working the same tide table: The Race, hours away, where four knots of water will either carry you out to Block Island like a king or stand you straight up.',
+      },
+      {
+        kind: 'beat',
+        pinnedWaypoint: 'The Race',
+        body: 'The ebb is at full pour and The Race is a moving staircase of standing waves, four knots of free transport under the chaos. Centre of the gate for the full sling and the green water, the shoulder for most of the ride, or Plum Gut\'s quiet side door?',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'bold',
+        body: 'You took the centre of the gate at full ebb — green water over the bow, the log reading tide-assisted nonsense — and The Race slung you out toward Block Island ahead of everything that flinched. The foredeck may forgive you by Sunday.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'safe',
+        body: 'You took Plum Gut\'s side door and left the overfalls to the brave, trading a handful of miles for an upright boat and a dry crew. The sluice boats beat you to the island; the boats that mistimed the sluice did not beat you anywhere.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'hedge',
+        body: 'You rode the shoulder of the gate — most of the fair stream, the smaller half of the standing waves — and came out the far side wet but whole with the tide\'s change in hand. A local\'s line through The Race, which is the highest compliment the Sound pays.',
+      },
+    ],
+  },
+
+  // -- Færder Race: midsummer calm at the light ------------------------------
+  {
+    raceId: 'race-faerder',
+    theme: 'A thousand boats, a night without dark — and a lighthouse ringed in glass.',
+    stakes:
+      'Seventy-one miles down the Oslofjord and back to Horten on a midsummer night that never goes black. The fjord breeze dies with the light — such as the light ever leaves — and the rounding at the Færder lighthouse is sailed, most years, at steerage way in a fleet of a thousand drifting sails.',
+    coached:
+      'Navigator: the southerly quits before the lighthouse, count on it. The drainage air runs the Vestfold shore in the small hours — sometimes. East keeps the old gradient longest. This race is won at one knot, by whoever keeps the boat that knot.',
+    beats: [
+      {
+        kind: 'briefing',
+        body: 'The evening start pours a thousand boats down the fjord on the last of the day\'s southerly, spinnakers stacked to the horizon like laundry. It is beautiful and everyone knows it is a trap: somewhere past Bastøy the wind has an appointment to vanish.',
+      },
+      {
+        kind: 'beat',
+        pinnedWaypoint: 'Færder Lighthouse',
+        body: 'The lighthouse stands in a ring of glass, the midnight sun rolling along the horizon, the fleet ghosting on private zephyrs. There is a whisper of drainage air under the Vestfold shore and a memory of southerly out east. Pick your poison — at one knot, wrong is forever.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'bold',
+        body: 'You ghosted down the Vestfold shore after the drainage breeze and it came — a cat\'s-paw, then a whisper, then two honest knots while the fleet at the light hung mirrored. In a race sailed at steerage way, two knots is a gale, and you owned it.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'safe',
+        body: 'You stood east and banked the dying gradient, sailing known breeze while the shore-gamblers chased rumours. It faded, as everything fades at Færder — but later than the alternatives, and the boat never quite stopped, which on this night was the whole art.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'hedge',
+        body: 'You held the middle and kept way on, trimming to every breath the fjord exhaled, committed to nothing but boatspeed. No jackpot, no park-up: a rounding at the Færder earned one boat-length at a time, in the pale gold light of a night that never arrived.',
+      },
+    ],
+  },
+
+  // -- Marion–Bermuda: the meander -------------------------------------------
+  {
+    raceId: 'race-marion-bermuda',
+    theme: 'The cruiser\'s crossing — and a river in the ocean that moved since the chart.',
+    stakes:
+      'Six hundred and forty-five miles from Buzzards Bay to St. David\'s Head, sailed the old way — shorthanded, sextant-friendly, unsponsored. The Gulf Stream crosses the middle of it regardless of anybody\'s ethos, and its meanders can hand a cruising boat two free knots or quietly take the race away.',
+    coached:
+      'Navigator: our Stream picture is three days old the moment we need it. The trace shows a warm meander bowing east — a conveyor, if it is still there. Chase it and we buy miles for a ride; cross square and we take the shortest wet road and no favours.',
+    beats: [
+      {
+        kind: 'briefing',
+        body: 'Marion empties on a June morning, the fleet motoring-out-and-sailing in that unhurried Corinthian way — and then Buzzards Bay opens, the shelf drops away, and six hundred miles of Atlantic get serious. Taped to the chart table: a satellite picture of a river that has already moved.',
+      },
+      {
+        kind: 'beat',
+        pinnedWaypoint: 'Gulf Stream Crossing',
+        body: 'The water goes deep blue and warm, and the Stream is under you. The trace promises a meander east — two knots of conveyor toward Bermuda, if you believe a three-day-old photograph of moving water. Chase it, cross square, or hunt the quiet entry?',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'bold',
+        body: 'You bought the miles east and the meander was there — the thermometer spiking, the current under the keel, Bermuda arriving two knots faster than the wind alone could manage. An old picture, a live river, and a navigator who will dine on this for years.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'safe',
+        body: 'You crossed square — the shortest, lumpiest, most honest road through the Stream — and were out of the river before it could develop opinions. The meander-chasers gambled on an old photograph; you gambled on nothing at all.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'hedge',
+        body: 'You detoured to the pilot chart\'s soft spot and crossed gently, part conviction, part caution. Less current against you than the square road, less windfall than the meander paid — the kind of quietly sensible Stream crossing this race was invented for.',
+      },
+    ],
+  },
 ];
 
 // Lookup: the storyline authored for a race, or undefined for an un-storied one.

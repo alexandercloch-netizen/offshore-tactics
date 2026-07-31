@@ -336,8 +336,35 @@ missing piece fails loudly — `npm run tsc` and `npm test` are your checklist.
   correct — the label just misleads); and the baseline samples the **waypoint
   centroid**, which for a long, sheltered course (r2ak up the Inside Passage) can
   land in dead air and read too light — re-vet the sample point for such courses.
+  **CRITICAL — the bake is DATE-SENSITIVE**: the query window is computed from
+  today, so a rebuild months later returns different stats for EXISTING races —
+  and a changed entry re-seeds that race's shipped field, which moves the golden
+  pins. When adding races, regenerate and then **surgically restore every
+  existing race's entry byte-for-byte from git**, keeping only the new entries
+  (the 27-race expansion did exactly this; see the merge snippet in that PR).
+  Coastline regen is reproducible (same NE sources → byte-identical), so it has
+  no such trap — but verify the existing keys' diff is empty all the same.
 - See the **Race to Alaska** (`race-r2ak`, hazard `tidal_rapids`) as the worked
   example of a brand-new hazard done end to end.
+- **Race CONTENT floor** (`contentDepth.test.ts` enforces all of it): every race
+  carries a storyline (`data/storylines.ts` — `storyline.test` pins the full
+  contract), a signature event whose choices OPEN an act-two situation (a `sets`
+  key answered by a `FOLLOWON_EVENTS` entry — no orphans), and ≥4 region-tagged
+  everyday events (`regions:` on events in the everyday pools; `RACE_REGION` in
+  `data/events.ts` maps race → region key). A race that reuses a hazard needs a
+  `HAZARD_RACE_EVENTS` override pinned to ITS OWN mark, or the signature never
+  fires (the shared event's `pinToWaypoint` names another course's mark).
+- **Golden-safe event authoring** (how to add content WITHOUT moving the pinned
+  streams — contentDepth's last two tests enforce this): (1) never tag a new
+  event `'uk'`, `'tasman'`, or a golden race id (round-island / fastnet /
+  sydney-hobart) — for their neighbours use race-id tags (`['race-cowes-dinard']`)
+  instead of the region key; the picker's `eventFits` then excludes the new event
+  from the golden candidate pools, and `filter` preserves order, so the pinned
+  draws are untouched. (2) Follow-on events only enter a draw when their
+  `followsFrom` key is LIVE, so always chain new follow-ons off NEW `sets` keys —
+  and on the three golden races put the `sets` key on a choice the pinned runs
+  never take (they auto-take `choices[0]`). (3) Per-race content
+  (`HAZARD_RACE_EVENTS`, `STORYLINES`) is keyed by race id and can't leak.
 
 **Add a boat** — append a `Boat` to `src/data/boats.ts` with a non-zero
 `crewCapacity` (or the crew screen blocks signing), a price, `baseSpeed`, and

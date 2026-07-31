@@ -108,10 +108,15 @@ describe('pickEventForRace — point-of-sail gate', () => {
     .filter((e) => e.pointOfSail === 'Downwind')
     .map((e) => e.id);
 
+  // Draw with no-repeat until the whole everyday pool has had the chance to
+  // surface — sized to the pool rather than a magic count, so growing the
+  // content (the local-knowledge expansion tripled it) can't starve the
+  // positive-coverage assertion below.
+  const POOL_SIZE = [...GENERIC_EVENTS, ...WEATHER_EVENTS, ...MORALE_EVENTS].length;
   const drawMany = (pos: PointOfSail): string[] => {
     setRng(mulberry32(3));
     const shown: string[] = [];
-    for (let i = 0; i < 60; i += 1) {
+    for (let i = 0; i < POOL_SIZE + 5; i += 1) {
       shown.push(pickEventForRace(shown, pos).id);
     }
     return shown;
