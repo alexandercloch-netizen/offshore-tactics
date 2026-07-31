@@ -46,7 +46,8 @@ export const FleetScreen: React.FC<Props> = ({ navigation }) => {
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 96 }]}>
         <Text style={styles.intro}>
           Your fleet of custom boats. Build them from a class or import a real polar; you own
-          them outright, so there's no charter to race one. Funds: {money(state.funds)}
+          them outright, so there's no charter to race one.
+          {state.freeSailing ? ' Free Sailing — builds are on the house.' : ` Funds: ${money(state.funds)}`}
         </Text>
 
         {fleet.length === 0 ? (

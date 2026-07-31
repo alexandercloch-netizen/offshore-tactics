@@ -49,7 +49,9 @@ export const RaceSelectScreen: React.FC<Props> = ({ navigation }) => {
         ]}
       >
       <Text style={styles.intro}>
-        Funds available: {money(state.funds)}
+        {state.freeSailing
+          ? 'Free Sailing — no fees, no purse, just the racing.'
+          : `Funds available: ${money(state.funds)}`}
       </Text>
       {RACES.map((race) => {
         const unlocked = isRaceUnlocked(race, state.history);
@@ -136,15 +138,18 @@ const DivisionRow: React.FC<{
   funds: number;
   onEnter: () => void;
 }> = ({ race, division, funds, onEnter }) => {
-  const { money } = useGame();
+  const { money, state } = useGame();
   const info = race.divisions[division];
-  const affordable = funds >= info.entryFee;
+  // Free Sailing pays no entry fee, so every division is open.
+  const affordable = state.freeSailing || funds >= info.entryFee;
   return (
     <View style={styles.divisionRow}>
       <View style={{ flex: 1 }}>
         <Text style={styles.divisionName}>{divisionName(division)} Division</Text>
         <Text style={styles.divisionMeta}>
-          Entry {money(info.entryFee)} • Purse {money(info.prizeMoney)} • {info.fleetSize} boats
+          {state.freeSailing
+            ? `${info.fleetSize} boats`
+            : `Entry ${money(info.entryFee)} • Purse ${money(info.prizeMoney)} • ${info.fleetSize} boats`}
         </Text>
       </View>
       <NauticalButton

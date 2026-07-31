@@ -149,6 +149,16 @@ The simulation is a **pure, deterministic engine** with a thin React UI on top.
   (AsyncStorage; `keyFor` namespaces each account's cache), `reconcile.ts`
   (local↔cloud save merge). New persistent state folds in `gameReducer`, NEVER in
   `stepRace`/`applyDecision` (the determinism contract).
+  **Free Sailing** (`GameState.freeSailing`) switches the whole budget layer off:
+  the six reducer money cases (`ADD_FLEET_BOAT`/`BUY_SAIL`/`SELL_SAIL`/
+  `BEGIN_RACE`/`FINISH_RACE`/`PREPARE_NEXT_RACE`) are the ONLY places money moves,
+  and each one no-ops its funds math under the flag — funds freeze, boats become
+  charters (`BEGIN_RACE` skips `ownedBoatIds`), results/career/honours still count.
+  The engine NEVER reads the flag (goldens untouched); screens only hide money UI
+  and relax afford gates. It's a TWO-WAY preference: newest save wins in
+  `reconcile.ts` (never OR-union it like `tutorialSeen` — that would lock it on),
+  and `RESET_CAMPAIGN` preserves it. If you add a new money source, route it
+  through a reducer case and honour the flag there, not in a screen.
 - **`src/screens/`** — one per screen; bottom tabs (Race/Fleet/Leaderboard/
   Profile) live under `Main`, with setup/race screens pushed over them. The
   setup→race flow is Provisioning → Briefing → **StartSequence** (the pre-gun

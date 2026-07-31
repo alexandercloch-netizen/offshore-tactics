@@ -42,6 +42,7 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
     money,
     currency,
     setCurrency,
+    setFreeSailing,
     setPlayerProfile,
   } = useGame();
   const { configured, user, displayName } = useAuth();
@@ -113,6 +114,8 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
         funds={state.funds}
         money={money}
         currency={currency}
+        freeSailing={state.freeSailing === true}
+        onSetFreeSailing={setFreeSailing}
         ownedBoats={ownedBoats}
         crew={crew}
         homeWatersLabel={REGION_OPTIONS.find((o) => o.value === player?.region)?.label}

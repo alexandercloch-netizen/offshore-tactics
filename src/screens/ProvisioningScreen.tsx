@@ -51,7 +51,10 @@ export const ProvisioningScreen: React.FC<Props> = ({ navigation }) => {
 
   const cost = campaignCost(state);
   const remaining = state.funds - cost.total;
-  const overBudget = remaining < 0;
+  // Free Sailing: stores are supplied — provisioning still matters for the passage
+  // (food, water, kit), the bill just isn't yours.
+  const free = state.freeSailing === true;
+  const overBudget = !free && remaining < 0;
 
   const setSail = () => {
     if (overBudget) return;
@@ -117,7 +120,7 @@ export const ProvisioningScreen: React.FC<Props> = ({ navigation }) => {
                       : ' · one-off fit-out'}
                   </Text>
                 </View>
-                <Text style={styles.unit}>{money(item.unitCost)}</Text>
+                {!free ? <Text style={styles.unit}>{money(item.unitCost)}</Text> : null}
               </View>
               <Text style={styles.description}>{item.description}</Text>
               <View style={styles.effects}>
@@ -149,29 +152,35 @@ export const ProvisioningScreen: React.FC<Props> = ({ navigation }) => {
                   }
                   disabled={qty >= MAX_QTY}
                 />
-                <Text style={styles.lineCost}>
-                  {money(qty * item.unitCost)}
-                </Text>
+                {!free ? (
+                  <Text style={styles.lineCost}>{money(qty * item.unitCost)}</Text>
+                ) : null}
               </View>
             </View>
           );
         })}
       </ScrollView>
       <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
-        <View style={styles.ledger}>
-          <LedgerRow label="Entry fee" value={money(cost.entryFee)} />
-          <LedgerRow label={cost.charter > 0 ? 'Boat (purchase)' : 'Boat (owned)'} value={money(cost.charter)} />
-          <LedgerRow label="Crew wages" value={money(cost.wages)} />
-          <LedgerRow label="Provisions" value={money(cost.provisions)} />
-          <View style={styles.divider} />
-          <LedgerRow label="Total" value={money(cost.total)} bold />
-          <LedgerRow
-            label="Remaining"
-            value={money(remaining)}
-            bold
-            danger={overBudget}
-          />
-        </View>
+        {!free ? (
+          <View style={styles.ledger}>
+            <LedgerRow label="Entry fee" value={money(cost.entryFee)} />
+            <LedgerRow label={cost.charter > 0 ? 'Boat (purchase)' : 'Boat (owned)'} value={money(cost.charter)} />
+            <LedgerRow label="Crew wages" value={money(cost.wages)} />
+            <LedgerRow label="Provisions" value={money(cost.provisions)} />
+            <View style={styles.divider} />
+            <LedgerRow label="Total" value={money(cost.total)} bold />
+            <LedgerRow
+              label="Remaining"
+              value={money(remaining)}
+              bold
+              danger={overBudget}
+            />
+          </View>
+        ) : (
+          <View style={styles.ledger}>
+            <LedgerRow label="Free Sailing" value="Stores supplied — no bill" bold />
+          </View>
+        )}
         <NauticalButton
           label="Set Sail"
           onPress={setSail}

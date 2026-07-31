@@ -110,6 +110,10 @@ export function reconcileSaves(
     },
     tutorialSeen: Boolean(base.tutorialSeen || other.tutorialSeen),
     scoringSeen: Boolean(base.scoringSeen || other.scoringSeen),
+    // Free Sailing is a TWO-WAY preference, so newest save wins (never OR-union —
+    // that would lock the mode on forever). The fallback only covers a pre-flag
+    // save on the newer side, so a set preference isn't silently dropped.
+    freeSailing: base.freeSailing ?? other.freeSailing,
   };
 }
 

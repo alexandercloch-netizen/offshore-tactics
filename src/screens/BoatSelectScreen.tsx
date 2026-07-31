@@ -56,13 +56,15 @@ export const BoatSelectScreen: React.FC<Props> = ({ navigation }) => {
         contentContainerStyle={[styles.content, { paddingBottom: spacing.xxl }]}
       >
         <Text style={styles.intro}>
-          Buy the boat that suits the course — you keep it for future races.
-          Funds: {money(state.funds)}
+          {state.freeSailing
+            ? 'Free Sailing — charter any boat in the yard; nothing to buy.'
+            : `Buy the boat that suits the course — you keep it for future races. Funds: ${money(state.funds)}`}
         </Text>
         {[...state.profile.fleet, ...BOATS].map((boat: Boat) => {
           const selected = boat.id === selectedId;
           const owned = isBoatOwned(state, boat);
-          const affordable = owned || state.funds >= boat.price;
+          // Free Sailing charters anything; Career buys within budget.
+          const affordable = state.freeSailing || owned || state.funds >= boat.price;
           return (
             <SelectableCard
               key={boat.id}
@@ -70,7 +72,9 @@ export const BoatSelectScreen: React.FC<Props> = ({ navigation }) => {
               disabled={!affordable}
               dimmed={!affordable}
               selected={selected}
-              accessibilityLabel={`${boat.name}, ${owned ? 'owned' : money(boat.price)}`}
+              accessibilityLabel={`${boat.name}, ${
+                state.freeSailing ? 'available' : owned ? 'owned' : money(boat.price)
+              }`}
               style={styles.card}
             >
               <View style={styles.cardHeader}>
@@ -79,7 +83,7 @@ export const BoatSelectScreen: React.FC<Props> = ({ navigation }) => {
                   <Text style={styles.className}>{boat.className}</Text>
                 </View>
                 <Text style={styles.price}>
-                  {owned ? 'Owned' : money(boat.price)}
+                  {state.freeSailing ? 'Available' : owned ? 'Owned' : money(boat.price)}
                 </Text>
               </View>
               <Text style={styles.description}>{boat.description}</Text>

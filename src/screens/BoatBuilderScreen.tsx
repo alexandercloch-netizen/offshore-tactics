@@ -48,7 +48,7 @@ export const BoatBuilderScreen: React.FC<Props> = ({ navigation }) => {
   // The polar to preview/build: a class table or the imported one.
   const polar: BoatPolar | null = mode === 'class' ? classOption?.polar ?? null : parsed;
   const cost = mode === 'class' ? classOption?.price ?? 0 : IMPORT_BUILD_COST;
-  const affordable = state.funds >= cost;
+  const affordable = state.freeSailing || state.funds >= cost;
   const defaultName = mode === 'class' ? classOption?.name ?? 'Custom Boat' : 'Imported Boat';
 
   const onParse = () => {
@@ -197,7 +197,7 @@ export const BoatBuilderScreen: React.FC<Props> = ({ navigation }) => {
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
         <NauticalButton
-          label={polar ? `Build — ${money(cost)}` : 'Build'}
+          label={polar ? (state.freeSailing ? 'Build — free' : `Build — ${money(cost)}`) : 'Build'}
           onPress={onBuild}
           disabled={!polar || !affordable}
         />

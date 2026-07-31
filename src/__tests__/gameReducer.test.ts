@@ -111,6 +111,68 @@ describe('campaign lifecycle', () => {
   });
 });
 
+describe('Free Sailing — the budget layer switched off', () => {
+  const freeBase = (over: Partial<GameState> = {}): GameState =>
+    base({ freeSailing: true, funds: 100, ...over });
+
+  it('purchases succeed regardless of funds, and funds stay frozen', () => {
+    const s = freeBase({ profile: { fleet: [{ id: 'b1', sails: [] } as never] } });
+    const boat = reducer(s, {
+      type: 'ADD_FLEET_BOAT',
+      payload: { boat: { id: 'b2' } as never, cost: 999999 },
+    });
+    expect(boat.profile.fleet).toHaveLength(2); // built despite being "unaffordable"
+    expect(boat.funds).toBe(100); // frozen
+
+    const sail = reducer(s, { type: 'BUY_SAIL', payload: { boatId: 'b1', sailId: 'code-zero', cost: 999999 } });
+    expect(sail.profile.fleet[0].sails).toEqual(['code-zero']);
+    expect(sail.funds).toBe(100);
+
+    const sold = reducer(sail, { type: 'SELL_SAIL', payload: { boatId: 'b1', sailId: 'code-zero', refund: 2000 } });
+    expect(sold.funds).toBe(100); // no free money banked for a return to Career
+    expect(sold.profile.fleet[0].sails).toEqual([]);
+  });
+
+  it('BEGIN_RACE charges nothing and charters the boat (no ownership)', () => {
+    const s = freeBase({ selectedBoatId: 'boat-mistral', ownedBoatIds: [] });
+    const begun = reducer(s, {
+      type: 'BEGIN_RACE',
+      payload: { cost: 50000, progress: {}, condition: {}, weather: {}, windField: {}, tidalField: {}, fleet: [] } as never,
+    });
+    expect(begun.funds).toBe(100); // no bill
+    expect(begun.ownedBoatIds).toEqual([]); // a charter, not a purchase
+  });
+
+  it('FINISH_RACE pays no purse but still counts the result', () => {
+    const s = freeBase({ history: [], career: undefined });
+    const done = reducer(s, { type: 'FINISH_RACE', payload: { result: result({ prizeMoney: 4000, position: 1 }) } });
+    expect(done.funds).toBe(100); // no prize
+    expect(done.history).toHaveLength(1); // the race still counts
+    expect(done.career?.wins).toBe(1); // honours/career untouched by the mode
+  });
+
+  it('PREPARE_NEXT_RACE skips the stipend; funds stay frozen both ways', () => {
+    const next = reducer(freeBase({ funds: 5 }), { type: 'PREPARE_NEXT_RACE' });
+    expect(next.funds).toBe(5); // no sponsor top-up
+  });
+
+  it('toggling back to Career resumes the exact economics', () => {
+    const s = freeBase({ profile: { fleet: [{ id: 'b1', sails: [] } as never] } });
+    const career = reducer(s, { type: 'SET_FREE_SAILING', payload: false });
+    expect(career.freeSailing).toBe(false);
+    // The affordability guard bites again immediately.
+    const refused = reducer(career, { type: 'BUY_SAIL', payload: { boatId: 'b1', sailId: 'code-zero', cost: 5000 } });
+    expect(refused).toBe(career); // refused, unchanged — funds are still 100
+  });
+
+  it('RESET_CAMPAIGN wipes the campaign but keeps the mode preference', () => {
+    const fresh = reducer(freeBase({ funds: 999, history: [result()] }), { type: 'RESET_CAMPAIGN' });
+    expect(fresh.funds).toBe(STARTING_FUNDS);
+    expect(fresh.history).toEqual([]);
+    expect(fresh.freeSailing).toBe(true); // a settings choice, not campaign progress
+  });
+});
+
 describe('display-only "seen" flags', () => {
   it('SET_SCORING_SEEN and SET_TUTORIAL_SEEN set their flag and touch nothing else', () => {
     const s0 = base({ funds: 4242, scoringSeen: false, tutorialSeen: false });

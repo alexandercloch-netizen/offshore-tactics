@@ -119,6 +119,15 @@ describe('the Sailor\'s Card', () => {
     expect(byTestID(tree, 'profile-form')).toHaveLength(0);
   });
 
+  it('renders the Free Sailing toggle when wired, and frozen funds read as the mode', () => {
+    // Without the setter (older mounts/fixtures) the toggle is simply absent.
+    expect(byTestID(mount(props()), 'free-sailing-toggle')).toHaveLength(0);
+    const tree = mount(props({ freeSailing: true, onSetFreeSailing: () => undefined }));
+    expect(byTestID(tree, 'free-sailing-toggle')).toHaveLength(1);
+    // The funds row shows the mode, not a frozen number.
+    expect(allText(tree)).toContain('Free Sailing');
+  });
+
   it('does not crash with an empty career and no honours', () => {
     expect(() =>
       mount(props({ career: emptyCareer(), awards: [], stats: logbookStats([]) as ProfileCardProps['stats'], best: undefined, ownedBoats: [], crew: [] }))

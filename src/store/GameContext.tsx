@@ -86,6 +86,7 @@ export interface GameContextValue {
   applyStart: (outcome: StartOutcome) => void;
   markTutorialSeen: () => void;
   markScoringSeen: () => void;
+  setFreeSailing: (on: boolean) => void;
   markHonoursSeen: (ids: string[]) => void;
   addFleetBoat: (boat: FleetBoat, cost: number) => void;
   removeFleetBoat: (id: string) => void;
@@ -395,6 +396,10 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
     dispatch({ type: 'SET_SCORING_SEEN' });
   }, []);
 
+  const setFreeSailing = useCallback((on: boolean) => {
+    dispatch({ type: 'SET_FREE_SAILING', payload: on });
+  }, []);
+
   const markHonoursSeen = useCallback((ids: string[]) => {
     if (ids.length === 0) return;
     dispatch({ type: 'MARK_HONOURS_SEEN', payload: ids });
@@ -432,7 +437,10 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
   const campaignTotal = useCallback(() => campaignCost(stateRef.current).total, []);
 
   const canAffordCampaign = useCallback(
-    () => stateRef.current.funds >= campaignCost(stateRef.current).total,
+    // Free Sailing pays no bills, so it can always start the race.
+    () =>
+      stateRef.current.freeSailing === true ||
+      stateRef.current.funds >= campaignCost(stateRef.current).total,
     []
   );
 
@@ -642,6 +650,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
       applyStart,
       markTutorialSeen,
       markScoringSeen,
+      setFreeSailing,
       markHonoursSeen,
       addFleetBoat,
       removeFleetBoat,
@@ -676,6 +685,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
       applyStart,
       markTutorialSeen,
       markScoringSeen,
+      setFreeSailing,
       markHonoursSeen,
       addFleetBoat,
       removeFleetBoat,

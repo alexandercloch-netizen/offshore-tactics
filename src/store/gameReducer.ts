@@ -45,6 +45,7 @@ export const INITIAL_STATE: GameState = {
   eventLog: [],
   tutorialSeen: false,
   scoringSeen: false,
+  freeSailing: false,
 };
 
 export type Action =
@@ -68,6 +69,7 @@ export type Action =
     }
   | { type: 'SET_TUTORIAL_SEEN' }
   | { type: 'SET_SCORING_SEEN' }
+  | { type: 'SET_FREE_SAILING'; payload: boolean }
   | { type: 'MARK_HONOURS_SEEN'; payload: string[] }
   | { type: 'ADD_FLEET_BOAT'; payload: { boat: FleetBoat; cost: number } }
   | { type: 'REMOVE_FLEET_BOAT'; payload: string }
@@ -194,6 +196,13 @@ export function reducer(state: GameState, action: Action): GameState {
     case 'SET_SCORING_SEEN':
       return { ...state, scoringSeen: true };
 
+    // Free Sailing on/off — a two-way preference, not a one-way "seen" flag.
+    // Every money case below checks it, so the WHOLE budget layer turns with this
+    // single switch: funds freeze while it's on and career economics resume,
+    // untouched, the moment it's off.
+    case 'SET_FREE_SAILING':
+      return { ...state, freeSailing: action.payload };
+
     // Union the shown honours in (display-only, like tutorialSeen) so an
     // earn-moment fires exactly once.
     case 'MARK_HONOURS_SEEN':
@@ -207,10 +216,11 @@ export function reducer(state: GameState, action: Action): GameState {
       // rather than drive funds negative. A no-op in normal play (the UI gates the
       // purchase); the guard closes the negative-balance path if that gate is ever
       // bypassed. It never MASKS an overcharge — it declines the whole action.
-      if (action.payload.cost > state.funds) return state;
+      // Free Sailing: the build is free and funds stay frozen.
+      if (!state.freeSailing && action.payload.cost > state.funds) return state;
       return {
         ...state,
-        funds: state.funds - action.payload.cost,
+        funds: state.freeSailing ? state.funds : state.funds - action.payload.cost,
         profile: { ...state.profile, fleet: [...state.profile.fleet, action.payload.boat] },
       };
 
@@ -229,10 +239,11 @@ export function reducer(state: GameState, action: Action): GameState {
       const { boatId, sailId, cost } = action.payload;
       // Same affordability contract as ADD_FLEET_BOAT: refuse rather than go
       // negative (a no-op in the UI-gated happy path; closes the exploit).
-      if (cost > state.funds) return state;
+      // Free Sailing: the sail is supplied and funds stay frozen.
+      if (!state.freeSailing && cost > state.funds) return state;
       return {
         ...state,
-        funds: state.funds - cost,
+        funds: state.freeSailing ? state.funds : state.funds - cost,
         profile: {
           ...state.profile,
           fleet: state.profile.fleet.map((b) =>
@@ -246,9 +257,11 @@ export function reducer(state: GameState, action: Action): GameState {
 
     case 'SELL_SAIL': {
       const { boatId, sailId, refund } = action.payload;
+      // Free Sailing: nothing was paid, so nothing comes back — no free money to
+      // bank for a later return to Career.
       return {
         ...state,
-        funds: state.funds + refund,
+        funds: state.freeSailing ? state.funds : state.funds + refund,
         profile: {
           ...state.profile,
           fleet: state.profile.fleet.map((b) =>
@@ -280,13 +293,19 @@ export function reducer(state: GameState, action: Action): GameState {
     case 'BEGIN_RACE':
       return {
         ...state,
-        funds: state.funds - action.payload.cost,
+        // Free Sailing: no campaign bill, and the boat is a CHARTER — it does not
+        // join ownedBoatIds, so the career fleet only ever holds boats that were
+        // genuinely bought. Toggling back to Career finds the campaign exactly as
+        // it was left: same funds, same fleet.
+        funds: state.freeSailing ? state.funds : state.funds - action.payload.cost,
         // Players start on the Balanced auto-helm (the engine's DEFAULT_STRATEGY
         // stays `manual` so the golden stream is untouched; the player race seeds
         // the dial here). Persisting the chosen mode across races is a v2.
         strategy: { ...DEFAULT_STRATEGY, sailMode: 'balanced' },
         ownedBoatIds:
-          state.selectedBoatId && !state.ownedBoatIds.includes(state.selectedBoatId)
+          !state.freeSailing &&
+          state.selectedBoatId &&
+          !state.ownedBoatIds.includes(state.selectedBoatId)
             ? [...state.ownedBoatIds, state.selectedBoatId]
             : state.ownedBoatIds,
         progress: action.payload.progress,
@@ -320,7 +339,11 @@ export function reducer(state: GameState, action: Action): GameState {
     case 'FINISH_RACE':
       return {
         ...state,
-        funds: state.funds + action.payload.result.prizeMoney,
+        // Free Sailing: no purse — the result still counts (history, career,
+        // honours all fold as normal); only the money is switched off.
+        funds: state.freeSailing
+          ? state.funds
+          : state.funds + action.payload.result.prizeMoney,
         lastResult: action.payload.result,
         history: [action.payload.result, ...state.history].slice(0, 50),
         // Fold this finish into the lifetime record (never truncates, unlike the
@@ -346,7 +369,8 @@ export function reducer(state: GameState, action: Action): GameState {
       return {
         ...state,
         // Sponsor top-up so the player can always afford the next campaign.
-        funds: applyStipend(state.funds),
+        // Free Sailing: no sponsor either — funds stay frozen both ways.
+        funds: state.freeSailing ? state.funds : applyStipend(state.funds),
         selectedRaceId: undefined,
         selectedDivision: 'corinthian',
         selectedBoatId: undefined,
@@ -362,7 +386,9 @@ export function reducer(state: GameState, action: Action): GameState {
       };
 
     case 'RESET_CAMPAIGN':
-      return { ...INITIAL_STATE };
+      // A fresh campaign, but the Free Sailing preference survives — it's a
+      // settings choice about HOW to play, not campaign progress to wipe.
+      return { ...INITIAL_STATE, freeSailing: state.freeSailing };
 
     default:
       return state;
