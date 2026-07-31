@@ -4,6 +4,7 @@ import {
   courseAspect,
   courseBounds,
   courseLengthNm,
+  courseWindProfile,
   cumulativeDistances,
   haversineNm,
   isLoopCourse,
@@ -11,6 +12,33 @@ import {
   pointOfSailFor,
 } from '../engine/geo';
 import { Waypoint } from '../types';
+
+describe('courseWindProfile', () => {
+  const wp = (lat: number, lon: number): Waypoint => ({ name: `${lat},${lon}`, lat, lon, type: 'turn' });
+
+  it('reads a due-north course in a northerly as all upwind', () => {
+    const legs = [wp(0, 0), wp(1, 0)]; // heading ~0° (north)
+    const p = courseWindProfile(legs, 0); // wind from the north
+    expect(p.upwind).toBeCloseTo(1, 5);
+    expect(p.reach + p.downwind).toBeCloseTo(0, 5);
+  });
+
+  it('reads that same course in a southerly as all downwind', () => {
+    const p = courseWindProfile([wp(0, 0), wp(1, 0)], 180); // wind from the south, sailing north
+    expect(p.downwind).toBeCloseTo(1, 5);
+  });
+
+  it('distance-weights legs and always sums to 1', () => {
+    // A long northbound beat then a short eastbound reach, wind from the north.
+    const p = courseWindProfile([wp(0, 0), wp(2, 0), wp(2, 0.2)], 0);
+    expect(p.upwind).toBeGreaterThan(p.reach);
+    expect(p.upwind + p.reach + p.downwind).toBeCloseTo(1, 5);
+  });
+
+  it('is 0/0/0 for a degenerate zero-length course', () => {
+    expect(courseWindProfile([wp(10, 10), wp(10, 10)], 0)).toEqual({ upwind: 0, reach: 0, downwind: 0 });
+  });
+});
 
 describe('haversineNm', () => {
   it('measures ~60 nm per degree of latitude', () => {

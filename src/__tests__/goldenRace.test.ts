@@ -177,6 +177,11 @@ function runGolden(cfg: GoldenConfig): GoldenSummary {
     eventIds,
     fleetTop3,
   };
+  // Re-bless helper: `DUMP_GOLDEN=1 npx jest goldenRace` prints each summary as a
+  // pasteable literal. A deliberate physics change moves pins — re-bless once, with
+  // the reason, and only the pins it provably explains (see the comment above the
+  // pins). Zero cost when unset.
+  if (process.env.DUMP_GOLDEN) console.log('GOLDEN_DUMP', cfg.raceId, JSON.stringify(summary));
   return summary;
 }
 
@@ -228,6 +233,34 @@ describe('golden races — the determinism contract', () => {
 
 // ---------------------------------------------------------------------------
 // The pins. Captured from the engine — byte-exact.
+//
+// PARTIALLY RE-BLESSED (3rd time) for the *absolute tide floor* (the tide's
+// made-good is now floored at an ABSOLUTE `TIDE_FLOOR_KN` = 0.2 kn — the SAME
+// floor the fleet uses — instead of the old RELATIVE 20%-of-own-speed clamp; see
+// `engine/current.ts` + the tide block in `gameEngine.ts`). Old and new are
+// ALGEBRAICALLY IDENTICAL unless a strong foul stream trips the floor, so the
+// re-bless is tightly bounded and provable:
+//
+//   • BOTH the INSHORE and GALE goldens are UNCHANGED, byte-for-byte — their
+//     seeds never drive the stream foul enough to trip either floor, so the two
+//     formulas return the identical dtHours every tick.
+//   • The OFFSHORE golden's GEOMETRY is UNCHANGED, byte-for-byte — `ticks` (99)
+//     and `distanceNm` (688.221188). The boat sails the exact same track; only
+//     TIME moved: `elapsedH` 133.099396 → 136.47589 (seed 202's Fastnet was never
+//     ballooned — 133 h is the healthy finish — so the absolute floor, marginally
+//     less generous than the relative one at this seed's fresh-air foul tide, adds
+//     ~3 h). The lightly-ballooned seeds get the large relief instead (a probe of
+//     seeds 11/22 fell 290 h → 131 h — the point of the fix).
+//   • Everything else that moved is DOWNSTREAM of that time change: the fleet is
+//     advanced on the PLAYER's per-tick dtHours, so a changed clock re-times the
+//     fleet (→ `position` 8 → 25, `correctedPos`, `fleetTop3`, and `rngDraws`
+//     12002 → 11608 via time-scaled retirement rolls), and the shifted tick-clock
+//     re-aligns the event draws (→ `eventIds`, and the wear/`hull`/`stamina` those
+//     different events inflict). No player-GEOMETRY pin moved, which is the
+//     invariant that proves the change is purely in the time domain.
+//
+// Never re-bless to hide a moved player-GEOMETRY pin (`ticks`/`distanceNm`) — that
+// would mean the track itself changed, not just the clock.
 //
 // PARTIALLY RE-BLESSED (2nd time) for the *Pro racing-friction allowance*
 // (`FLEET_FRICTION` in fleet.ts pads the Pro fleet's benchmark by 1.10 so par is a
@@ -309,35 +342,36 @@ const GOLDEN_INSHORE: GoldenSummary = {
 const GOLDEN_OFFSHORE: GoldenSummary = {
   ticks: 99,
   decisions: 8,
-  // RE-BLESSED for the Pro racing-friction allowance (see the note above): the
-  // slower Pro fleet keeps more boats on the course each tick, so `advanceFleet`
-  // draws MORE (11510 → 12002). This is fleet-lifetime divergence, NOT a player
-  // stream break — the player sailed a byte-identical race (ticks/decisions/
-  // elapsedH/distanceNm/hull/stamina/eventIds all UNCHANGED); only fleet-dependent
-  // pins moved.
-  rngDraws: 12002,
+  // RE-BLESSED (3rd) for the absolute tide floor: the player's clock moved ~3 h
+  // (see the note above), which re-times the player-clock-driven fleet — different
+  // time-scaled retirement rolls draw a different total (12002 → 11608). NOT a
+  // player-stream break: the player's GEOMETRY (ticks/distanceNm) is byte-identical.
+  rngDraws: 11608,
   finished: true,
   retired: false,
-  elapsedH: 133.099396,
+  // +3.4 h from the absolute floor (this seed's Fastnet was never ballooned, so the
+  // floor is marginally less generous here than the old relative one — the balloon
+  // relief shows on the lightly-becalmed seeds, not this one). Geometry unchanged.
+  elapsedH: 136.47589,
   distanceNm: 688.221188,
-  // The fix at work: a well-sailed Pro boat now finishes 8th on the water (was 31st)
-  // and 6th on corrected time (was 35th) — mid-to-upper fleet, no longer buried by a
-  // benchmark that ignored the friction the player pays but the AI never does.
-  position: 8,
-  correctedPos: 6,
-  hull: 63.815566,
-  stamina: 34.062182,
+  // The tighter Pro fleet, re-timed off the player's shifted clock, reshuffles hard
+  // around this boat (a tight pack amplifies a small time delta) — a downstream
+  // effect of the time change, not a geometry change.
+  position: 25,
+  correctedPos: 28,
+  hull: 72.047121,
+  stamina: 16.017148,
   eventIds: [
     'evt-headland',
-    'evt-fatigue',
-    'evt-fo-watch',
-    'evt-hz-celtic',
     'evt-morale-meal',
-    'evt-fog',
-    'evt-gear',
-    'evt-fo-jury',
+    'evt-front',
+    'evt-hz-celtic',
+    'evt-mob',
+    'evt-injury',
+    'evt-fo-hand',
+    'evt-kelpline',
   ],
-  fleetTop3: ['Comanche', 'Leopard', 'Pyewacket'],
+  fleetTop3: ['Rán', 'Comanche', 'Leopard'],
 };
 
 const GOLDEN_GALE: GoldenSummary = {

@@ -163,3 +163,30 @@ export function courseAspect(waypoints: Waypoint[]): number {
   const spanY = b.maxLat - b.minLat || 1e-6;
   return spanY / spanX;
 }
+
+// The distance-weighted point-of-sail mix of a course against a single prevailing
+// wind: what fraction of the miles are beaten upwind, reached, or run downwind.
+// A first-order read (the prevailing direction, not the evolving field), enough to
+// tell a player whether a course rewards pointing or pace off the wind when they
+// pick a boat. Fractions sum to 1 (0/0/0 only for a degenerate zero-length course).
+export function courseWindProfile(
+  waypoints: Waypoint[],
+  windFromDeg: number
+): { upwind: number; reach: number; downwind: number } {
+  let up = 0;
+  let reach = 0;
+  let down = 0;
+  for (let i = 1; i < waypoints.length; i += 1) {
+    const a = waypoints[i - 1];
+    const b = waypoints[i];
+    const legNm = haversineNm(a.lat, a.lon, b.lat, b.lon);
+    if (legNm <= 0) continue;
+    const pos = pointOfSailFor(bearing(a.lat, a.lon, b.lat, b.lon), windFromDeg);
+    if (pos === 'Upwind') up += legNm;
+    else if (pos === 'Reach') reach += legNm;
+    else down += legNm;
+  }
+  const total = up + reach + down;
+  if (total <= 0) return { upwind: 0, reach: 0, downwind: 0 };
+  return { upwind: up / total, reach: reach / total, downwind: down / total };
+}

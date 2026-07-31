@@ -72,7 +72,7 @@ import {
 import { getSailById, WORKING_SAILS } from '../data/sails';
 import { createWindField, forecastConfidence, pressureHint, sampleWind, weatherFromWind } from './wind';
 import { clearPolyline, planRoute, WindSampler } from './router';
-import { currentAlong, sampleCurrent, tideAlong } from './current';
+import { TIDE_FLOOR_KN, currentAlong, sampleCurrent, tideAlong } from './current';
 import { LANDMASSES, LandPolygon } from '../data/landmasses';
 import { pointInLand, segmentCrossesLand, snapToWater } from './land';
 import {
@@ -504,10 +504,6 @@ export function initialCondition(
     crewStamina: clamp(stamina + sumProvisionEffect(provisions, 'staminaBoost')),
     crewMorale: clamp(morale + sumProvisionEffect(provisions, 'moraleBoost')),
   };
-}
-
-export function makeWindField(race: Race): WindField {
-  return createWindField(race);
 }
 
 // A clean headless run of `boat` over the whole course, on the SAME movement
@@ -1587,12 +1583,18 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
   // good this step (`dGeom`), NOT the tack-inflated route distance, so its effect
   // stays the same size as the fleet's (which drifts its course progress) and the
   // standings stay fair. Because it only adjusts *time*, the boat stays exactly on
-  // its land-routed track. Capped so a foul stream slows but can't stall the boat.
+  // its land-routed track. Floored at an ABSOLUTE made-good speed (`TIDE_FLOOR_KN`)
+  // — the SAME floor the fleet uses in `advanceFleet` — so a foul stream slows but
+  // can't stall the boat. This floor used to be RELATIVE (20% of the boat's own
+  // tide-free made-good), which in light air let the player crawl far below the
+  // fleet's absolute floor and balloon a long race; the absolute floor keeps the
+  // two symmetric so a windier field can't reopen that gap.
   const tideMark = marks[Math.min(prev.nextMarkIndex, marks.length - 1)];
   const courseToMark = brg(prev, tideMark);
   const tide = tideAlong(state.tidalField, prev.lat, prev.lon, prev.elapsedHours, courseToMark);
-  const tideCourse = tide * dtBase; // course nm the stream adds (+) / removes (−) this step
-  const dtHours = dGeom > 1e-6 ? dtBase * (dGeom / Math.max(dGeom + tideCourse, dGeom * 0.2)) : dtBase;
+  const mgFree = dtBase > 0 ? dGeom / dtBase : 0; // tide-free made-good speed (kn)
+  const mgTide = Math.max(mgFree + tide, TIDE_FLOOR_KN); // absolute floor, symmetric with the fleet
+  const dtHours = dGeom > 1e-6 ? dGeom / mgTide : dtBase;
   const elapsedHours = prev.elapsedHours + dtHours;
 
   // Wear accrues with geometric progress, so `df` sums to ~1 over a whole race

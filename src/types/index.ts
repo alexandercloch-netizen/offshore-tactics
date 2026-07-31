@@ -814,6 +814,7 @@ export interface GameState {
   career?: CareerRecord; // forward-accruing lifetime record (optional — back-compat with old saves)
   eventLog: string[];
   tutorialSeen?: boolean; // whether the player has seen the race how-to-play
+  scoringSeen?: boolean; // whether the corrected-time (handicap) primer has been shown (display-only, like tutorialSeen)
   seenHonourIds?: string[]; // honours whose earn-moment has been shown (display-only, like tutorialSeen)
   savedAt?: number; // epoch ms the save was last written; drives cloud sync reconciliation
 }

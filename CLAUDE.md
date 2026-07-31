@@ -45,21 +45,33 @@ The simulation is a **pure, deterministic engine** with a thin React UI on top.
     (`forecastConfidence`/`sampleForecast`) blurs the *displayed* forecast away
     from the true field as you look further ahead — a sharp Navigator
     (`navigatorSkill`) keeps it trustworthy longer; the race still sails the true
-    field, so it stays fair and deterministic. **KNOWN ISSUE — the field runs
-    light on several courses** (a travelling-front DC bias + a hazard-`speedMul`
-    double-discount of the already-light baked mean hold ~15/17 courses below
-    baseline). Fixing it is subtle: the obvious repairs (mean-neutral front pulse,
-    tempering `speedMul`, capping the unbounded synoptic rotation) each pass in
-    isolation but **destabilise long OCEAN races** — with the field a hair windier
-    or the rotation bounded, the boat sits at a dead angle while a foul tide holds
-    it, and a 130 h Fastnet balloons past 500 h (a tide-nonlinearity + rotation
-    interaction). So the wind-lightness fix is a DEDICATED follow-up that must be
-    validated against the full `stepRace` loop with tide (not just the tide-free
-    `cleanRunHours`), NOT a quick constant tweak. Tried-and-reverted: front `sech²`
-    pulse, `speedMul` temper, `rotate` tanh-cap and sin-oscillation — all shipped
-    long-race crawls. `racePlausibility.test.ts` guards the STRUCTURAL inputs
-    (distance, dead-calm floor, fleet spread) today; it gains the field-mean-vs-
-    baseline assertion when the lightness fix lands stably.
+    field, so it stays fair and deterministic. **KNOWN ISSUE — a few long courses
+    finish unrealistically slowly** (notably the Middle Sea Race). The old note
+    here blamed a "light field" and prescribed tempering `speedMul` / a mean-neutral
+    front; a headless `stepRace`+tide probe across the long courses **disproved
+    that**: the seeded field means are healthy (Fastnet ~15 kn, Transpac ~12 kn,
+    Middle Sea ~8 kn — all near or above their baked baselines), yet the boat makes
+    good only a fraction of its potential speed. The lever is therefore MADE-GOOD
+    EFFICIENCY (deep downwind VMG angles, and `med_fickle`'s ±34° shift whipping the
+    router into endless re-tacks), NOT field magnitude — so tempering `speedMul`
+    would windier-up an already-healthy field without touching the loss, and would
+    re-open the dead-angle balloon. Note too that some long finishes are simply
+    REALISTIC for a cruising boat (a Transpac cruiser is genuinely 14–21 days; the
+    130 h record is a maxi surfing the trades) — the true outlier to chase is Middle
+    Sea (~26 days), a per-race routing subtlety, not a global constant.
+    **FIXED (this pass) — the tide-balloon half.** The foul-tide made-good floor
+    was RELATIVE for the player (20 % of its own tide-free speed) but ABSOLUTE for
+    the fleet (0.2 kn), so in light air the player could crawl far below the fleet
+    and a 130 h Fastnet ballooned past 500 h — the very "tide-nonlinearity" that
+    destabilised every earlier wind tweak. Both sides now share one ABSOLUTE floor
+    (`TIDE_FLOOR_KN` in `engine/current.ts`; see the tide block in `gameEngine.ts`
+    and `advanceFleet` in `fleet.ts`). Probe: ballooned Fastnet seeds fell 290 h →
+    131 h with nothing else regressing; the goldens re-blessed once (offshore only —
+    see `goldenRace.test.ts`). The remaining made-good/routing work is a dedicated
+    follow-up that MUST be validated against the full `stepRace` loop with tide (the
+    tide-free `cleanRunHours` can't see it). `racePlausibility.test.ts` guards the
+    STRUCTURAL inputs (distance, dead-calm floor, honest start read, fleet spread);
+    it gains a made-good-efficiency assertion when that work lands stably.
   - `polar.ts` / `polarTable.ts` / `polarImport.ts` — boat speed from polar
     diagrams (parametric for catalogue boats, real tables for custom boats).
   - `sails.ts` — the wardrobe: `effectivePolar` (base lifted by every owned
@@ -127,9 +139,16 @@ The simulation is a **pure, deterministic engine** with a thin React UI on top.
   `provisions.ts`, `events.ts` (tactical decisions), `weather.ts`,
   `landmasses.ts`, `polarLibrary.ts`, `sails.ts`, `onboarding.ts`. `index.ts`
   re-exports and holds economy constants.
-- **`src/store/`** — `GameContext` (the game state reducer + persistence + cloud
-  sync), `AuthContext` (Supabase auth + the login gate), `storage.ts`
-  (AsyncStorage), `reconcile.ts` (local↔cloud save merge).
+- **`src/store/`** — `gameReducer.ts` (the PURE economy/progression state machine:
+  `(state, action) => state`, no React/Supabase — imports types/data/engine/reseed
+  only, so it unit-tests in isolation; holds `INITIAL_STATE`, the affordability
+  guards, and every persistent flag like `tutorialSeen`/`scoringSeen`), `GameContext`
+  (wraps that reducer with persistence, cloud sync and the imperative race
+  lifecycle), `authValidation.ts` (pure `validateCredentials`/`mapAuthError`, no
+  Supabase), `AuthContext` (Supabase auth + the login gate), `storage.ts`
+  (AsyncStorage; `keyFor` namespaces each account's cache), `reconcile.ts`
+  (local↔cloud save merge). New persistent state folds in `gameReducer`, NEVER in
+  `stepRace`/`applyDecision` (the determinism contract).
 - **`src/screens/`** — one per screen; bottom tabs (Race/Fleet/Leaderboard/
   Profile) live under `Main`, with setup/race screens pushed over them. The
   setup→race flow is Provisioning → Briefing → **StartSequence** (the pre-gun
@@ -343,6 +362,16 @@ effects are covered by `src/__tests__/provisioning.test.ts`.
 - Wear accrues by geometric progress (`df` sums to ~1 over a race), so wear
   coefficients are "points lost over a whole race". Only a destroyed hull
   retires you; an exhausted crew just sails slowly.
+- **The tide floor is now ABSOLUTE and symmetric.** A foul stream can slow the
+  made-good rate but never below `TIDE_FLOOR_KN` (0.2 kn), and it's the SAME floor
+  for the player (`stepRace`, `gameEngine.ts`) and the fleet (`advanceFleet`,
+  `fleet.ts`) — both import it from `engine/current.ts`. It used to be RELATIVE for
+  the player (20 % of the boat's own tide-free speed), which in light air let the
+  player crawl far below the fleet's absolute floor and ballooned long races. If you
+  touch this, keep the two sides on the one shared constant — the asymmetry was a
+  real, hard-to-find balloon. Algebraically the tide term is a no-op unless a strong
+  foul stream trips the floor, so a slack-tide race is byte-identical (two of the
+  three goldens are — only the offshore, tide-fed one re-blessed).
 - **The wear-differential trap.** The player wears; the AI fleet never does
   (`advanceFleet` is frictionless). So an exhausted crew doesn't just "sail slowly"
   — it bleeds ground to a fleet holding pace, and on a long race can drop a leader

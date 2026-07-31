@@ -38,8 +38,13 @@ function ordinal(n: number): string {
 export const ResultsScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const { state, prepareNextRace, money, markHonoursSeen } = useGame();
+  const { state, prepareNextRace, money, markHonoursSeen, markScoringSeen } = useGame();
   const result = state.lastResult;
+  // The corrected-time primer plays in full the first time a player reaches a
+  // result (they've just been ranked on a number the water order didn't predict);
+  // after that it collapses to a one-line reminder. Captured once on mount so
+  // marking it seen doesn't swap the copy mid-view.
+  const scoringSeenRef = useRef(state.scoringSeen ?? false);
   // The staged finish reveal plays once over the results, then reveals the full
   // debrief. A finisher gets the staged sequence; a retirement/DNF skips it.
   const [revealDone, setRevealDone] = useState(!result?.finished);
@@ -57,6 +62,13 @@ export const ResultsScreen: React.FC<Props> = ({ navigation }) => {
   }, []);
   useEffect(() => {
     if (newHonours.length > 0) markHonoursSeen(newHonours.map((a) => a.id));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // The scoring primer teaches the corrected-time ranking; mark it seen the first
+  // time a finisher lands on the debrief so the full version shows exactly once.
+  useEffect(() => {
+    if (result?.finished && !scoringSeenRef.current) markScoringSeen();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -79,6 +91,13 @@ export const ResultsScreen: React.FC<Props> = ({ navigation }) => {
       />
     );
   }
+
+  // The entry fee the player paid to start (from the race's division), so the
+  // debrief can show a plain income statement for the race. Absent on old saves
+  // that didn't record a division — the ledger then just shows the prize.
+  const race = getRaceById(result.raceId);
+  const entryFee =
+    race && result.division ? race.divisions[result.division]?.entryFee ?? null : null;
 
   const podium = result.finished && result.position <= 3;
   const won = result.finished && result.position === 1;
@@ -144,6 +163,16 @@ export const ResultsScreen: React.FC<Props> = ({ navigation }) => {
           </>
         )}
       </View>
+
+      {!result.retired && result.correctedHours ? (
+        <View style={styles.scoringCard} testID="scoring-primer">
+          <Text style={styles.scoringText}>
+            {scoringSeenRef.current
+              ? 'Ranked on corrected time — elapsed × your boat’s handicap rating — so the water order isn’t the result.'
+              : 'You’re ranked on corrected time, not the finish order on the water. Every boat’s elapsed time is multiplied by its handicap rating, so a slower boat that sails above its rating can still beat a faster one. Sail the boat you have better than its number.'}
+          </Text>
+        </View>
+      ) : null}
 
       <View style={styles.statsRow}>
         <View style={styles.statCard}>
@@ -226,9 +255,37 @@ export const ResultsScreen: React.FC<Props> = ({ navigation }) => {
 
       <Debrief result={result} width={width} />
 
-      <View style={styles.fundsCard}>
-        <Text style={styles.fundsLabel}>Campaign Funds</Text>
-        <Text style={styles.fundsValue}>{money(state.funds)}</Text>
+      <View style={styles.fundsCard} testID="cost-ledger">
+        {entryFee != null ? (
+          <View style={styles.ledgerRow}>
+            <Text style={styles.ledgerLabel}>Entry fee</Text>
+            <Text style={styles.ledgerDebit}>−{money(entryFee)}</Text>
+          </View>
+        ) : null}
+        <View style={styles.ledgerRow}>
+          <Text style={styles.ledgerLabel}>Prize money</Text>
+          <Text style={[styles.ledgerCredit, result.prizeMoney <= 0 && styles.ledgerZero]}>
+            {result.prizeMoney > 0 ? `+${money(result.prizeMoney)}` : money(0)}
+          </Text>
+        </View>
+        {entryFee != null ? (
+          <View style={[styles.ledgerRow, styles.ledgerNetRow]}>
+            <Text style={styles.ledgerNetLabel}>Net for this race</Text>
+            <Text
+              style={[
+                styles.ledgerNet,
+                { color: result.prizeMoney - entryFee >= 0 ? colors.signalGreen : colors.signalRed },
+              ]}
+            >
+              {result.prizeMoney - entryFee >= 0 ? '+' : '−'}
+              {money(Math.abs(result.prizeMoney - entryFee))}
+            </Text>
+          </View>
+        ) : null}
+        <View style={[styles.ledgerRow, styles.ledgerFundsRow]}>
+          <Text style={styles.fundsLabel}>Campaign Funds</Text>
+          <Text style={styles.fundsValue}>{money(state.funds)}</Text>
+        </View>
       </View>
 
       {state.eventLog.length > 0 ? (
@@ -531,15 +588,73 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   fundsCard: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     backgroundColor: colors.card,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.hull,
     padding: spacing.lg,
     marginBottom: spacing.lg,
+    gap: spacing.xs,
+  },
+  scoringCard: {
+    backgroundColor: colors.navy,
+    borderRadius: radius.md,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.brass,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+  scoringText: {
+    color: colors.foam,
+    fontSize: fontSize.sm,
+    lineHeight: 20,
+  },
+  ledgerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  ledgerLabel: {
+    color: colors.mist,
+    fontSize: fontSize.sm,
+  },
+  ledgerDebit: {
+    color: colors.mist,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.medium,
+    fontVariant: ['tabular-nums'],
+  },
+  ledgerCredit: {
+    color: colors.signalGreen,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.medium,
+    fontVariant: ['tabular-nums'],
+  },
+  ledgerZero: {
+    color: colors.mist,
+  },
+  ledgerNetRow: {
+    marginTop: spacing.xs,
+    paddingTop: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: colors.hull,
+  },
+  ledgerNetLabel: {
+    color: colors.foam,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.medium,
+  },
+  ledgerNet: {
+    fontSize: fontSize.md,
+    fontWeight: fontWeight.bold,
+    fontVariant: ['tabular-nums'],
+  },
+  ledgerFundsRow: {
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.hull,
   },
   fundsLabel: {
     color: colors.mist,

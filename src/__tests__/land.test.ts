@@ -1,8 +1,7 @@
-import { pointInLand, segmentCrossesLand } from '../engine/land';
-import { LANDMASSES, LandPolygon } from '../data/landmasses';
+import { pointInLand } from '../engine/land';
+import { LANDMASSES } from '../data/landmasses';
 import { RACES, getBoatById, getRaceById } from '../data';
 import { createWindField } from '../engine/wind';
-import { createTidalField } from '../engine/current';
 import { createFleet, competitorPoints } from '../engine/fleet';
 import {
   DEFAULT_STRATEGY,
@@ -13,15 +12,18 @@ import {
   raceDivision,
   stepRace,
 } from '../engine/gameEngine';
-import { planRoute, WindSampler } from '../engine/router';
-import { sampleForecast } from '../engine/wind';
+import { planRoute } from '../engine/router';
 import { haversineNm } from '../engine/geo';
 import { mulberry32, resetRng, setRng } from '../engine/rng';
-import { BoatCondition, GameState } from '../types';
+import { GameState } from '../types';
+import { healthy, sailTrail, nearMark, landCrossings, inlandIncursions } from './landShared';
+
+// The land-safety suite is split three ways so jest can run the heavy blocks
+// concurrently (it can't parallelise one file): this file holds the fast checks,
+// `landTide.test.ts` the running-tide block, `landForecast.test.ts` the forecast
+// routing block. Shared helpers live in `landShared.ts`.
 
 afterEach(() => resetRng());
-
-const healthy: BoatCondition = { hullIntegrity: 100, crewStamina: 100, crewMorale: 100 };
 
 describe('pointInLand', () => {
   it('puts central Michigan on land and mid-Lake-Michigan in the water', () => {
@@ -48,68 +50,6 @@ describe('coastline coverage', () => {
     });
   });
 });
-
-// Sail a race headless (ignoring decision prompts, which don't move the boat) and
-// return the track actually sailed.
-function sailTrail(raceId: string, withTide = false, stepNm?: number): { lat: number; lon: number }[] {
-  const race = getRaceById(raceId)!;
-  const boat = getBoatById('boat-mistral')!;
-  const windField = createWindField(race);
-  let state = {
-    funds: 0,
-    selectedRaceId: raceId,
-    selectedDivision: 'corinthian',
-    selectedBoatId: boat.id,
-    ownedBoatIds: [],
-    selectedCrewIds: [],
-    provisions: [],
-    strategy: DEFAULT_STRATEGY,
-    profile: { fleet: [] },
-    condition: healthy,
-    windField,
-    // The tide's set & drift moves the boat over the ground — guard that it never
-    // pushes the track onto the coast (a foul stream by a shoreside gate used to).
-    tidalField: withTide ? createTidalField(race) : undefined,
-    fleet: createFleet(race, raceDivision(race, 'corinthian')),
-    progress: initialProgress(race, boat, 'corinthian', windField),
-    history: [],
-    eventLog: [],
-  } as unknown as GameState;
-
-  // Coarser steps than gameplay by default — enough to trace the whole routed
-  // track without a slow tick-by-tick sim. Callers can pass the gameplay step for
-  // a higher-resolution audit (the tide drift needs it).
-  const step = stepNm ?? Math.max(race.distanceNm * 0.04, 1);
-  for (let i = 0; i < 4000; i += 1) {
-    const out = stepRace(state, step);
-    state = { ...state, progress: out.progress, condition: out.condition, weather: out.weather, fleet: out.fleet };
-    if (out.finished || out.retired) break;
-  }
-  return state.progress!.trail;
-}
-
-// A point sits "at" a mark if it's within the coarse-coastline tolerance of one.
-const MARGIN_NM = 6; // tolerate coastal start/finish/marks sitting on the coarse coastline
-function nearMark(race: { waypoints: { lat: number; lon: number }[] }, p: { lat: number; lon: number }): boolean {
-  return race.waypoints.some((w) => haversineNm(p.lat, p.lon, w.lat, w.lon) <= MARGIN_NM);
-}
-
-// Count the segments of a polyline that cut across land. A vertex check alone
-// misses the real defect — two clean vertices with land between them — so we
-// test the segments the boat actually sails. Segments touching a mandatory mark
-// are exempt (real harbours/headlands sit on the coarse coastline).
-function landCrossings(
-  race: { waypoints: { lat: number; lon: number }[] },
-  land: LandPolygon[] | undefined,
-  pts: { lat: number; lon: number }[]
-): { lat: number; lon: number }[][] {
-  const crossings: { lat: number; lon: number }[][] = [];
-  for (let i = 0; i < pts.length - 1; i += 1) {
-    if (nearMark(race, pts[i]) || nearMark(race, pts[i + 1])) continue;
-    if (segmentCrossesLand(land, pts[i], pts[i + 1])) crossings.push([pts[i], pts[i + 1]]);
-  }
-  return crossings;
-}
 
 describe('routed tracks stay off land (all races)', () => {
   RACES.filter((r) => LANDMASSES[r.id]?.length).forEach((race) => {
@@ -153,36 +93,6 @@ describe('the AI fleet stays off land (all races)', () => {
   });
 });
 
-// Tide on, at the *gameplay* step (the coarse step hid the bug). The boat now
-// makes good the tide as a time rate and stays on its routed track, and a
-// movement-layer guard steers it around any land clip the router leaves — so the
-// track must stay in the water on a running tide.
-//
-// Excluded: courses whose real channels are narrower than the 1:10m coastline can
-// represent — R2AK's Inside Passage (Seymour Narrows ~750 m) and the Middle Sea's
-// Strait of Messina / Aeolian island gaps. The polygon shows navigable water as
-// land, so the route unavoidably "clips" it. That's a coastline-resolution
-// limitation (tide-independent — it clips with no tide too), tracked in
-// docs/TIDE-NOTES.md, not a movement bug.
-const SUBRESOLUTION_COAST = new Set(['race-r2ak', 'race-middle-sea']);
-describe('routed tracks stay off land with the tide running', () => {
-  RACES.filter(
-    (r) => r.tide && r.tide.peakRateKn > 0 && LANDMASSES[r.id]?.length && !SUBRESOLUTION_COAST.has(r.id)
-  ).forEach((race) => {
-    [11, 21, 42].forEach((seed) => {
-      it(`${race.name} stays in the water on a running tide (seed ${seed})`, () => {
-        setRng(mulberry32(seed));
-        const land = LANDMASSES[race.id];
-        const trail = sailTrail(race.id, true, defaultStepNm(race));
-        expect(trail.length).toBeGreaterThan(2);
-        const onLand = trail.filter((p) => pointInLand(land, p.lat, p.lon) && !nearMark(race, p));
-        expect(onLand).toEqual([]);
-        expect(landCrossings(race, land, trail)).toEqual([]);
-      });
-    });
-  });
-});
-
 // The displayed course preview (briefing + in-race forward route) is the full
 // planned route, not just the sailed trail. Guard that it, too, stays in the
 // water — a rhumb line straight through an island was the original defect.
@@ -210,64 +120,6 @@ describe('the planned course preview stays off land (all races)', () => {
     });
   });
 });
-
-// The briefing draws the route the crew *believes* it will sail — weather-routed
-// on the forecast (blurred away from truth by the Navigator's skill), for each of
-// the three start biases (left / optimal / right). That's the surface where a
-// planned line was seen crossing land, and it differs from the true-field preview
-// above: a fuzzier forecast bends the route, so a margin that's clear on truth can
-// still wander ashore. Mirror BriefingScreen's call exactly and guard every
-// combination — weakest Navigator (most blur) included.
-describe('the briefing forecast route stays off land (all races)', () => {
-  const MARGIN_NM = 6;
-  const NAV_SKILLS = [10, 55, 95]; // weak → club → ace; weak blurs the forecast most
-
-  RACES.filter((r) => LANDMASSES[r.id]?.length).forEach((race) => {
-    it(`${race.name} plans a forecast route in the water`, () => {
-      const land = LANDMASSES[race.id];
-      const boat = getBoatById('boat-mistral')!;
-      const start = { lat: race.waypoints[0].lat, lon: race.waypoints[0].lon };
-
-      for (const navSkill of NAV_SKILLS) {
-        const sampler: WindSampler = (f, lat, lon, h) => sampleForecast(f, lat, lon, h, navSkill);
-        for (const bias of [-1, 0, 1] as const) {
-          setRng(mulberry32(7));
-          const field = createWindField(race);
-          const route = planRoute(boat, field, start, race.waypoints, 1, 0, bias, land, sampler);
-          expect(route.length).toBeGreaterThan(2);
-
-          const onLand = route.filter((p) => {
-            if (!pointInLand(land, p.lat, p.lon)) return false;
-            return !race.waypoints.some((w) => haversineNm(p.lat, p.lon, w.lat, w.lon) <= MARGIN_NM);
-          });
-          // Surface which combination failed if it ever regresses.
-          expect({ navSkill, bias, onLand }).toEqual({ navSkill, bias, onLand: [] });
-        }
-      }
-    });
-  });
-});
-
-// Stricter than `landCrossings` for loop courses: a chord across an island runs
-// mark-to-mark, so an endpoint check exempts it. Sample the segment *interior*
-// instead — a real incursion has points sitting inland, far from any mark, while
-// a tight headland rounding only has interior points hugging the mark.
-function inlandIncursions(
-  race: { waypoints: { lat: number; lon: number }[] },
-  land: LandPolygon[] | undefined,
-  pts: { lat: number; lon: number }[]
-): { lat: number; lon: number }[] {
-  const hits: { lat: number; lon: number }[] = [];
-  for (let i = 0; i < pts.length - 1; i += 1) {
-    const a = pts[i];
-    const b = pts[i + 1];
-    for (const t of [0.2, 0.35, 0.5, 0.65, 0.8]) {
-      const p = { lat: a.lat + (b.lat - a.lat) * t, lon: a.lon + (b.lon - a.lon) * t };
-      if (pointInLand(land, p.lat, p.lon) && !nearMark(race, p)) hits.push(p);
-    }
-  }
-  return hits;
-}
 
 // The post-race debrief draws the sailed track and the optimal line from a
 // *downsampled* copy stored on the result (kept small for the save). Uniform

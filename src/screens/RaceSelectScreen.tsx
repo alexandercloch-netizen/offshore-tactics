@@ -7,6 +7,7 @@ import { colors, fontSize, fontWeight, radius, spacing, status, surface } from '
 import { RACES, getRaceById } from '../data';
 import { useGame } from '../store/GameContext';
 import { formatDuration, isRaceUnlocked } from '../engine/gameEngine';
+import { raceOfTheWeek, weekIndex } from '../engine/recommend';
 import { divisionName } from '../lib/labels';
 import NauticalButton from '../components/NauticalButton';
 import FunnelSteps from '../components/FunnelSteps';
@@ -33,6 +34,11 @@ export const RaceSelectScreen: React.FC<Props> = ({ navigation }) => {
     navigation.navigate('BoatSelect');
   };
 
+  // A deterministic weekly featured race — a reason to come back and sail
+  // something off the usual line. Display-only (no reward), so it can spotlight a
+  // still-locked, aspirational course too.
+  const featuredId = raceOfTheWeek(weekIndex(Date.now()))?.id;
+
   return (
     <View style={styles.screen}>
       <FunnelSteps stage="race" />
@@ -48,11 +54,17 @@ export const RaceSelectScreen: React.FC<Props> = ({ navigation }) => {
       {RACES.map((race) => {
         const unlocked = isRaceUnlocked(race, state.history);
         const lockRace = getRaceById(race.unlockAfter);
+        const featured = race.id === featuredId;
         return (
           <View
             key={race.id}
-            style={[styles.card, !unlocked && styles.cardLocked]}
+            style={[styles.card, featured && styles.cardFeatured, !unlocked && styles.cardLocked]}
           >
+            {featured ? (
+              <Text style={styles.featuredRibbon} testID="race-of-the-week">
+                ★ Race of the Week
+              </Text>
+            ) : null}
             <View style={styles.cardHeader}>
               <Text style={styles.raceName}>{race.name}</Text>
               <View
@@ -178,6 +190,18 @@ const styles = StyleSheet.create({
   },
   cardLocked: {
     opacity: 0.6,
+  },
+  cardFeatured: {
+    borderColor: colors.brassLight,
+    borderWidth: 2,
+  },
+  featuredRibbon: {
+    color: colors.brassLight,
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.bold,
+    textTransform: 'uppercase',
+    letterSpacing: 2,
+    marginBottom: spacing.sm,
   },
   cardHeader: {
     flexDirection: 'row',
