@@ -42,7 +42,7 @@ export const RACES: Race[] = [
     },
     // Marks sit in navigable water and the rhumb legs between them clear the
     // drawn Isle of Wight coastline (validated against the full-res landmass),
-    // so the course rounds the island instead of cutting across it. Clockwise
+    // so the course rounds the island instead of cutting across it. Anti-clockwise
     // from the RYS line in the Solent, out west to the Needles, down the back of
     // the island past St Catherine's and Dunnose, then home up the eastern Solent.
     waypoints: [
@@ -102,7 +102,7 @@ export const RACES: Race[] = [
       'A spectacular 606-mile lap of Sicily, past the smoking cone of Stromboli. Scenic, demanding and beloved by Corinthian crews.',
     distanceNm: 606,
     difficulty: 'Offshore',
-    recordTimeHours: 33,
+    recordTimeHours: 40,
     corinthianRating: 4,
     hazard: 'med_fickle',
     hazardWaypoint: 'Strait of Messina',
@@ -794,7 +794,7 @@ export const RACES: Race[] = [
       'The winter classic north: out of the Heads and 380 miles up the NSW coast to the Gold Coast, with the East Australian Current running hard against you the whole way. Inshore for relief or offshore for breeze — pick your poison.',
     distanceNm: 386,
     difficulty: 'Offshore',
-    recordTimeHours: 19,
+    recordTimeHours: 26,
     corinthianRating: 3,
     hazard: 'eac_coastal',
     hazardWaypoint: 'Smoky Cape',
@@ -863,7 +863,7 @@ export const RACES: Race[] = [
       'The great South Atlantic crossing: 3,300 miles from Table Mountain to Sugarloaf. Ride the Benguela north, pick your moment to cut the corner of the South Atlantic High, then surf the southeast trades all the way to Brazil.',
     distanceNm: 3363,
     difficulty: 'Ocean',
-    recordTimeHours: 163,
+    recordTimeHours: 252,
     corinthianRating: 2,
     hazard: 'ocean_high',
     hazardWaypoint: 'High Gate',
@@ -898,7 +898,7 @@ export const RACES: Race[] = [
     name: 'Bayview Mackinac Race',
     location: 'Port Huron → Mackinac Island, Lake Huron',
     description:
-      'The other Mac: 230 miles up Lake Huron from Port Huron to the same finish line off Mission Point. Fresh water, no tide, and a lake that can serve champagne sailing and a parking lot in the same afternoon.',
+      'The other Mac: 204 miles up Lake Huron from Port Huron to the same finish line off Mission Point. Fresh water, no tide, and a lake that can serve champagne sailing and a parking lot in the same afternoon.',
     distanceNm: 207,
     difficulty: 'Coastal',
     recordTimeHours: 21,
@@ -944,7 +944,7 @@ export const RACES: Race[] = [
     // The inside passage is tide-dominated: the stream funnels hard through
     // Discovery Passage at Seymour Narrows; the outside coast feels the Pacific.
     tide: {
-      floodDeg: 340,
+      floodDeg: 135, // floods SE down Discovery Passage — same water, same convention as r2ak
       peakRateKn: 1.1,
       gates: [{ waypoint: 'Seymour Narrows', gain: 2.0, radiusNm: 5 }],
     },

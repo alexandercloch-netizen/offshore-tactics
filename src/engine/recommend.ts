@@ -10,6 +10,34 @@ import { RACES } from '../data/races';
 import { REGION_RACES } from '../data/onboarding';
 import { finishedRaceIds, isRaceUnlocked } from './gameEngine';
 
+// How deep a race sits in the unlock ladder (0 = always open). "Most advanced"
+// means deepest chain first, then the harder difficulty band, then the longer
+// course — NOT file order, which used to decide and recommended whatever race
+// happened to be appended last.
+const DIFFICULTY_ORDER: Record<Race['difficulty'], number> = {
+  Inshore: 0,
+  Coastal: 1,
+  Offshore: 2,
+  Ocean: 3,
+};
+function ladderDepth(race: Race): number {
+  let depth = 0;
+  let cur: Race | undefined = race;
+  while (cur?.unlockAfter && depth < RACES.length) {
+    cur = RACES.find((r) => r.id === cur!.unlockAfter);
+    depth += 1;
+  }
+  return depth;
+}
+function mostAdvanced(pool: Race[]): Race {
+  return [...pool].sort(
+    (a, b) =>
+      ladderDepth(a) - ladderDepth(b) ||
+      DIFFICULTY_ORDER[a.difficulty] - DIFFICULTY_ORDER[b.difficulty] ||
+      a.distanceNm - b.distanceNm
+  )[pool.length - 1];
+}
+
 // The race to surface on the home screen for this player: their home-waters
 // race when it's unlocked and not yet won, otherwise the most advanced race
 // they've unlocked, so there's always a sensible next thing to sail.
@@ -30,14 +58,14 @@ export function recommendedRace(
     // the next unlocked race instead; only then fall back to a won regional one.
     const freshRegional = regional.find((r) => !won.has(r.id));
     if (freshRegional) return freshRegional;
-    if (freshUnlocked.length > 0) return freshUnlocked[freshUnlocked.length - 1];
+    if (freshUnlocked.length > 0) return mostAdvanced(freshUnlocked);
     if (regional.length > 0) return regional[0];
   }
 
   // No profile: the furthest-progressed unlocked race not yet won, else the
-  // last unlocked race in the ladder.
+  // deepest unlocked race in the ladder.
   const pool = freshUnlocked.length > 0 ? freshUnlocked : unlocked;
-  return pool[pool.length - 1];
+  return mostAdvanced(pool);
 }
 
 // Seasoned hands start in the Pro division; everyone else eases in Corinthian.

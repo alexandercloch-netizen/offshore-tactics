@@ -1969,7 +1969,7 @@ export const GENERIC_EVENTS: GameEvent[] = [
     id: 'evt-rg-nor-midnightsun',
     title: 'Racing the Pale Night',
     prompt:
-      'The sun is rolling along the horizon, never quite setting — the fleet sails on, but the crew\'s clocks are quietly unravelling.',
+      'The June night is as pale as it gets this far south — bright enough to read the tell-tales at two in the morning — the fleet sails on, but the crew\'s clocks are quietly unravelling.',
     kind: 'tactical',
     phase: 'late',
     regions: ['norden'],
@@ -4575,7 +4575,7 @@ export const HAZARD_RACE_EVENTS: Record<string, GameEvent> = {
     id: 'evt-hz-faerder',
     title: 'Midsummer Calm at the Light',
     prompt:
-      'The lighthouse stands in a ring of glass and the midnight sun is doing nothing for the wind. A whisper of drainage air runs the Vestfold shore; the eastern side keeps the last of the old southerly.',
+      'The lighthouse stands in a ring of glass under a night that never quite goes dark — and none of that pale light is doing anything for the wind. A whisper of drainage air runs the Vestfold shore; the eastern side keeps the last of the old southerly.',
     kind: 'hazard',
     hazard: 'light_air',
     pinToWaypoint: 'Færder Lighthouse',

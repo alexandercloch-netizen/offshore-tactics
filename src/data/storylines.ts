@@ -279,7 +279,7 @@ export const STORYLINES: Storyline[] = [
     beats: [
       {
         kind: 'briefing',
-        body: 'Days of cold green water and aching arms up the Inside Passage, the tide doing as much of the racing as the wind. Ahead lies Seymour Narrows — the gap every R2AK crew dreads, where the whole Pacific tries to squeeze through a slot and the rock below has drowned ships. The navigator is sleeping with the tide tables.',
+        body: 'Days of cold green water and aching arms up the Inside Passage, the tide doing as much of the racing as the wind. Ahead lies Seymour Narrows — the gap every R2AK crew dreads, where the whole Pacific tries to squeeze through a slot and this water drowned ships for a century. The navigator is sleeping with the tide tables.',
       },
       {
         kind: 'beat',
@@ -294,7 +294,7 @@ export const STORYLINES: Storyline[] = [
       {
         kind: 'debrief',
         outcome: 'safe',
-        body: 'You tucked into the eddy and waited out the flood for slack water, then walked the boat through the Narrows in the calm. Hours gone, and the gate-runners away up the passage — but Ripple Rock has eaten boats that gambled it, and you weren\'t one of them.',
+        body: 'You tucked into the eddy and waited out the flood for slack water, then walked the boat through the Narrows in the calm. Hours gone, and the gate-runners away up the passage — but Ripple Rock ate ships for a century before they blew it flat — and the current it fed is still all there, and you weren\'t one of them.',
       },
       {
         kind: 'debrief',
@@ -361,7 +361,7 @@ export const STORYLINES: Storyline[] = [
       {
         kind: 'debrief',
         outcome: 'bold',
-        body: 'You shot the Alderney Race on the last of the fair stream and it flung you down the Little Russel like a thing possessed, the log reading numbers the wind never made. The boats that hesitated met the turn in the gap — and stopped. That is how Dinard races have been won for a century.',
+        body: 'You shot the Alderney Race on the last of the fair stream and it flung you down past the Casquets toward Les Hanois like a thing possessed, the log reading numbers the wind never made. The boats that hesitated met the turn in the gap — and stopped. That is how Dinard races have been won for a century.',
       },
       {
         kind: 'debrief',
@@ -653,13 +653,14 @@ export const STORYLINES: Storyline[] = [
       },
       {
         kind: 'debrief',
-        outcome: 'safe',
+        outcome: 'hedge',
         body: 'You rounded clean and kept your options, neither betting the race on the shore nor spending miles on a rumour. The dusk lottery paid some boats and parked others; you sailed through the middle of it, unspectacular and still racing.',
       },
       {
         kind: 'debrief',
-        outcome: 'hedge',
-        body: 'You shaded seaward without fully committing — a rounding with one hand on the shore route and one eye on the dark water. When the night wind came you were half a mile from perfect, which at the Giraglia at dusk counts as seamanship.',
+        outcome: 'safe',
+      body:
+        'You hugged the Corsican shore for the short road home, and the island let you keep it — a lift off the cliffs where the chart promised shadow, Genoa creeping closer while the offshore gamblers were still hunting their rumour. Some nights the land pays the patient.',
       },
     ],
   },
@@ -725,12 +726,12 @@ export const STORYLINES: Storyline[] = [
       },
       {
         kind: 'debrief',
-        outcome: 'safe',
+        outcome: 'hedge',
         body: 'You reefed before it hit and went through the squall line like a well-run ship: wet, upright, and unbroken. The surfers made miles on you; the swimmers, further down the fleet, made none at all.',
       },
       {
         kind: 'debrief',
-        outcome: 'hedge',
+        outcome: 'safe',
         body: 'You bore away round the blackest of the cell and re-crossed behind it, trading distance for dry decks. Not the hero\'s line, not the coward\'s: the navigator logged it as "avoiding action", and the boat never noticed it happened.',
       },
     ],
@@ -932,7 +933,7 @@ export const STORYLINES: Storyline[] = [
       {
         kind: 'beat',
         pinnedWaypoint: 'Færder Lighthouse',
-        body: 'The lighthouse stands in a ring of glass, the midnight sun rolling along the horizon, the fleet ghosting on private zephyrs. There is a whisper of drainage air under the Vestfold shore and a memory of southerly out east. Pick your poison — at one knot, wrong is forever.',
+        body: 'The lighthouse stands in a ring of glass, the pale night hanging on the horizon, the fleet ghosting on private zephyrs. There is a whisper of drainage air under the Vestfold shore and a memory of southerly out east. Pick your poison — at one knot, wrong is forever.',
       },
       {
         kind: 'debrief',
@@ -977,12 +978,12 @@ export const STORYLINES: Storyline[] = [
       },
       {
         kind: 'debrief',
-        outcome: 'safe',
+        outcome: 'hedge',
         body: 'You crossed square — the shortest, lumpiest, most honest road through the Stream — and were out of the river before it could develop opinions. The meander-chasers gambled on an old photograph; you gambled on nothing at all.',
       },
       {
         kind: 'debrief',
-        outcome: 'hedge',
+        outcome: 'safe',
         body: 'You detoured to the pilot chart\'s soft spot and crossed gently, part conviction, part caution. Less current against you than the square road, less windfall than the meander paid — the kind of quietly sensible Stream crossing this race was invented for.',
       },
     ],
