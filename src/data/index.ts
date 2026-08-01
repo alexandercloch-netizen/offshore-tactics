@@ -31,12 +31,23 @@ export {
   debriefBeat,
 } from './storylines';
 
-export const STARTING_FUNDS = 250000;
+// Sized against the real 27-race cost surface (entry + boat + full pro crew +
+// bluewater provisions): a mid-boat pro campaign runs ~42–50k anywhere on the
+// calendar (wages dominate — a Corsair's 6 pros are ~25k a race), and the
+// worst case — the 14-berth maxi on an Ocean course — is ~111k. The start
+// funds a serious GLOBAL campaign from day one: a proper boat plus several
+// full-crew campaigns in hand before results have to pay the bills.
+export const STARTING_FUNDS = 400000;
 
 // Anti-soft-lock sponsor: if the campaign chest falls below the trigger, a
 // sponsor tops it back up to the floor so the player can always go racing.
-export const STIPEND_TRIGGER = 15000;
-export const STIPEND_FLOOR = 75000;
+// The floor covers TWO mid-boat pro campaigns (~50k each) anywhere in the
+// world — a real rebuild, not a scrap — while the maxi-class campaign (~111k)
+// stays results-funded. The trigger sits just below one serious campaign so
+// there is no dead band (too rich for the sponsor, too poor to campaign):
+// below it you are topped straight back to global-campaign strength.
+export const STIPEND_TRIGGER = 40000;
+export const STIPEND_FLOOR = 100000;
 
 // Funds topped up to the floor when below the trigger; otherwise unchanged.
 export function applyStipend(funds: number): number {
