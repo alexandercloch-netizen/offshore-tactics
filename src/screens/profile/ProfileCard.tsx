@@ -294,8 +294,8 @@ const PrefsSection: React.FC<ProfileCardProps> = (p) => (
           <Segmented<'career' | 'free'>
             value={p.freeSailing ? 'free' : 'career'}
             options={[
-              { value: 'career', label: 'Career' },
               { value: 'free', label: 'Free Sailing' },
+              { value: 'career', label: 'Campaign' },
             ]}
             onSelect={(v) => p.onSetFreeSailing!(v === 'free')}
             stretch={false}
@@ -304,8 +304,8 @@ const PrefsSection: React.FC<ProfileCardProps> = (p) => (
         </View>
         <Text style={styles.prefHint}>
           {p.freeSailing
-            ? 'No fees, prices or prizes — every boat and sailor is available, and your campaign funds are frozen until you return to Career.'
-            : 'Career runs the full campaign budget: entry fees, boats, wages and prize money. Switch to Free Sailing to just race.'}
+            ? 'No fees, prices or prizes — every boat and sailor is available. Want the budget game? Campaign mode runs entry fees, boats, wages and prize money.'
+            : 'Campaign mode runs the full budget: entry fees, boats, wages and prize money. Switch to Free Sailing to just race.'}
         </Text>
       </>
     ) : null}
