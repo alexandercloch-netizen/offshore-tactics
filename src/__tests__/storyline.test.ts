@@ -123,6 +123,16 @@ describe('storyline content', () => {
     }
   });
 
+  it('every bold debrief carries its honest bust variant (the gamble can fail)', () => {
+    // signaturePaidOff can be false (a misread field bet, a bungle) — the bold
+    // debrief must have a bustBody so the story never congratulates a failed
+    // gamble. Safe/hedge beats don't gamble and need none.
+    for (const story of STORYLINES) {
+      const bold = story.beats.find((b) => b.kind === 'debrief' && b.outcome === 'bold');
+      expect(bold?.bustBody?.length ?? 0).toBeGreaterThan(40);
+    }
+  });
+
   it('provides bold / safe / hedge debrief variants for each storyline', () => {
     for (const story of STORYLINES) {
       const outcomes = story.beats

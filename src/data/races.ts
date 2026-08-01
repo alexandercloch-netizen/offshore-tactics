@@ -42,7 +42,7 @@ export const RACES: Race[] = [
     },
     // Marks sit in navigable water and the rhumb legs between them clear the
     // drawn Isle of Wight coastline (validated against the full-res landmass),
-    // so the course rounds the island instead of cutting across it. Clockwise
+    // so the course rounds the island instead of cutting across it. Anti-clockwise
     // from the RYS line in the Solent, out west to the Needles, down the back of
     // the island past St Catherine's and Dunnose, then home up the eastern Solent.
     waypoints: [
@@ -71,11 +71,11 @@ export const RACES: Race[] = [
     distanceNm: 289,
     difficulty: 'Coastal',
     recordTimeHours: 23.5,
-    corinthianRating: 5,
+    corinthianRating: 4,
     hazard: 'light_air',
     hazardWaypoint: 'Mid-Lake Michigan',
     prevailingWind: { fromDeg: 200, speedKn: 10 },
-    signatureHazard: 'Light-air "parking lots" and sudden Great Lakes squalls.',
+    signatureHazard: 'A lake that serves champagne sailing, glassy park-ups and a black-line squall in the same afternoon — and goes to sleep at dusk with your lead in its pocket.',
     season: 'July',
     waypoints: [
       { name: 'Chicago Harbor Light', lat: 41.89, lon: -87.59, type: 'start' },
@@ -102,21 +102,21 @@ export const RACES: Race[] = [
       'A spectacular 606-mile lap of Sicily, past the smoking cone of Stromboli. Scenic, demanding and beloved by Corinthian crews.',
     distanceNm: 606,
     difficulty: 'Offshore',
-    recordTimeHours: 33,
+    recordTimeHours: 40,
     corinthianRating: 4,
     hazard: 'med_fickle',
     hazardWaypoint: 'Strait of Messina',
     prevailingWind: { fromDeg: 315, speedKn: 14 },
-    signatureHazard: 'Fickle Mediterranean winds and the current through the Strait of Messina.',
+    signatureHazard: 'A sea that changes its mind by the hour — and Messina\'s stream, the Scylla and Charybdis of the old charts, waiting in the narrows.',
     season: 'October',
-    unlockAfter: 'race-chicago-mac',
+    unlockAfter: 'race-malta-syracuse',
     // The Med is all but tideless — except the Strait of Messina, where a real
     // tidal stream runs hard (the Scylla & Charybdis of legend). A low base rate
     // with a strong, localised gate at the strait, so only Messina bites.
     tide: {
       floodDeg: 0, // the strait's stream sets ~N on the flood
       peakRateKn: 0.3,
-      gates: [{ waypoint: 'Strait of Messina', gain: 0.6, radiusNm: 16 }],
+      gates: [{ waypoint: 'Strait of Messina', gain: 3.0, radiusNm: 16 }],
     },
     waypoints: [
       { name: 'Grand Harbour, Valletta', lat: 35.9177, lon: 14.5366, type: 'start' },
@@ -176,7 +176,7 @@ export const RACES: Race[] = [
       driftKn: 0.6,
       gates: [{ waypoint: 'Gulf Stream', gain: 3.0, radiusNm: 80 }],
     },
-    unlockAfter: 'race-middle-sea',
+    unlockAfter: 'race-annapolis-newport',
     waypoints: [
       { name: 'Newport, RI (Start)', lat: 41.4386, lon: -71.3432, type: 'start' },
       { name: 'Gulf Stream', lat: 38.5, lon: -69.5, type: 'turn' },
@@ -201,7 +201,7 @@ export const RACES: Race[] = [
     hazard: 'celtic_weather',
     hazardWaypoint: 'Fastnet Rock',
     prevailingWind: { fromDeg: 240, speedKn: 18 },
-    signatureHazard: 'Brutal Celtic Sea weather and tidal gates the whole way to the Rock.',
+    signatureHazard: 'The Celtic Sea in a bad mood, gale-force fronts marching through, and a lonely lighthouse rock that has been the measure of ocean racers for a century.',
     season: 'July / August',
     // The English Channel and its approaches are strongly tidal: the stream sets
     // ENE up-Channel on the flood, running hardest at the Portland tidal race and
@@ -215,7 +215,7 @@ export const RACES: Race[] = [
         { waypoint: 'Cap de la Hague', gain: 1.2, radiusNm: 14 },
       ],
     },
-    unlockAfter: 'race-newport-bermuda',
+    unlockAfter: 'race-cowes-dinard',
     waypoints: [
       { name: 'Cowes (RYS Line)', lat: 50.7876, lon: -1.2901, type: 'start' },
       { name: 'Cowes approach 1', lat: 50.7542, lon: -1.4016, type: 'turn' },
@@ -265,7 +265,7 @@ export const RACES: Race[] = [
       driftKn: 0.6,
       gates: [{ waypoint: 'Saba', gain: 0.8, radiusNm: 12 }],
     },
-    unlockAfter: 'race-fastnet',
+    unlockAfter: 'race-antigua-360',
     waypoints: [
       { name: 'Antigua (English Harbour)', lat: 16.9799, lon: -61.7539, type: 'start' },
       { name: 'Antigua approach 1', lat: 16.9709, lon: -61.722, type: 'turn' },
@@ -323,7 +323,7 @@ export const RACES: Race[] = [
         { waypoint: 'Bass Strait', gain: 1.0, radiusNm: 45 },
       ],
     },
-    unlockAfter: 'race-caribbean-600',
+    unlockAfter: 'race-cabbage-tree',
     waypoints: [
       { name: 'Sydney Heads', lat: -33.8487, lon: 151.3068, type: 'start' },
       { name: 'Sydney Heads approach 1', lat: -33.9227, lon: 151.3314, type: 'turn' },
@@ -364,7 +364,7 @@ export const RACES: Race[] = [
       driftDeg: 250,
       driftKn: 0.4,
     },
-    unlockAfter: 'race-sydney-hobart',
+    unlockAfter: 'race-islands-race',
     waypoints: [
       { name: 'Point Fermin (San Pedro)', lat: 33.7, lon: -118.29, type: 'start' },
       { name: 'Point Fermin approach 1', lat: 33.3099, lon: -118.2759, type: 'turn' },
@@ -396,7 +396,7 @@ export const RACES: Race[] = [
     signatureHazard:
       'Seymour Narrows runs at up to 16 knots of tide — hit the slack-water gate or anchor in place.',
     season: 'June',
-    unlockAfter: 'race-transpac',
+    unlockAfter: 'race-swiftsure',
     // The Inside Passage is intensely tidal. A steady base stream through the
     // channels, with a fierce gate at Seymour Narrows (the signature hazard) and a
     // lesser one at the exposed Dixon Entrance. Generous radii keep it fair across
@@ -495,7 +495,7 @@ export const RACES: Race[] = [
     tide: {
       floodDeg: 75,
       peakRateKn: 1.0,
-      gates: [{ waypoint: 'Alderney Race', gain: 1.4, radiusNm: 12 }],
+      gates: [{ waypoint: 'Alderney Race', gain: 2.6, radiusNm: 12 }],
     },
     waypoints: [
       { name: 'Cowes (RYS Line)', lat: 50.7946, lon: -1.2835, type: 'start' },
@@ -575,7 +575,7 @@ export const RACES: Race[] = [
     distanceNm: 475,
     difficulty: 'Offshore',
     recordTimeHours: 40,
-    corinthianRating: 4,
+    corinthianRating: 3,
     hazard: 'light_air',
     hazardWaypoint: 'Cape Henry',
     prevailingWind: { fromDeg: 210, speedKn: 11 },
@@ -695,7 +695,7 @@ export const RACES: Race[] = [
     difficulty: 'Coastal',
     recordTimeHours: 13,
     corinthianRating: 4,
-    hazard: 'island_lee',
+    hazard: 'island_accel',
     hazardWaypoint: 'Catalina West End',
     prevailingWind: { fromDeg: 290, speedKn: 9 },
     signatureHazard:
@@ -761,7 +761,7 @@ export const RACES: Race[] = [
     name: 'Rolex Giraglia',
     location: 'Saint-Tropez → Giraglia Rock → Genoa',
     description:
-      'The Mediterranean classic: out of the gulf of Saint-Tropez, across the Ligurian Sea to the lonely Giraglia rock off Cap Corse, then north to Genoa — chasing a breeze that dies at dusk and fills from somewhere new at dawn.',
+      'Out of the gulf of Saint-Tropez and across the Ligurian Sea to a lonely lighthouse rock off Cap Corse — then north to Genoa, chasing a breeze that dies at dusk and fills from somewhere new at dawn.',
     distanceNm: 208,
     difficulty: 'Coastal',
     recordTimeHours: 15,
@@ -791,10 +791,10 @@ export const RACES: Race[] = [
     name: 'Sydney to Gold Coast',
     location: 'Sydney → Southport, Australia',
     description:
-      'The winter classic north: out of the Heads and 380 miles up the NSW coast to the Gold Coast, with the East Australian Current running hard against you the whole way. Inshore for relief or offshore for breeze — pick your poison.',
+      'Out of the Heads in July and 380 miles north along the NSW coast, the East Australian Current running hard against you every one of them. Inshore for relief or offshore for breeze — pick your poison.',
     distanceNm: 386,
     difficulty: 'Offshore',
-    recordTimeHours: 19,
+    recordTimeHours: 26,
     corinthianRating: 3,
     hazard: 'eac_coastal',
     hazardWaypoint: 'Smoky Cape',
@@ -809,7 +809,8 @@ export const RACES: Race[] = [
       floodDeg: 0,
       peakRateKn: 0,
       driftDeg: 200,
-      driftKn: 0.7,
+      driftKn: 1.3,
+      gates: [{ waypoint: 'Smoky Cape', gain: 0.8, radiusNm: 40 }],
     },
     waypoints: [
       { name: 'Sydney Heads (Start)', lat: -33.83, lon: 151.3, type: 'start' },
@@ -829,7 +830,7 @@ export const RACES: Race[] = [
     name: 'China Sea Race',
     location: 'Hong Kong → Subic Bay, Philippines',
     description:
-      "Asia's blue-water classic since 1962: 565 miles across the South China Sea on the dying northeast monsoon, dodging fishing fleets by night and squall lines by day, to a finish under the palms of Subic Bay.",
+      "Five hundred and sixty-five miles across the South China Sea on the dying northeast monsoon — fishing fleets by night, squall lines by day, and a finish under the palms of Subic Bay. Asia's blue-water proving ground since 1962.",
     distanceNm: 572,
     difficulty: 'Offshore',
     recordTimeHours: 47,
@@ -851,8 +852,8 @@ export const RACES: Race[] = [
       { name: 'Subic Bay (Finish)', lat: 14.82, lon: 120.27, type: 'finish' },
     ],
     divisions: {
-      corinthian: { entryFee: 1100, prizeMoney: 9000, fleetSize: 18, paceTarget: 1.26 },
-      pro: { entryFee: 2400, prizeMoney: 20000, fleetSize: 34, paceTarget: 1.06 },
+      corinthian: { entryFee: 1100, prizeMoney: 18000, fleetSize: 18, paceTarget: 1.26 },
+      pro: { entryFee: 2400, prizeMoney: 40000, fleetSize: 34, paceTarget: 1.06 },
     },
   },
   {
@@ -860,10 +861,10 @@ export const RACES: Race[] = [
     name: 'Cape to Rio',
     location: 'Cape Town → Rio de Janeiro',
     description:
-      'The great South Atlantic crossing: 3,300 miles from Table Mountain to Sugarloaf. Ride the Benguela north, pick your moment to cut the corner of the South Atlantic High, then surf the southeast trades all the way to Brazil.',
+      'Three thousand three hundred miles from Table Mountain to Sugarloaf. Ride the Benguela north, pick your moment against the South Atlantic High, then surf the southeast trades all the way to Brazil.',
     distanceNm: 3363,
     difficulty: 'Ocean',
-    recordTimeHours: 163,
+    recordTimeHours: 252,
     corinthianRating: 2,
     hazard: 'ocean_high',
     hazardWaypoint: 'High Gate',
@@ -889,8 +890,8 @@ export const RACES: Race[] = [
       { name: 'Rio de Janeiro (Finish)', lat: -23.0, lon: -43.15, type: 'finish' },
     ],
     divisions: {
-      corinthian: { entryFee: 3200, prizeMoney: 32000, fleetSize: 14, paceTarget: 1.24 },
-      pro: { entryFee: 6500, prizeMoney: 70000, fleetSize: 24, paceTarget: 1.05 },
+      corinthian: { entryFee: 3200, prizeMoney: 65000, fleetSize: 14, paceTarget: 1.24 },
+      pro: { entryFee: 6500, prizeMoney: 140000, fleetSize: 24, paceTarget: 1.05 },
     },
   },
   {
@@ -898,12 +899,12 @@ export const RACES: Race[] = [
     name: 'Bayview Mackinac Race',
     location: 'Port Huron → Mackinac Island, Lake Huron',
     description:
-      'The other Mac: 230 miles up Lake Huron from Port Huron to the same finish line off Mission Point. Fresh water, no tide, and a lake that can serve champagne sailing and a parking lot in the same afternoon.',
+      'The other Mac: 204 miles up Lake Huron from Port Huron to the same finish line off Mission Point. Fresh water, no tide, and a lake that can serve champagne sailing and a parking lot in the same afternoon.',
     distanceNm: 207,
     difficulty: 'Coastal',
     recordTimeHours: 21,
-    corinthianRating: 5,
-    hazard: 'light_air',
+    corinthianRating: 4,
+    hazard: 'lake_squall',
     hazardWaypoint: 'Thunder Bay offing',
     prevailingWind: { fromDeg: 225, speedKn: 10 },
     signatureHazard:
@@ -929,12 +930,12 @@ export const RACES: Race[] = [
     name: 'Van Isle 360',
     location: 'Round Vancouver Island, Canada',
     description:
-      'The great lap of Vancouver Island: threading the rapids of the inside passage, rounding the surf-swept top at Cape Scott, then running the wild Pacific coast to a finish under Victoria\'s lights — a race with two entirely different oceans in it.',
+      'Thread the rapids of the inside passage, round the surf-swept top of Vancouver Island at Cape Scott, then run the wild Pacific coast to a finish under Victoria\'s lights — one race, two entirely different oceans.',
     distanceNm: 504,
     difficulty: 'Offshore',
     recordTimeHours: 70,
-    corinthianRating: 2,
-    hazard: 'tidal_rapids',
+    corinthianRating: 3,
+    hazard: 'cape_wind',
     hazardWaypoint: 'Seymour Narrows',
     prevailingWind: { fromDeg: 305, speedKn: 12 },
     signatureHazard:
@@ -944,7 +945,7 @@ export const RACES: Race[] = [
     // The inside passage is tide-dominated: the stream funnels hard through
     // Discovery Passage at Seymour Narrows; the outside coast feels the Pacific.
     tide: {
-      floodDeg: 340,
+      floodDeg: 135, // floods SE down Discovery Passage — same water, same convention as r2ak
       peakRateKn: 1.1,
       gates: [{ waypoint: 'Seymour Narrows', gain: 2.0, radiusNm: 5 }],
     },
@@ -972,8 +973,8 @@ export const RACES: Race[] = [
       { name: 'Victoria (Finish)', lat: 48.4, lon: -123.36, type: 'finish' },
     ],
     divisions: {
-      corinthian: { entryFee: 1200, prizeMoney: 9500, fleetSize: 16, paceTarget: 1.26 },
-      pro: { entryFee: 2600, prizeMoney: 21000, fleetSize: 30, paceTarget: 1.06 },
+      corinthian: { entryFee: 1200, prizeMoney: 16000, fleetSize: 16, paceTarget: 1.26 },
+      pro: { entryFee: 2600, prizeMoney: 36000, fleetSize: 30, paceTarget: 1.06 },
     },
   },
   {
@@ -1009,7 +1010,7 @@ export const RACES: Race[] = [
     name: 'Block Island Race',
     location: 'Stamford → Block Island → Stamford',
     description:
-      'The Memorial Day classic: 186 miles down Long Island Sound, out through the tide-race at The Race, round Block Island and home. Two passes through one of the hardest-running tidal gates on the US east coast.',
+      'Down Long Island Sound on the Friday evening ebb, out through The Race, round Block Island and home — two passes through one of the hardest-running tidal gates on the US east coast, on one Memorial Day weekend.',
     distanceNm: 183,
     difficulty: 'Coastal',
     recordTimeHours: 14,
@@ -1058,6 +1059,15 @@ export const RACES: Race[] = [
     signatureHazard:
       'The pre-dawn calm at the lighthouse — the fjord breeze dies with the light, and the fleet anchors against the current or ghosts on private zephyrs.',
     season: 'June',
+        // The fjord's slow exhale: a weak net outflow the light-air fleet genuinely
+    // anchors against, squeezed at the Drøbak narrows.
+    tide: {
+      floodDeg: 5,
+      peakRateKn: 0.3,
+      driftDeg: 185,
+      driftKn: 0.3,
+      gates: [{ waypoint: 'Drøbak Sound', gain: 1.2, radiusNm: 4 }],
+    },
     waypoints: [
       { name: 'Steilene (Start)', lat: 59.82, lon: 10.6, type: 'start' },
       { name: 'Drøbak Sound', lat: 59.66, lon: 10.61, type: 'turn' },
@@ -1081,8 +1091,8 @@ export const RACES: Race[] = [
     distanceNm: 645,
     difficulty: 'Offshore',
     recordTimeHours: 64,
-    corinthianRating: 3,
-    hazard: 'gulf_stream',
+    corinthianRating: 4,
+    hazard: 'ocean_high',
     hazardWaypoint: 'Gulf Stream Crossing',
     prevailingWind: { fromDeg: 230, speedKn: 13 },
     signatureHazard:
@@ -1106,8 +1116,8 @@ export const RACES: Race[] = [
       { name: 'St. David\'s Head (Finish)', lat: 32.37, lon: -64.65, type: 'finish' },
     ],
     divisions: {
-      corinthian: { entryFee: 1300, prizeMoney: 10000, fleetSize: 18, paceTarget: 1.27 },
-      pro: { entryFee: 2800, prizeMoney: 22000, fleetSize: 32, paceTarget: 1.06 },
+      corinthian: { entryFee: 1300, prizeMoney: 14000, fleetSize: 18, paceTarget: 1.27 },
+      pro: { entryFee: 2800, prizeMoney: 32000, fleetSize: 32, paceTarget: 1.06 },
     },
   },
 ];

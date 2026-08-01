@@ -53,6 +53,23 @@ export const CONQUEST_COURSES: { id: string; name: string; raceId: string }[] = 
 
 export const MARQUEE_RACE_IDS: string[] = CONQUEST_COURSES.map((c) => c.raceId);
 
+// The home-waters classics and terminal capstones — every port's local trophy
+// and the end-of-ladder silverware. Separate from CONQUEST_COURSES so the Grand
+// Slam keeps its original nine; these cups are their own reason to return.
+export const CLASSIC_COURSES: { id: string; name: string; raceId: string }[] = [
+  { id: 'st-malo-trophy', name: 'St Malo Trophy', raceId: 'race-cowes-dinard' },
+  { id: 'siracusa-cup', name: 'Siracusa Cup', raceId: 'race-malta-syracuse' },
+  { id: 'round-antigua-trophy', name: 'Round Antigua Trophy', raceId: 'race-antigua-360' },
+  { id: 'annapolis-newport-trophy', name: 'Annapolis–Newport Trophy', raceId: 'race-annapolis-newport' },
+  { id: 'islands-race-trophy', name: 'Islands Race Trophy', raceId: 'race-islands-race' },
+  { id: 'tri-state-trophy', name: 'Tri-State Trophy', raceId: 'race-tri-state' },
+  { id: 'cabbage-tree-trophy', name: 'Cabbage Tree Island Trophy', raceId: 'race-cabbage-tree' },
+  { id: 'cape-to-rio-trophy', name: 'Cape to Rio Trophy', raceId: 'race-cape2rio' },
+  { id: 'china-sea-trophy', name: 'China Sea Race Trophy', raceId: 'race-china-sea' },
+  { id: 'van-isle-trophy', name: 'Van Isle 360 Trophy', raceId: 'race-van-isle' },
+  { id: 'founders-trophy', name: 'Founders Trophy', raceId: 'race-marion-bermuda' },
+];
+
 // The documented historic editions that ship (weatherEditions.ts), keyed in the
 // career record's '<raceId>:<year>' form. Keeper of the Record targets this set.
 export const DOCUMENTED_EDITION_KEYS: string[] = Object.values(WEATHER_EDITIONS)
@@ -105,6 +122,16 @@ export function longestCleanStreak(history: RaceResult[]): number {
 
 // ---- The catalogue ----------------------------------------------------------
 
+const classicHonours: Honour[] = CLASSIC_COURSES.map((course) => ({
+  id: course.id,
+  name: course.name,
+  blurb: `Your name is on the ${course.name} — a corrected-time win at its course.`,
+  hint: 'Win this course on corrected time to lift the trophy.',
+  tier: 'cup' as const,
+  group: 'conquest' as const,
+  progress: (c: CareerRecord) => ({ have: won(c).includes(course.raceId) ? 1 : 0, need: 1 }),
+}));
+
 const conquestHonours: Honour[] = CONQUEST_COURSES.map((course) => ({
   id: course.id,
   name: course.name,
@@ -156,6 +183,7 @@ export const HONOURS: Honour[] = [
 
   // ---- Conquest: a named trophy per marquee course ----
   ...conquestHonours,
+  ...classicHonours,
 
   // ---- Seamanship: how well the boat was sailed, not just where it placed ----
   {

@@ -1691,6 +1691,7 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
     startFadeNm: prev.startFadeNm,
     signatureFired: prev.signatureFired,
     signatureChoiceId: prev.signatureChoiceId,
+    signaturePaidOff: prev.signaturePaidOff,
     decisionTriggerNm: prev.decisionTriggerNm,
     // A choice-opened situation expires once the boat has sailed past its
     // window — the reef question answers itself, the moment is gone.
@@ -2011,6 +2012,11 @@ export function applyDecision(state: GameState, choice: TacticalChoice): StepRes
     legStartNm: state.progress.distanceCoveredNm,
     readings: (state.progress.readings ?? []).slice(-1),
     signatureChoiceId: isSignatureChoice ? choice.id : state.progress.signatureChoiceId,
+    // The truth of the call, for the debrief: a misread field bet or a bungle is
+    // a bust. Plain state — no RNG drawn — so the pinned streams are untouched.
+    signaturePaidOff: isSignatureChoice
+      ? !bungled && paidOff !== false
+      : state.progress.signaturePaidOff,
     // The decision is resolved: the trigger point is spent (a fresh event will
     // set its own), and if this choice leaves the boat in a situation (a tucked
     // reef, a big kite up), open the follow-on window from here.
@@ -2453,7 +2459,13 @@ export function buildResult(state: GameState, outcome: StepResult): RaceResult {
   let storyDebrief: string | undefined;
   if (story && signatureChoiceId) {
     signatureOutcome = signatureOutcomeFor(hazardEventForRace(race), signatureChoiceId);
-    storyDebrief = debriefBeat(story, signatureOutcome)?.body;
+    const beat = debriefBeat(story, signatureOutcome);
+    // The honest bold debrief: a gamble that provably didn't come off reads its
+    // bust variant instead of the triumph it never earned.
+    storyDebrief =
+      signatureOutcome === 'bold' && state.progress?.signaturePaidOff === false && beat?.bustBody
+        ? beat.bustBody
+        : beat?.body;
   }
 
   // Finish drama facts ("The Duel"): rank the whole fleet — the player folded in —

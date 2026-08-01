@@ -36,8 +36,13 @@ interface HazardProfile {
 function hazardProfile(hazard: HazardKey, baseSpeed: number): HazardProfile {
   switch (hazard) {
     case 'light_air':
-    case 'doldrums':
       return { speedMul: 0.65, shiftAmp: 22, rotatePerH: 0.4, featureDeltaMul: -0.55, featureRadiusNm: 90 };
+    case 'doldrums':
+      // The ocean High race is NOT a drifter: honest, steady trades everywhere
+      // EXCEPT the huge parked hole the routing must respect. Splitting this out
+      // of light_air's arm gives Transpac the sled ride the sport knows — the
+      // light_air values above stay byte-identical (golden-safe).
+      return { speedMul: 0.9, shiftAmp: 12, rotatePerH: 0.3, featureDeltaMul: -0.55, featureRadiusNm: 110 };
     case 'med_fickle':
     case 'tidal_gate':
       return { speedMul: 0.9, shiftAmp: 34, rotatePerH: 0.6, featureDeltaMul: -0.3, featureRadiusNm: 45 };
@@ -68,6 +73,15 @@ function hazardProfile(hazard: HazardKey, baseSpeed: number): HazardProfile {
       // A parked ocean ridge: the headline feature is a huge soft hole the route
       // must respect; outside it the breeze is workmanlike, not wild.
       return { speedMul: 0.8, shiftAmp: 16, rotatePerH: 0.3, featureDeltaMul: -0.6, featureRadiusNm: 110 };
+    case 'lake_squall':
+      // Huron's afternoon squall-and-thermal lake (vs Michigan's parking lot):
+      // a working breeze that swings hard and fast, with hard-edged cells riding
+      // through — the mid-rotate corner no other course owns.
+      return { speedMul: 0.8, shiftAmp: 26, rotatePerH: 1.2, featureDeltaMul: 0.45, featureRadiusNm: 30 };
+    case 'cape_wind':
+      // An exposed-cape course: honest pressure, a big acceleration zone off the
+      // headland, the sea state doing the bullying — Van Isle's outer coast.
+      return { speedMul: 1.1, shiftAmp: 16, rotatePerH: 1.0, featureDeltaMul: 0.5, featureRadiusNm: 60 };
     default:
       return { speedMul: 1.0, shiftAmp: 18, rotatePerH: 0.5, featureDeltaMul: 0.2, featureRadiusNm: 50 };
   }

@@ -29,7 +29,9 @@ export type HazardKey =
   | 'eac_coastal'
   | 'strait_fog'
   | 'monsoon_squall'
-  | 'ocean_high';
+  | 'ocean_high'
+  | 'lake_squall'
+  | 'cape_wind';
 
 export type WaypointType = 'start' | 'turn' | 'island' | 'mark' | 'finish';
 
@@ -534,6 +536,10 @@ export interface StoryBeat {
   body: string; // cockpit-legible narrative prose
   pinnedWaypoint?: string; // for the signature beat: the mark it fires at
   outcome?: SignatureOutcome; // for debrief beats: the choice this beat answers
+  // For the BOLD debrief beat only: the honest variant read when the gamble did
+  // NOT come off (the field failed it, or the call was bungled). Optional — a
+  // storyline without one falls back to `body`, exactly as before.
+  bustBody?: string;
 }
 
 // A self-contained per-race storyline: a theme, the stakes, and a small set of
@@ -610,6 +616,11 @@ export interface RaceProgress {
   // records the choice the player made, so the debrief can pick its matching beat.
   signatureFired?: boolean;
   signatureChoiceId?: string; // id of the TacticalChoice taken at the signature decision
+  // Whether the signature choice actually CAME OFF: a field-resolved bold call
+  // that misread the wind, or any bungled call, records false — so the debrief
+  // can tell the truth instead of congratulating a failed gamble. Undefined on
+  // legacy saves / pre-signature (treated as paid off).
+  signaturePaidOff?: boolean;
   // Where the active decision was triggered. A field-resolved call's edge decays
   // as the boat sails on past this point — the shift you spotted doesn't wait —
   // so a late commit is worth less than an immediate one. While set it also
