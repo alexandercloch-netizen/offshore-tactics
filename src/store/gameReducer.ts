@@ -45,7 +45,14 @@ export const INITIAL_STATE: GameState = {
   eventLog: [],
   tutorialSeen: false,
   scoringSeen: false,
-  freeSailing: false,
+  // Free Sailing is the front door: a brand-new player just sails. The budget
+  // game is Campaign mode, opted into from Profile → Preferences. LEGACY
+  // CONTRACT: LOAD_STATE replaces state wholesale, so an existing save keeps its
+  // stored value — and a pre-flag save (field undefined, written before Free
+  // Sailing existed) stays falsy, i.e. Campaign: those players built their funds
+  // under the budget and are never silently switched. Only a genuinely fresh
+  // campaign starts free.
+  freeSailing: true,
 };
 
 export type Action =

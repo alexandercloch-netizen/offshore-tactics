@@ -155,10 +155,22 @@ The simulation is a **pure, deterministic engine** with a thin React UI on top.
   and each one no-ops its funds math under the flag — funds freeze, boats become
   charters (`BEGIN_RACE` skips `ownedBoatIds`), results/career/honours still count.
   The engine NEVER reads the flag (goldens untouched); screens only hide money UI
-  and relax afford gates. It's a TWO-WAY preference: newest save wins in
-  `reconcile.ts` (never OR-union it like `tutorialSeen` — that would lock it on),
-  and `RESET_CAMPAIGN` preserves it. If you add a new money source, route it
-  through a reducer case and honour the flag there, not in a screen.
+  and relax afford gates. **Free Sailing is the DEFAULT for a fresh campaign**
+  (`INITIAL_STATE.freeSailing: true`); the budget game is **Campaign mode** (the
+  toggle's user-facing name), opted into from Profile → Preferences. LEGACY
+  CONTRACT: `LOAD_STATE` replaces state wholesale, so a stored save keeps its
+  stored value and a pre-flag save (field `undefined`) stays falsy = Campaign —
+  players who built funds under the budget are never silently switched; only a
+  genuinely fresh campaign starts free (pinned in `gameReducer.test.ts`). It's a
+  TWO-WAY preference: newest save wins in `reconcile.ts` (never OR-union it like
+  `tutorialSeen` — that would lock it on), and `RESET_CAMPAIGN` preserves it. If
+  you add a new money source, route it through a reducer case and honour the flag
+  there, not in a screen. The Campaign purse is sized against the real cost
+  surface (see `data/index.ts`): a mid-boat pro campaign runs ~42–50k (wages
+  dominate), the 14-berth maxi worst case ~111k — so `STARTING_FUNDS` 400k opens
+  a serious global campaign, and the sponsor floor (100k, trigger 40k) always
+  rebuilds to two mid campaigns with no dead band, while maxi-class campaigning
+  stays results-funded.
 - **`src/screens/`** — one per screen; bottom tabs (Race/Fleet/Leaderboard/
   Profile) live under `Main`, with setup/race screens pushed over them. The
   setup→race flow is Provisioning → Briefing → **StartSequence** (the pre-gun

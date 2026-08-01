@@ -213,6 +213,16 @@ test('a full race can be played from start to finish in the cockpit', async ({ p
   await page.getByRole('button', { name: 'Back to Harbour' }).click();
   await page.getByText('Profile', { exact: true }).first().click();
   await expect(page.getByTestId('profile-honours-strip')).toBeVisible({ timeout: 10_000 });
+
+  // The game-mode toggle: Free Sailing is the front door (the whole run above
+  // sailed it — no fees, no ledgers), and Campaign is the opt-in budget game.
+  // Flip it and prove the budget UI comes back: in Free Sailing the funds row
+  // reads "Free Sailing" (so the string appears twice — toggle label + value);
+  // in Campaign the value becomes money and only the toggle label remains.
+  await expect(page.getByTestId('free-sailing-toggle')).toBeVisible();
+  await expect(page.getByText('Free Sailing', { exact: true })).toHaveCount(2);
+  await page.getByText('Campaign', { exact: true }).first().click();
+  await expect(page.getByText('Free Sailing', { exact: true })).toHaveCount(1);
   await page.getByTestId('view-trophy-case').click();
   await expect(page.getByTestId('trophy-case')).toBeVisible({ timeout: 10_000 });
   // First Blood is earned, so its tile shows without expanding the locked goals.

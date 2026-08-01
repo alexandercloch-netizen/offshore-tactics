@@ -9,6 +9,10 @@ import { GameState, RaceResult } from '../types';
 // today; the reducer is the source of truth and must be safe on its own.)
 
 const base = (over: Partial<GameState> = {}): GameState => ({ ...INITIAL_STATE, ...over });
+// A CAMPAIGN-mode state: Free Sailing is the fresh-start default now, so every
+// fixture exercising the budget economy pins the mode off explicitly.
+const campaign = (over: Partial<GameState> = {}): GameState =>
+  base({ freeSailing: false, ...over });
 
 const result = (over: Partial<RaceResult> = {}): RaceResult => ({
   raceId: 'race-round-island',
@@ -28,7 +32,7 @@ const result = (over: Partial<RaceResult> = {}): RaceResult => ({
 
 describe('economy — funds never go negative', () => {
   it('BUY_SAIL and ADD_FLEET_BOAT refuse an unaffordable purchase (no negative funds)', () => {
-    const poor = base({ funds: 100, profile: { fleet: [{ id: 'b1', sails: [] } as never] } });
+    const poor = campaign({ funds: 100, profile: { fleet: [{ id: 'b1', sails: [] } as never] } });
     const afterSail = reducer(poor, { type: 'BUY_SAIL', payload: { boatId: 'b1', sailId: 'code-zero', cost: 5000 } });
     expect(afterSail).toBe(poor); // refused, unchanged
     expect(afterSail.funds).toBe(100);
@@ -42,14 +46,14 @@ describe('economy — funds never go negative', () => {
   });
 
   it('an affordable purchase subtracts exactly the cost', () => {
-    const rich = base({ funds: 10000, profile: { fleet: [{ id: 'b1', sails: [] } as never] } });
+    const rich = campaign({ funds: 10000, profile: { fleet: [{ id: 'b1', sails: [] } as never] } });
     const after = reducer(rich, { type: 'BUY_SAIL', payload: { boatId: 'b1', sailId: 'code-zero', cost: 5000 } });
     expect(after.funds).toBe(5000);
     expect(after.profile.fleet[0].sails).toEqual(['code-zero']);
   });
 
   it('BUY_SAIL is idempotent; SELL_SAIL refunds and removes', () => {
-    const owned = base({ funds: 10000, profile: { fleet: [{ id: 'b1', sails: ['code-zero'] } as never] } });
+    const owned = campaign({ funds: 10000, profile: { fleet: [{ id: 'b1', sails: ['code-zero'] } as never] } });
     const dupe = reducer(owned, { type: 'BUY_SAIL', payload: { boatId: 'b1', sailId: 'code-zero', cost: 5000 } });
     expect(dupe.profile.fleet[0].sails).toEqual(['code-zero']); // no duplicate
     expect(dupe.funds).toBe(5000); // still charged (matches shipped behavior)
@@ -62,7 +66,7 @@ describe('economy — funds never go negative', () => {
 
 describe('FINISH_RACE — career folds exactly once', () => {
   it('adds prize money, prepends history, and counts the win once', () => {
-    const s0 = base({ funds: 1000, history: [], career: undefined });
+    const s0 = campaign({ funds: 1000, history: [], career: undefined });
     const s1 = reducer(s0, { type: 'FINISH_RACE', payload: { result: result({ prizeMoney: 4000, position: 1 }) } });
     expect(s1.funds).toBe(5000);
     expect(s1.history).toHaveLength(1);
@@ -79,7 +83,7 @@ describe('FINISH_RACE — career folds exactly once', () => {
 
   it('caps history at 50, newest first', () => {
     const fifty = Array.from({ length: 50 }, (_, i) => result({ timestamp: i }));
-    const s = reducer(base({ history: fifty }), {
+    const s = reducer(campaign({ history: fifty }), {
       type: 'FINISH_RACE',
       payload: { result: result({ timestamp: 9999 }) },
     });
@@ -90,7 +94,7 @@ describe('FINISH_RACE — career folds exactly once', () => {
 
 describe('campaign lifecycle', () => {
   it('PREPARE_NEXT_RACE tops up a broke campaign to the stipend floor and clears race state', () => {
-    const broke = base({ funds: 500, selectedRaceId: 'race-fastnet', progress: {} as never });
+    const broke = campaign({ funds: 500, selectedRaceId: 'race-fastnet', progress: {} as never });
     const next = reducer(broke, { type: 'PREPARE_NEXT_RACE' });
     expect(next.funds).toBe(STIPEND_FLOOR);
     expect(next.selectedRaceId).toBeUndefined();
@@ -98,7 +102,7 @@ describe('campaign lifecycle', () => {
   });
 
   it('RESET_CAMPAIGN returns a fresh campaign', () => {
-    const played = base({ funds: 12345, history: [result()], ownedBoatIds: ['boat-sprite'] });
+    const played = campaign({ funds: 12345, history: [result()], ownedBoatIds: ['boat-sprite'] });
     const fresh = reducer(played, { type: 'RESET_CAMPAIGN' });
     expect(fresh.funds).toBe(STARTING_FUNDS);
     expect(fresh.history).toEqual([]);
@@ -106,8 +110,38 @@ describe('campaign lifecycle', () => {
   });
 
   it('the default case is a pure passthrough', () => {
-    const s = base({ funds: 999 });
+    const s = campaign({ funds: 999 });
     expect(reducer(s, { type: 'NONSENSE' } as unknown as Action)).toBe(s);
+  });
+});
+
+describe('Free Sailing is the front door; Campaign is the legacy contract', () => {
+  it('a fresh campaign starts in Free Sailing', () => {
+    expect(INITIAL_STATE.freeSailing).toBe(true);
+  });
+
+  it('LOAD_STATE keeps a legacy save (no flag) in Campaign — never silently switched', () => {
+    // A pre-flag save has no freeSailing field at all. LOAD_STATE replaces state
+    // wholesale, so the field stays undefined — falsy — and every money case
+    // runs the full Campaign economy for that player.
+    const legacy = { ...campaign() } as GameState & { freeSailing?: boolean };
+    delete legacy.freeSailing;
+    const loaded = reducer(base(), { type: 'LOAD_STATE', payload: legacy });
+    expect(loaded.freeSailing).toBeUndefined();
+    // The budget genuinely bites: an unaffordable buy is refused.
+    const poor = { ...loaded, funds: 100, profile: { fleet: [{ id: 'b1', sails: [] } as never] } };
+    const refused = reducer(poor, { type: 'BUY_SAIL', payload: { boatId: 'b1', sailId: 'code-zero', cost: 5000 } });
+    expect(refused).toBe(poor);
+  });
+
+  it('LOAD_STATE keeps a stored preference exactly as saved', () => {
+    expect(reducer(base(), { type: 'LOAD_STATE', payload: campaign() }).freeSailing).toBe(false);
+    expect(reducer(campaign(), { type: 'LOAD_STATE', payload: base({ freeSailing: true }) }).freeSailing).toBe(true);
+  });
+
+  it('RESET_CAMPAIGN preserves the mode either way (a settings choice, not progress)', () => {
+    expect(reducer(campaign(), { type: 'RESET_CAMPAIGN' }).freeSailing).toBe(false);
+    expect(reducer(base({ freeSailing: true }), { type: 'RESET_CAMPAIGN' }).freeSailing).toBe(true);
   });
 });
 
