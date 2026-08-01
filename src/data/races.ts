@@ -75,7 +75,7 @@ export const RACES: Race[] = [
     hazard: 'light_air',
     hazardWaypoint: 'Mid-Lake Michigan',
     prevailingWind: { fromDeg: 200, speedKn: 10 },
-    signatureHazard: 'Light-air "parking lots" and sudden Great Lakes squalls.',
+    signatureHazard: 'A lake that serves champagne sailing, glassy park-ups and a black-line squall in the same afternoon — and goes to sleep at dusk with your lead in its pocket.',
     season: 'July',
     waypoints: [
       { name: 'Chicago Harbor Light', lat: 41.89, lon: -87.59, type: 'start' },
@@ -107,7 +107,7 @@ export const RACES: Race[] = [
     hazard: 'med_fickle',
     hazardWaypoint: 'Strait of Messina',
     prevailingWind: { fromDeg: 315, speedKn: 14 },
-    signatureHazard: 'Fickle Mediterranean winds and the current through the Strait of Messina.',
+    signatureHazard: 'A sea that changes its mind by the hour — and Messina\'s stream, the Scylla and Charybdis of the old charts, waiting in the narrows.',
     season: 'October',
     unlockAfter: 'race-malta-syracuse',
     // The Med is all but tideless — except the Strait of Messina, where a real
@@ -201,7 +201,7 @@ export const RACES: Race[] = [
     hazard: 'celtic_weather',
     hazardWaypoint: 'Fastnet Rock',
     prevailingWind: { fromDeg: 240, speedKn: 18 },
-    signatureHazard: 'Brutal Celtic Sea weather and tidal gates the whole way to the Rock.',
+    signatureHazard: 'The Celtic Sea in a bad mood, gale-force fronts marching through, and a lonely lighthouse rock that has been the measure of ocean racers for a century.',
     season: 'July / August',
     // The English Channel and its approaches are strongly tidal: the stream sets
     // ENE up-Channel on the flood, running hardest at the Portland tidal race and
@@ -761,7 +761,7 @@ export const RACES: Race[] = [
     name: 'Rolex Giraglia',
     location: 'Saint-Tropez → Giraglia Rock → Genoa',
     description:
-      'The Mediterranean classic: out of the gulf of Saint-Tropez, across the Ligurian Sea to the lonely Giraglia rock off Cap Corse, then north to Genoa — chasing a breeze that dies at dusk and fills from somewhere new at dawn.',
+      'Out of the gulf of Saint-Tropez and across the Ligurian Sea to a lonely lighthouse rock off Cap Corse — then north to Genoa, chasing a breeze that dies at dusk and fills from somewhere new at dawn.',
     distanceNm: 208,
     difficulty: 'Coastal',
     recordTimeHours: 15,
@@ -791,7 +791,7 @@ export const RACES: Race[] = [
     name: 'Sydney to Gold Coast',
     location: 'Sydney → Southport, Australia',
     description:
-      'The winter classic north: out of the Heads and 380 miles up the NSW coast to the Gold Coast, with the East Australian Current running hard against you the whole way. Inshore for relief or offshore for breeze — pick your poison.',
+      'Out of the Heads in July and 380 miles north along the NSW coast, the East Australian Current running hard against you every one of them. Inshore for relief or offshore for breeze — pick your poison.',
     distanceNm: 386,
     difficulty: 'Offshore',
     recordTimeHours: 26,
@@ -830,7 +830,7 @@ export const RACES: Race[] = [
     name: 'China Sea Race',
     location: 'Hong Kong → Subic Bay, Philippines',
     description:
-      "Asia's blue-water classic since 1962: 565 miles across the South China Sea on the dying northeast monsoon, dodging fishing fleets by night and squall lines by day, to a finish under the palms of Subic Bay.",
+      "Five hundred and sixty-five miles across the South China Sea on the dying northeast monsoon — fishing fleets by night, squall lines by day, and a finish under the palms of Subic Bay. Asia's blue-water proving ground since 1962.",
     distanceNm: 572,
     difficulty: 'Offshore',
     recordTimeHours: 47,
@@ -861,7 +861,7 @@ export const RACES: Race[] = [
     name: 'Cape to Rio',
     location: 'Cape Town → Rio de Janeiro',
     description:
-      'The great South Atlantic crossing: 3,300 miles from Table Mountain to Sugarloaf. Ride the Benguela north, pick your moment to cut the corner of the South Atlantic High, then surf the southeast trades all the way to Brazil.',
+      'Three thousand three hundred miles from Table Mountain to Sugarloaf. Ride the Benguela north, pick your moment against the South Atlantic High, then surf the southeast trades all the way to Brazil.',
     distanceNm: 3363,
     difficulty: 'Ocean',
     recordTimeHours: 252,
@@ -930,7 +930,7 @@ export const RACES: Race[] = [
     name: 'Van Isle 360',
     location: 'Round Vancouver Island, Canada',
     description:
-      'The great lap of Vancouver Island: threading the rapids of the inside passage, rounding the surf-swept top at Cape Scott, then running the wild Pacific coast to a finish under Victoria\'s lights — a race with two entirely different oceans in it.',
+      'Thread the rapids of the inside passage, round the surf-swept top of Vancouver Island at Cape Scott, then run the wild Pacific coast to a finish under Victoria\'s lights — one race, two entirely different oceans.',
     distanceNm: 504,
     difficulty: 'Offshore',
     recordTimeHours: 70,
@@ -1010,7 +1010,7 @@ export const RACES: Race[] = [
     name: 'Block Island Race',
     location: 'Stamford → Block Island → Stamford',
     description:
-      'The Memorial Day classic: 186 miles down Long Island Sound, out through the tide-race at The Race, round Block Island and home. Two passes through one of the hardest-running tidal gates on the US east coast.',
+      'Down Long Island Sound on the Friday evening ebb, out through The Race, round Block Island and home — two passes through one of the hardest-running tidal gates on the US east coast, on one Memorial Day weekend.',
     distanceNm: 183,
     difficulty: 'Coastal',
     recordTimeHours: 14,

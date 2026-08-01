@@ -1597,7 +1597,7 @@ export const GENERIC_EVENTS: GameEvent[] = [
       {
         id: 'evt-rg-pnw-ferrylane-a',
         label: 'Cross on speed ahead of her',
-        description: 'Beat the window with knots to spare. Probably.',
+        description: 'Beat the window with knots to spare — the ferry captain has seen this movie before.',
         timeDelta: -0.15,
         staminaDelta: -2,
         moraleDelta: 1,
@@ -2159,7 +2159,7 @@ export const MORALE_EVENTS: GameEvent[] = [
     choices: [
       {
         id: 'evt-nightwatch-full',
-        label: 'Full watch, keep driving',
+        label: 'Keep the full watch driving',
         description: 'Every hand on deck and the hammer down through the night — pace held, legs paid for.',
         timeDelta: -0.4,
         staminaDelta: -9,
@@ -4890,7 +4890,7 @@ export const HAZARD_RACE_EVENTS: Record<string, GameEvent> = {
       {
         id: 'evt-hz-meander-ride',
         sets: 'meander-chased',
-        label: 'Chase the meander',
+        label: 'Chase the meander east',
         description: 'Buy miles east for a ride south on the warm river — if it is still where the trace says.',
         timeDelta: -1.2,
         staminaDelta: -5,
@@ -4902,7 +4902,7 @@ export const HAZARD_RACE_EVENTS: Record<string, GameEvent> = {
       },
       {
         id: 'evt-hz-meander-square',
-        label: 'Cross square, minimum time in',
+        label: 'Cross it square and quick',
         description: 'Perpendicular through the Stream — the shortest wet, lumpy road.',
         timeDelta: -0.1,
         staminaDelta: -4,

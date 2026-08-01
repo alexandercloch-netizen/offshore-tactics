@@ -158,12 +158,12 @@ export const STORYLINES: Storyline[] = [
       {
         kind: 'debrief',
         outcome: 'safe',
-        body: 'You tucked in under the cliffs and crept through the back eddy, out of the worst of the foul stream. No glory in it, and the gate-runners stole a march — but you never stopped dead in the tide-line the way the gamblers who mistimed it did.',
+        body: 'You tucked in under the cliffs and crept through the back eddy, out of the worst of the foul stream. No glory in it, and the gate-runners made their minutes — but you never stopped dead in the tide-line the way the gamblers who mistimed it did.',
       },
       {
         kind: 'debrief',
         outcome: 'hedge',
-        body: 'You shaded toward the gate without fully committing — close enough to catch some of the fair tide, cautious enough not to be caught out if it shut early. A navigator\'s rounding of the Needles, the race still there to be sailed down the back of the island.',
+        body: 'You shaded toward the gate and kept your escape route — close enough to catch some of the fair tide, cautious enough not to be caught out if it shut early. A half-tide rounding, honestly bought of the Needles, the race still there to be sailed down the back of the island.',
       },
     ],
   },
@@ -234,12 +234,12 @@ export const STORYLINES: Storyline[] = [
       {
         kind: 'debrief',
         outcome: 'safe',
-        body: 'You held a steady line down the middle of the strait and took the average of it — no slingshot, but no foul-tide trap either. The boats that timed the ribbon stole a march at Messina; you simply refused to gamble the race on a tide table.',
+        body: 'You held a steady line down the middle of the strait and took the average of it — no slingshot, but no foul-tide trap either. The boats that timed the ribbon got clean away at Messina; you simply refused to gamble the race on a tide table.',
       },
       {
         kind: 'debrief',
         outcome: 'hedge',
-        body: 'You worked toward the fair stream without fully committing to the navigator\'s window — a foot in the ribbon, a foot in clear water. A measure of the slingshot, none of the risk of being flushed the wrong way: a careful threading of Messina.',
+        body: 'You worked toward the fair stream with one eye on the exit to the navigator\'s window — a foot in the ribbon, a foot in clear water. A measure of the slingshot, none of the risk of being flushed the wrong way: a careful threading of Messina.',
       },
     ],
   },
@@ -734,7 +734,7 @@ export const STORYLINES: Storyline[] = [
       {
         kind: 'debrief',
         outcome: 'hedge',
-        body: 'You rode the current line itself, where the water is lumpy and undecided — half out of the river, half in the breeze. A navigator\'s compromise: nobody aboard was ever thrilled, and nothing ever went badly wrong.',
+        body: 'You rode the current line itself, where the water is lumpy and undecided — half out of the river, half in the breeze. A coast-hugger\'s bargain: nobody aboard was ever thrilled, and nothing ever went badly wrong.',
       },
     ],
   },
@@ -962,7 +962,7 @@ export const STORYLINES: Storyline[] = [
       {
         kind: 'debrief',
         outcome: 'hedge',
-        body: 'You rode the shoulder of the gate — most of the fair stream, the smaller half of the standing waves — and came out the far side wet but whole with the tide\'s change in hand. A local\'s line through The Race, which is the highest compliment the Sound pays.',
+        body: 'You rode the shoulder of the gate — most of the fair stream, the smaller half of the standing waves — and came out the far side wet but whole with the tide\'s change in hand. A Sound sailor\'s line through The Race, which is the highest compliment the Sound pays.',
       },
     ],
   },
