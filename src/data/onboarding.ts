@@ -42,10 +42,13 @@ export const REGION_RACES: Record<SailingRegion, string[]> = {
   // The FIRST id in each list is the region's home race (see the Port note
   // below) — new races join BEHIND the established leads so nobody's home race
   // silently changes.
-  uk: ['race-cowes-dinard', 'race-round-island', 'race-fastnet'],
+  // uk ramps Inshore → Coastal → jewel (Round the Island first, then Dinard).
+  uk: ['race-round-island', 'race-cowes-dinard', 'race-fastnet'],
   med: ['race-malta-syracuse', 'race-middle-sea', 'race-giraglia'],
   caribbean: ['race-antigua-360', 'race-caribbean-600'],
-  usEast: ['race-annapolis-newport', 'race-newport-bermuda', 'race-block-island', 'race-marion-bermuda'],
+  // usEast leads with the gentle 183nm coastal, not a 475nm offshore passage —
+  // a deliberate home-race change (only the recommendation shifts; nothing lost).
+  usEast: ['race-block-island', 'race-annapolis-newport', 'race-newport-bermuda', 'race-marion-bermuda'],
   usWest: ['race-islands-race', 'race-transpac', 'race-swiftsure', 'race-r2ak', 'race-ensenada', 'race-van-isle'],
   greatLakes: ['race-tri-state', 'race-chicago-mac', 'race-bayview-mac'],
   ausNz: ['race-cabbage-tree', 'race-sydney-hobart', 'race-sydney-goldcoast'],

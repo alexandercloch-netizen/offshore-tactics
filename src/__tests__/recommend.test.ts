@@ -75,7 +75,9 @@ describe('recommendedRace', () => {
   });
 
   it('picks the UK home-port classic for a UK sailor at the start', () => {
-    expect(recommendedRace(player('uk'), [])?.id).toBe('race-cowes-dinard');
+    // Round the Island now leads the UK list — the Inshore on-ramp before the
+    // 151nm Channel crossing (the six-lens journey review's re-seat).
+    expect(recommendedRace(player('uk'), [])?.id).toBe('race-round-island');
   });
 
   it('moves on to a fresh race once the home ones are won', () => {

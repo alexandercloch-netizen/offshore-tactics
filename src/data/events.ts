@@ -1151,6 +1151,39 @@ export const GENERIC_EVENTS: GameEvent[] = [
     ],
   },
   {
+    id: 'evt-rg-carib-guadeloupe',
+    title: 'The Soufrière\'s Shadow',
+    prompt:
+      'Guadeloupe is the race\'s great graveyard: a wind shadow two thousand metres tall and fifteen miles long, with parked fleets to prove it. Inside is short; outside is alive.',
+    kind: 'tactical',
+    regions: ['race-caribbean-600'],
+    conditions: ['light', 'moderate'],
+    choices: [
+      {
+        id: 'evt-rg-carib-guadeloupe-in',
+        label: 'Cut the corner under the volcano',
+        description: 'The short lane through the lee — genius when the puffs roll down, a car park when they don\'t.',
+        timeDelta: -0.8,
+        staminaDelta: -4,
+        moraleDelta: 3,
+        hullDelta: 0,
+        risk: 0.3,
+        field: true,
+        crewSkill: 'Navigator',
+      },
+      {
+        id: 'evt-rg-carib-guadeloupe-out',
+        label: 'Stand offshore of the shadow',
+        description: 'Sail the extra miles where the trade never stops blowing.',
+        timeDelta: 0.2,
+        staminaDelta: -2,
+        moraleDelta: 0,
+        hullDelta: 0,
+        risk: 0.06,
+      },
+    ],
+  },
+  {
     id: 'evt-rg-carib-shadowslot',
     title: 'The Island Slot',
     prompt:
@@ -3419,6 +3452,70 @@ export const FOLLOWON_EVENTS: GameEvent[] = [
       },
     ],
   },
+  {
+    id: 'evt-fo2-squall-run',
+    title: 'The Next Line Forms',
+    prompt:
+      'You bet the Michigan shore, and the lake\'s afternoon line is bearing down on your lane — hard-edged cells, forty degrees of shift on their faces, flat spots behind.',
+    kind: 'weather',
+    followsFrom: 'huron-shore',
+    choices: [
+      {
+        id: 'evt-fo2-squall-run-again',
+        label: 'Line up and ride it too',
+        description: 'The same play twice — the crew knows the drill now, and so does the load on the gear.',
+        timeDelta: -0.6,
+        staminaDelta: -6,
+        moraleDelta: 2,
+        hullDelta: -4,
+        risk: 0.26,
+        field: true,
+        crewSkill: 'Tactician',
+      },
+      {
+        id: 'evt-fo2-squall-run-bank',
+        label: 'Bank the gain, duck this one',
+        description: 'One ride was profit; two is greed. Slip behind the line and keep what you made.',
+        timeDelta: 0.2,
+        staminaDelta: -2,
+        moraleDelta: 0,
+        hullDelta: 0,
+        risk: 0.07,
+      },
+    ],
+  },
+  {
+    id: 'evt-fo2-cape-seaway',
+    title: 'The Sea the River Built',
+    prompt:
+      'You spent the crew shooting the Narrows, and the west coast is presenting its bill early — the cape\'s acceleration zone ahead, and a sea to match, short and steep on the quarter.',
+    kind: 'weather',
+    followsFrom: 'narrows-spent',
+    choices: [
+      {
+        id: 'evt-fo2-cape-seaway-drive',
+        label: 'Keep her driving through it',
+        description: 'Hand-steer the surfs and hold the river — brutal on the helm, brilliant on the log.',
+        timeDelta: -0.6,
+        staminaDelta: -8,
+        moraleDelta: 3,
+        hullDelta: -4,
+        risk: 0.26,
+        field: true,
+        crewSkill: 'Skipper',
+      },
+      {
+        id: 'evt-fo2-cape-seaway-ease',
+        label: 'Ease out to kinder water',
+        description: 'Trade the last of the acceleration for a sea the autopilot can steer.',
+        timeDelta: 0.2,
+        staminaDelta: -3,
+        moraleDelta: 1,
+        hullDelta: 0,
+        risk: 0.08,
+      },
+    ],
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -4057,6 +4154,96 @@ export const HAZARD_EVENTS: Record<HazardKey, GameEvent> = {
       },
     ],
   },
+  lake_squall: {
+    id: 'evt-hz-lakesquall',
+    title: 'The Afternoon Line',
+    prompt:
+      'A squall line is building down the lake with the afternoon heat — hard-edged cells, forty degrees of shift on their faces, flat spots behind. Use them or dodge them?',
+    kind: 'hazard',
+    hazard: 'lake_squall',
+    pinToWaypoint: 'Thunder Bay offing',
+    storyBeat: 'race-bayview-mac',
+    choices: [
+      {
+        id: 'evt-hz-lakesquall-ride',
+        label: 'Ride the cells\' faces',
+        description: 'Gybe onto each line as it comes and surf the pressure — hero miles if the timing holds.',
+        timeDelta: -1.1,
+        staminaDelta: -9,
+        moraleDelta: 4,
+        hullDelta: -6,
+        risk: 0.36,
+        field: true,
+        crewSkill: 'Tactician',
+      },
+      {
+        id: 'evt-hz-lakesquall-thread',
+        label: 'Thread between the lines',
+        description: 'Take the lanes of steady air between the cells — modest gains, manageable drama.',
+        timeDelta: -0.1,
+        staminaDelta: -4,
+        moraleDelta: 1,
+        hullDelta: -1,
+        risk: 0.2,
+        crewSkill: 'Tactician',
+      },
+      {
+        id: 'evt-hz-lakesquall-reef',
+        label: 'Shorten down and let them pass',
+        description: 'Reef early, sail your own lake, and let the gamblers have their swim.',
+        timeDelta: 0.6,
+        staminaDelta: -2,
+        moraleDelta: 0,
+        hullDelta: 0,
+        risk: 0.08,
+      },
+    ],
+  },
+  cape_wind: {
+    id: 'evt-hz-capewind',
+    title: 'The Cape\'s Acceleration',
+    prompt:
+      'The headland is bending the gradient into a river of pressure a few miles wide. Inside it the boat will fly — and so will the load on everything you own.',
+    kind: 'hazard',
+    hazard: 'cape_wind',
+    pinToWaypoint: 'Cape Scott',
+    storyBeat: 'race-van-isle',
+    choices: [
+      {
+        id: 'evt-hz-capewind-in',
+        label: 'Sail the acceleration zone',
+        description: 'Get into the river and stay there — maximum pressure, maximum load.',
+        timeDelta: -1.2,
+        staminaDelta: -8,
+        moraleDelta: 4,
+        hullDelta: -8,
+        risk: 0.36,
+        field: true,
+        crewSkill: 'Skipper',
+      },
+      {
+        id: 'evt-hz-capewind-edge',
+        label: 'Skirt the river\'s edge',
+        description: 'Carry most of the pressure at half the load, a mile outside the worst of it.',
+        timeDelta: -0.1,
+        staminaDelta: -5,
+        moraleDelta: 2,
+        hullDelta: -3,
+        risk: 0.2,
+        crewSkill: 'Skipper',
+      },
+      {
+        id: 'evt-hz-capewind-off',
+        label: 'Stand well off the cape',
+        description: 'Give the headland its searoom and keep the rig for the miles still to come.',
+        timeDelta: 0.7,
+        staminaDelta: -3,
+        moraleDelta: 0,
+        hullDelta: 0,
+        risk: 0.09,
+      },
+    ],
+  },
   ocean_high: {
     id: 'evt-hz-oceanhigh',
     title: 'The High Decides',
@@ -4316,7 +4503,7 @@ export const HAZARD_RACE_EVENTS: Record<string, GameEvent> = {
     prompt:
       'Night, and the gradient is going home with the sun. Catalina\'s black shoulder lies across the short road south — cut the corner through her lee and gamble on the land breeze, or stand offshore where the westerly still breathes?',
     kind: 'hazard',
-    hazard: 'island_lee',
+    hazard: 'island_accel',
     pinToWaypoint: 'Catalina West End', // the lee gamble — fired at the West End
     storyBeat: 'race-islands-race',
     choices: [
@@ -4459,7 +4646,7 @@ export const HAZARD_RACE_EVENTS: Record<string, GameEvent> = {
     prompt:
       'Thunder Bay is abeam and the lake is going to sleep with the sun. There is a rumour of night land breeze under the Michigan shore — and a shorter, emptier rhumb line up the middle.',
     kind: 'hazard',
-    hazard: 'light_air',
+    hazard: 'lake_squall',
     pinToWaypoint: 'Thunder Bay offing',
     storyBeat: 'race-bayview-mac',
     choices: [
@@ -4507,7 +4694,7 @@ export const HAZARD_RACE_EVENTS: Record<string, GameEvent> = {
     prompt:
       'Seymour Narrows gates the inside passage, and the west coast of the island — all 300 miles of it — waits beyond. Spend the crew shooting the last of the ebb, or bank the rest and take the next window?',
     kind: 'hazard',
-    hazard: 'tidal_rapids',
+    hazard: 'cape_wind',
     pinToWaypoint: 'Seymour Narrows',
     storyBeat: 'race-van-isle',
     choices: [
@@ -4696,7 +4883,7 @@ export const HAZARD_RACE_EVENTS: Record<string, GameEvent> = {
     prompt:
       'The satellite trace shows a warm meander bowing east across the rhumb — a two-knot conveyor, if you believe a three-day-old picture of a river that moves.',
     kind: 'hazard',
-    hazard: 'gulf_stream',
+    hazard: 'ocean_high',
     pinToWaypoint: 'Gulf Stream Crossing',
     storyBeat: 'race-marion-bermuda',
     choices: [

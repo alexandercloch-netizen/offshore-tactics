@@ -29,7 +29,9 @@ export type HazardKey =
   | 'eac_coastal'
   | 'strait_fog'
   | 'monsoon_squall'
-  | 'ocean_high';
+  | 'ocean_high'
+  | 'lake_squall'
+  | 'cape_wind';
 
 export type WaypointType = 'start' | 'turn' | 'island' | 'mark' | 'finish';
 

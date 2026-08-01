@@ -101,6 +101,12 @@ const HAZARD_WEATHER_BIAS: Record<HazardKey, Partial<Record<string, number>>> = 
   // trades round the edge — the race is won by how much of the light stuff you
   // let it feed you.
   ocean_high: { 'wx-calm': 2, 'wx-light': 2.5, 'wx-moderate': 1.5, 'wx-fresh': 1.2, 'wx-gale': 0.3 },
+  // Huron serves champagne and a squall line in the same afternoon — a working
+  // lake with hard edges, calm only after dark.
+  lake_squall: { 'wx-moderate': 2, 'wx-fresh': 2, 'wx-calm': 1.5, 'wx-gale': 0.5 },
+  // The exposed cape: real pressure most days, a genuine blow often enough to
+  // respect, flat calm almost never.
+  cape_wind: { 'wx-fresh': 2, 'wx-strong': 1.8, 'wx-moderate': 1.5, 'wx-calm': 0.6 },
 };
 
 function weightedPick(weights: Record<string, number>): WeatherCondition {
