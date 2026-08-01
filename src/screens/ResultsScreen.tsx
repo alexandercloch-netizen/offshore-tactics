@@ -202,6 +202,13 @@ export const ResultsScreen: React.FC<Props> = ({ navigation }) => {
         ) : null}
       </View>
 
+      {result.storyDebrief ? (
+        <View style={styles.summaryCard} testID="results-debrief">
+          <Text style={styles.storyTitle}>The Story of the Race</Text>
+          <Text style={styles.summary}>{result.storyDebrief}</Text>
+        </View>
+      ) : null}
+
       {newHonours.length > 0 ? (
         <View style={styles.honoursCard} testID="results-new-honours">
           <Text style={styles.honoursKicker}>New Honours</Text>
@@ -245,13 +252,6 @@ export const ResultsScreen: React.FC<Props> = ({ navigation }) => {
       {finishLine ? (
         <View style={styles.finishLineCard} testID="finish-debrief-line">
           <Text style={styles.finishLineText}>{finishLine}</Text>
-        </View>
-      ) : null}
-
-      {result.storyDebrief ? (
-        <View style={styles.summaryCard} testID="results-debrief">
-          <Text style={styles.storyTitle}>The Story of the Race</Text>
-          <Text style={styles.summary}>{result.storyDebrief}</Text>
         </View>
       ) : null}
 

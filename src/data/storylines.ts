@@ -38,6 +38,8 @@ export const STORYLINES: Storyline[] = [
         kind: 'debrief',
         outcome: 'bold',
         body: 'You carried sail and drove her round the Rock with the rail down and water over the deck. Bold, and it bought you miles on the boats that flinched — but the boat and the crew wear the marks of it all the way to Cherbourg.',
+        bustBody:
+          'You drove at the Rock with everything standing and the Celtic Sea called it — a night of green water and load alarms, the wardrobe one blown seam from a very long swim home. You rounded, in the end, on a boat that had aged a season in a watch.',
       },
       {
         kind: 'debrief',
@@ -74,6 +76,8 @@ export const STORYLINES: Storyline[] = [
         kind: 'debrief',
         outcome: 'bold',
         body: 'You committed to the eddy, sailed the extra miles, and hooked the warm push toward Bermuda. When the current is with you it feels like cheating — the log reading nonsense and the miles to St David\'s melting away.',
+        bustBody:
+          'You bet east on the warm eddy and found cold water — the thermometer never moved, the current never came, and the miles you spent hunting it are on the wrong side of the ledger. The Stream keeps its rivers where it pleases.',
       },
       {
         kind: 'debrief',
@@ -110,6 +114,8 @@ export const STORYLINES: Storyline[] = [
         kind: 'debrief',
         outcome: 'bold',
         body: 'You drove her straight into the change, punching the breaking seas for every yard. Brutal on the boat and brutal on the crew — but you held your line through the Strait while others bore away, and that is how Hobart is won.',
+        bustBody:
+          'You punched into the change and the Strait charged full rate — hours of upwind punishment for miles the fleet made back the moment the pressure evened out. The Buster was not impressed, and the boat has the bruises to prove it.',
       },
       {
         kind: 'debrief',
@@ -146,6 +152,8 @@ export const STORYLINES: Storyline[] = [
         kind: 'debrief',
         outcome: 'bold',
         body: 'You sent it at the gate and shot the Needles on the dying ebb, the fleet behind you sliding to a halt as the stream turned. Timed to the minute — the back of the island opened up clear and you were gone before they could follow.',
+        bustBody:
+          'You shot for the Needles gate and the tide table won — the stream turned early and stood the overfalls up in your face, the fleet\'s sterns disappearing west while you clawed past the wreck at two knots over the ground. The gate does not negotiate.',
       },
       {
         kind: 'debrief',
@@ -182,6 +190,8 @@ export const STORYLINES: Storyline[] = [
         kind: 'debrief',
         outcome: 'bold',
         body: 'You cut inside the Manitous and the gamble held — the breeze stayed in the passage and you banked the miles in flat water while the outside boats sailed the long way round. The short road paid, and you came out the top end with a lead.',
+        bustBody:
+          'You took the inside line past the Manitous and the islands took their toll — the night breeze you were promised never made it down the passage, and you sat in the shadow watching mastheads slide by outside. The lake keeps its own counsel.',
       },
       {
         kind: 'debrief',
@@ -218,6 +228,8 @@ export const STORYLINES: Storyline[] = [
         kind: 'debrief',
         outcome: 'bold',
         body: 'You committed to the ribbon and the stream took you — Messina flushed you north past Scylla like a cork from a bottle, the log reading speeds the wind alone could never make. A current-rider\'s passage of the strait, and miles banked toward Stromboli.',
+        bustBody:
+          'You went at Messina on your own arithmetic and the strait had different numbers — the stream turned while you were still mid-channel, and Scylla and Charybdis charged you both tolls. The old monsters are patient. They can afford to be.',
       },
       {
         kind: 'debrief',
@@ -254,6 +266,8 @@ export const STORYLINES: Storyline[] = [
         kind: 'debrief',
         outcome: 'bold',
         body: 'You dove south and committed to the pressure, and the trades filled in hard and stayed — a sleigh ride the whole way down, surfing under the kite while the rhumb-line boats withered at the edge of the High. The long road around the High was the fast one.',
+        bustBody:
+          'You dove south for the promised pressure and bought nothing but distance — the trades filled late and filled everywhere, and the great-circle boats got the same wind without the detour. The High forgives nobody\'s extra miles.',
       },
       {
         kind: 'debrief',
@@ -290,6 +304,8 @@ export const STORYLINES: Storyline[] = [
         kind: 'debrief',
         outcome: 'bold',
         body: 'You shot Seymour on the last of the ebb, the current flinging you through the slot faster than the boat has ever sailed, walls of whirling water either side. Heart-in-mouth and perfectly timed — you were through and gone while the cautious crews were still waiting on slack.',
+        bustBody:
+          'You sent it at the Narrows on the last of the ebb and the gate called your bluff — the flood arrived early and stood you still mid-channel, sixteen knots of somewhere else\'s water deciding your afternoon. The tree and its ten thousand dollars got further away.',
       },
       {
         kind: 'debrief',
@@ -326,6 +342,8 @@ export const STORYLINES: Storyline[] = [
         kind: 'debrief',
         outcome: 'bold',
         body: 'You sailed high into the Saba funnel and the gust hit like a wall — the boat lit up, rail down, log spinning, miles carved out of the fleet in a few screaming minutes. You rode the acceleration zone for everything it had and came out the far side ahead.',
+        bustBody:
+          'You loaded up for the funnel and the funnel won — a gust off Saba\'s shoulder that put the rail under and the kite in ribbons, and after that you sailed the trade like everyone else, minus one sail and a layer of pride.',
       },
       {
         kind: 'debrief',
@@ -362,6 +380,8 @@ export const STORYLINES: Storyline[] = [
         kind: 'debrief',
         outcome: 'bold',
         body: 'You shot the Alderney Race on the last of the fair stream and it flung you down past the Casquets toward Les Hanois like a thing possessed, the log reading numbers the wind never made. The boats that hesitated met the turn in the gap — and stopped. That is how Dinard races have been won for a century.',
+        bustBody:
+          'You bet the crossing on the Alderney Race and arrived to find the door already swinging shut — the first of the foul stream boiling back through the gap, the Casquets flashing their told-you-so. You got through, eventually. So did everyone behind you, faster.',
       },
       {
         kind: 'debrief',
@@ -398,6 +418,8 @@ export const STORYLINES: Storyline[] = [
         kind: 'debrief',
         outcome: 'bold',
         body: 'You sailed away from the rhumb and out into the dark water, and the pressure held — the boat slipping along all night while the short-line fleet sat slatting on the glass behind you. St. Joe\'s pierhead lights came up before dawn, and the hard miles were the fast ones.',
+        bustBody:
+          'You committed offshore after the darker water and it was a mirage — the pressure line dissolved as you reached it, and the rhumb-line boats ghosted past on air you had given away for nothing. The lake shut down without paying you.',
       },
       {
         kind: 'debrief',
@@ -434,6 +456,8 @@ export const STORYLINES: Storyline[] = [
         kind: 'debrief',
         outcome: 'bold',
         body: 'You cut in under Capo Murro di Porco and the cape let you pass — katabatic breaths off the cliffs walking you along the short road while the wide boats sailed their insurance miles. You carried your way round the corner and into Siracusa with the race in hand. The locals will say you sailed it like one of them.',
+        bustBody:
+          'You shaved Capo Murro for the short corner and the cape took its cut — the shadow reached further than the chart suggested, and the wide boats carried their sea breeze past while you drifted under the headland\'s silence.',
       },
       {
         kind: 'debrief',
@@ -470,6 +494,8 @@ export const STORYLINES: Storyline[] = [
         kind: 'debrief',
         outcome: 'bold',
         body: 'You eased into the ship channel and let the ebb do the racing — the land sliding by while the boats parked either side of the lanes shrank astern. By the time the flood turned, you were at sea in the new breeze with the bay closed behind you. The one moving road out of the parking lot, and you took it.',
+        bustBody:
+          'You ghosted into the ship channel to ride the ebb and the Bay called slack early — no current, no wind, just a parked boat between buoys while the patient fleet found the first of the new southerly outside. The Bay pays whom it pleases.',
       },
       {
         kind: 'debrief',
@@ -506,6 +532,8 @@ export const STORYLINES: Storyline[] = [
         kind: 'debrief',
         outcome: 'bold',
         body: 'You dove into the lee and the island was kind — cat\'s-paws off the hills handing you along the short road while the offshore boats sailed their big, honest miles in the trade. You slipped past Cades Reef with the lap sewn up and ghosted into English Harbour ahead of boats that never stopped moving. Robbery, done politely.',
+        bustBody:
+          'You dived deep into the lee for the short water and the island closed its hand — glassy calm under the cliffs while the offshore boats carried their breeze around you. Robbery was attempted. The island pressed charges.',
       },
       {
         kind: 'debrief',
@@ -542,6 +570,8 @@ export const STORYLINES: Storyline[] = [
         kind: 'debrief',
         outcome: 'bold',
         body: 'You hugged the beach the whole way north, surf on the beam and the depth sounder honest, cheating the river out of every southbound yard while the offshore boats paid their knot to the ocean. You rounded Cabbage Tree with a lead the current built for you — and turned south to let it carry you home.',
+        bustBody:
+          'You hugged the beach out of the current and found the current\'s little brother — holes and headers under the cliffs while the offshore fleet paid the EAC\'s toll and kept their wind. Some tolls are cheaper than the detour.',
       },
       {
         kind: 'debrief',
@@ -578,6 +608,8 @@ export const STORYLINES: Storyline[] = [
         kind: 'debrief',
         outcome: 'bold',
         body: 'You cut the corner through Catalina\'s lee and the island breathed for you — a thread of land breeze off the hills walking the boat through the dark while the offshore fleet sailed the long way round in the dying westerly. You came out the far side with miles in the bank and San Clemente next on the list.',
+        bustBody:
+          'You cut the corner into Catalina\'s shadow and the shadow was home — an hour of slatting sails under the dark loom of the island while the seaward fleet sailed round you in pressure you had declined. The lee always looks shorter than it is.',
       },
       {
         kind: 'debrief',
@@ -614,6 +646,8 @@ export const STORYLINES: Storyline[] = [
         kind: 'debrief',
         outcome: 'bold',
         body: 'You ran into the grey on the numbers, called the Bank close aboard without ever seeing it, and came round onto the fair stream as the ebb\'s last hour drained east — the flood carrying you up the strait while the fleet behind waited for eyes. A blind rounding, perfectly plotted: the kind Swiftsure legends are made of.',
+        bustBody:
+          'You ran the fog blind on the instruments and the instruments were honest about it: you overstood the Bank in a white room, and the horn you finally heard was a boat that had already rounded. Faith is a heading, not a fix.',
       },
       {
         kind: 'debrief',
@@ -650,6 +684,8 @@ export const STORYLINES: Storyline[] = [
         kind: 'debrief',
         outcome: 'bold',
         body: 'You gave the rock searoom and sailed out into the dark after a rumour of wind — and found it, heeling to the night gradient while the inshore boats sat mirrored under Cap Corse. The long way round the Giraglia was the short way to Genoa.',
+        bustBody:
+          'You sailed out into the dark after a rumour of wind and it stayed a rumour — the night gradient filled inshore instead, along the very cliffs you had left behind, and Genoa got further away with every patient offshore mile.',
       },
       {
         kind: 'debrief',
@@ -687,6 +723,8 @@ export const STORYLINES: Storyline[] = [
         kind: 'debrief',
         outcome: 'bold',
         body: 'You went beach-crawling in the dark, boat-length by boat-length through the back-eddies while the offshore boats paid their two knots. It took nerve and a depth sounder — and it bought you the cape while the fleet fought the river.',
+        bustBody:
+          'You threaded the beach eddies in the dark and the beach kept the change — back-eddies that were really just holes, a bar\'s worth of confused water, and the offshore boats paying the current and banking the breeze all night long.',
       },
       {
         kind: 'debrief',
@@ -723,6 +761,8 @@ export const STORYLINES: Storyline[] = [
         kind: 'debrief',
         outcome: 'bold',
         body: 'You carried sail into the squall and took the ride — rail buried, helm loaded, the log touching numbers the boat may never see again. It spat you out ahead of the fleet and slightly bent, which around here is called a good trade.',
+        bustBody:
+          'You carried sail into the squall line and the squall line carried some of it away — a knockdown, a shredded luff, and the hole behind the cell swallowing whatever the surf had gained. The monsoon posts its terms in advance.',
       },
       {
         kind: 'debrief',
@@ -759,6 +799,8 @@ export const STORYLINES: Storyline[] = [
         kind: 'debrief',
         outcome: 'bold',
         body: 'You committed to the arc and sailed the extra hundred miles with the trade never dropping below a working breeze. The rhumb-line boats parked in the ridge and watched their water run low; you came round the outside with the kite up the whole way to Brazil.',
+        bustBody:
+          'You arced wide around the ridge and the ridge came with you — the High slumped south as you did, and the pressure you sailed for stayed a forecast. Extra miles, ordinary wind, and the rhumb-line boats never knew you had gone.',
       },
       {
         kind: 'debrief',
@@ -795,6 +837,8 @@ export const STORYLINES: Storyline[] = [
         kind: 'debrief',
         outcome: 'bold',
         body: 'You closed the shore in the dark and the land breeze came down off the dunes like a favour — a private six knots while the mid-lake fleet sat on a mirror. By dawn you were gone, and the rhumb-line boats were still explaining the night to each other.',
+        bustBody:
+          'You closed the Michigan shore for the night drain and the dunes slept in — flat water, dead air, and the mid-lake fleet ghosting north on the rumour\'s other half. The land breeze is a gift, not a wage.',
       },
       {
         kind: 'debrief',
@@ -831,6 +875,8 @@ export const STORYLINES: Storyline[] = [
         kind: 'debrief',
         outcome: 'bold',
         body: 'You shot the closing gate at full stretch and the Narrows slung you into Johnstone Strait ahead of the tide and the fleet. The price came due off Cape Scott, where the Pacific met a crew already spent — but the miles were banked, and miles are what this lap is made of.',
+        bustBody:
+          'You spent the crew shooting the closing gate and the gate shut anyway — spat back into the holding pool to wait like everyone else, minus the reserves you burned proving the tide table right. The west coast collected the balance later.',
       },
       {
         kind: 'debrief',
@@ -867,6 +913,8 @@ export const STORYLINES: Storyline[] = [
         kind: 'debrief',
         outcome: 'bold',
         body: 'You cut inside the islands and the night air held — barely, a whisper down the channel that kept the boat sliding while the offshore boats sailed their insurance miles. The shortest road to Ensenada, sailed on nerve and a depth contour.',
+        bustBody:
+          'You threaded inside the Coronados at midnight and the islands were waiting — the gradient died in their shadow and left you drifting under bare stars, margarita money sailing past a mile to seaward. The inside lane is only short when it moves.',
       },
       {
         kind: 'debrief',
@@ -903,6 +951,8 @@ export const STORYLINES: Storyline[] = [
         kind: 'debrief',
         outcome: 'bold',
         body: 'You took the centre of the gate at full ebb — green water over the bow, the log reading tide-assisted nonsense — and The Race slung you out toward Block Island ahead of everything that flinched. The foredeck may forgive you by Sunday.',
+        bustBody:
+          'You rode The Race\'s sluice a half-hour late and the overfalls collected — a standing wall of water that stopped the boat like a hand on the chest, four knots of yesterday\'s transport running the wrong way. The gate keeps its own clock.',
       },
       {
         kind: 'debrief',
@@ -939,6 +989,8 @@ export const STORYLINES: Storyline[] = [
         kind: 'debrief',
         outcome: 'bold',
         body: 'You ghosted down the Vestfold shore after the drainage breeze and it came — a cat\'s-paw, then a whisper, then two honest knots while the fleet at the light hung mirrored. In a race sailed at steerage way, two knots is a gale, and you owned it.',
+        bustBody:
+          'You ghosted down the Vestfold shore chasing drainage air that never drained — the pale night hung windless over the whole fjord, and the eastern boats kept the old southerly you had traded away. At one knot, wrong is forever.',
       },
       {
         kind: 'debrief',
@@ -975,6 +1027,8 @@ export const STORYLINES: Storyline[] = [
         kind: 'debrief',
         outcome: 'bold',
         body: 'You bought the miles east and the meander was there — the thermometer spiking, the current under the keel, Bermuda arriving two knots faster than the wind alone could manage. An old picture, a live river, and a navigator who will dine on this for years.',
+        bustBody:
+          'You chased the meander on a three-day-old picture and the river had moved on — cold water where the conveyor should have run, and the miles east bought nothing but distance. The Stream is a rumour that redraws itself nightly.',
       },
       {
         kind: 'debrief',
