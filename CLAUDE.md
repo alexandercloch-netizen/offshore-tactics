@@ -378,6 +378,27 @@ missing piece fails loudly — `npm run tsc` and `npm test` are your checklist.
   never take (they auto-take `choices[0]`). (3) Per-race content
   (`HAZARD_RACE_EVENTS`, `STORYLINES`) is keyed by race id and can't leak.
 
+**Add a regatta/series** — the multi-day layer (Cowes Week is the worked
+example). A series is DATA + the PURE REDUCER + display; the engine never learns
+it exists. Append a `Series` to `src/data/series.ts` (member race ids in sailing
+order, `entryFee` charged ONCE at `ENTER_SERIES`, `prizeMoney` paid to the
+overall winner at completion) and author each member day as an ordinary `Race`
+in `races.ts` carrying `seriesId` — member days are hidden from the open race
+list, the recommender and the weekly spotlight (all filter on `seriesId`), and
+their division `entryFee`/`prizeMoney` are 0 (`series.test.ts` enforces it: the
+series carries the money). Scoring is low-point over stored results
+(`engine/series.ts`): `buildResult` captures `correctedOrder` on member days,
+`seriesStandings` derives the table (DNC/DNF = entrants+1, one discard once
+every day is sailed — possible because the AI fleet's names are deterministic by
+index, so the roster coincides day to day), and the `FINISH_RACE` reducer case
+folds day → progress → completion (purse + `career.seriesWins`, both honouring
+Free Sailing). Content floors: bookend days carry the storyline + pinned
+signature (with `bustBody`); mid-week days may be LITE (everyday + series-tagged
+local events only) by listing them in `SERIES_LITE_MEMBER_IDS` — contentDepth
+and storyline tests exempt exactly that set. Tag series-local events with the
+member race ids (never a golden region key). Bake coastlines/climatology for the
+new ids with the byte-for-byte restore of every existing entry, as always.
+
 **Add a boat** — append a `Boat` to `src/data/boats.ts` with a non-zero
 `crewCapacity` (or the crew screen blocks signing), a price, `baseSpeed`, and
 0–100 `upwind`/`downwind`/`stability`. Give it a realistic `ratingTcc` (IRC-style

@@ -16,6 +16,7 @@ import AuthScreen from '../screens/AuthScreen';
 import AuthGateScreen from '../screens/AuthGateScreen';
 import LeaderboardScreen from '../screens/LeaderboardScreen';
 import RaceSelectScreen from '../screens/RaceSelectScreen';
+import SeriesHubScreen from '../screens/SeriesHubScreen';
 import BoatSelectScreen from '../screens/BoatSelectScreen';
 import CrewSelectScreen from '../screens/CrewSelectScreen';
 import ProvisioningScreen from '../screens/ProvisioningScreen';
@@ -129,6 +130,11 @@ export const AppNavigator: React.FC = () => {
           name="RaceSelect"
           component={RaceSelectScreen}
           options={{ title: 'Select a Race' }}
+        />
+        <Stack.Screen
+          name="SeriesHub"
+          component={SeriesHubScreen}
+          options={{ title: 'Regatta' }}
         />
         <Stack.Screen
           name="BoatSelect"

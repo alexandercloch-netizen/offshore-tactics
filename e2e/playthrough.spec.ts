@@ -223,6 +223,17 @@ test('a full race can be played from start to finish in the cockpit', async ({ p
   await expect(page.getByText('Free Sailing', { exact: true })).toHaveCount(2);
   await page.getByText('Campaign', { exact: true }).first().click();
   await expect(page.getByText('Free Sailing', { exact: true })).toHaveCount(1);
+  // --- The regatta layer: Cowes Week is one card, a hub, and a week ---------
+  // Back out to the race list: the series card opens the hub; entering the week
+  // arms Day 1, whose "Sail" button drops into the ordinary setup funnel.
+  await page.getByText('Race', { exact: true }).first().click();
+  await page.getByRole('button', { name: 'Browse All Races' }).click();
+  await page.getByTestId('series-card-series-cowes-week').click();
+  await expect(page.getByTestId('series-hub')).toBeVisible();
+  await page.getByRole('button', { name: /Enter the Week/ }).click();
+  await page.getByRole('button', { name: /Sail Day 1/ }).click();
+  await page.getByRole('button', { name: 'Continue to Crew' }).isVisible();
+
   await page.getByTestId('view-trophy-case').click();
   await expect(page.getByTestId('trophy-case')).toBeVisible({ timeout: 10_000 });
   // First Blood is earned, so its tile shows without expanding the locked goals.
