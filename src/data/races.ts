@@ -774,7 +774,7 @@ export const RACES: Race[] = [
     season: 'June',
     unlockAfter: 'race-malta-syracuse',
     waypoints: [
-      { name: 'Saint-Tropez (Start)', lat: 43.27, lon: 6.66, type: 'start' },
+      { name: 'Saint-Tropez (Start)', lat: 43.2783, lon: 6.66, type: 'start' },
       { name: 'Cap Camarat offing', lat: 43.17, lon: 6.75, type: 'turn' },
       { name: 'Ligurian Sea', lat: 43.05, lon: 8.1, type: 'turn' },
       { name: 'Giraglia Rock', lat: 43.05, lon: 9.42, type: 'island' },
@@ -843,7 +843,7 @@ export const RACES: Race[] = [
     season: 'April',
     unlockAfter: 'race-sydney-hobart',
     waypoints: [
-      { name: 'Victoria Harbour (Start)', lat: 22.28, lon: 114.22, type: 'start' },
+      { name: 'Victoria Harbour (Start)', lat: 22.2865, lon: 114.2461, type: 'start' },
       { name: 'Tathong Channel', lat: 22.22, lon: 114.3, type: 'turn' },
       { name: 'Lema Channel offing', lat: 21.9, lon: 114.75, type: 'turn' },
       { name: 'Mid-Channel (South China Sea)', lat: 19.8, lon: 116.9, type: 'turn' },
@@ -998,7 +998,7 @@ export const RACES: Race[] = [
       { name: 'Dana Point offing', lat: 33.35, lon: -117.75, type: 'turn' },
       { name: 'San Diego offing', lat: 32.6, lon: -117.45, type: 'turn' },
       { name: 'Islas Coronados', lat: 32.35, lon: -117.4, type: 'island' },
-      { name: 'Ensenada (Finish)', lat: 31.86, lon: -116.63, type: 'finish' },
+      { name: 'Ensenada (Finish)', lat: 31.852, lon: -116.6275, type: 'finish' },
     ],
     divisions: {
       corinthian: { entryFee: 350, prizeMoney: 2500, fleetSize: 32, paceTarget: 1.32 },
@@ -1108,7 +1108,7 @@ export const RACES: Race[] = [
       gates: [{ waypoint: 'Gulf Stream Crossing', gain: 1.0, radiusNm: 60 }],
     },
     waypoints: [
-      { name: 'Marion (Start)', lat: 41.69, lon: -70.75, type: 'start' },
+      { name: 'Marion (Start)', lat: 41.6817, lon: -70.7307, type: 'start' },
       { name: 'Buzzards Bay exit', lat: 41.42, lon: -71.02, type: 'turn' },
       { name: 'Continental Shelf', lat: 40.2, lon: -69.9, type: 'turn' },
       { name: 'Gulf Stream Crossing', lat: 38.5, lon: -68.3, type: 'turn' },
@@ -1139,16 +1139,16 @@ export const RACES: Race[] = [
     season: 'August',
     tide: {
       floodDeg: 90,
-      peakRateKn: 1.5,
-      gates: [{ waypoint: 'Bramble Bank', gain: 0.6, radiusNm: 3 }],
+      peakRateKn: 0.9,
+      gates: [{ waypoint: 'Bramble Bank', gain: 0.35, radiusNm: 2 }],
     },
     waypoints: [
-      { name: 'RYS Line (Start)', lat: 50.7646, lon: -1.3005, type: 'start' },
+      { name: 'RYS Line (Start)', lat: 50.7946, lon: -1.2835, type: 'start' },
       { name: 'Bramble Bank', lat: 50.7933, lon: -1.3183, type: 'mark' },
       { name: 'Hill Head', lat: 50.8095, lon: -1.243, type: 'mark' },
       { name: 'Ryde Middle', lat: 50.7625, lon: -1.1316, type: 'mark' },
       { name: 'Norris', lat: 50.7705, lon: -1.257, type: 'mark' },
-      { name: 'RYS Line (Finish)', lat: 50.7646, lon: -1.3005, type: 'finish' },
+      { name: 'RYS Line (Finish)', lat: 50.7946, lon: -1.2835, type: 'finish' },
     ],
     divisions: {
       corinthian: { entryFee: 0, prizeMoney: 0, fleetSize: 24, paceTarget: 1.3 },
@@ -1162,7 +1162,7 @@ export const RACES: Race[] = [
     location: 'The Solent, Isle of Wight',
     description:
       'The tide-runner\'s day: west with the ebb past Gurnard and Hamstead, back along the mainland shore by Lepe, and over the Bramble to the line.',
-    distanceNm: 24,
+    distanceNm: 25,
     difficulty: 'Inshore',
     recordTimeHours: 2.8,
     corinthianRating: 5,
@@ -1174,16 +1174,16 @@ export const RACES: Race[] = [
     season: 'August',
     tide: {
       floodDeg: 90,
-      peakRateKn: 1.5,
-      gates: [{ waypoint: 'Bramble Bank', gain: 0.6, radiusNm: 3 }],
+      peakRateKn: 0.9,
+      gates: [{ waypoint: 'Bramble Bank', gain: 0.35, radiusNm: 2 }],
     },
     waypoints: [
-      { name: 'RYS Line (Start)', lat: 50.7646, lon: -1.3005, type: 'start' },
+      { name: 'RYS Line (Start)', lat: 50.7946, lon: -1.2835, type: 'start' },
       { name: 'Gurnard Ledge', lat: 50.7525, lon: -1.4024, type: 'mark' },
       { name: 'Hamstead Ledge', lat: 50.698, lon: -1.5741, type: 'mark' },
       { name: 'Lepe Spit', lat: 50.7845, lon: -1.3525, type: 'mark' },
       { name: 'Bramble Bank', lat: 50.7933, lon: -1.3183, type: 'mark' },
-      { name: 'RYS Line (Finish)', lat: 50.7646, lon: -1.3005, type: 'finish' },
+      { name: 'RYS Line (Finish)', lat: 50.7946, lon: -1.2835, type: 'finish' },
     ],
     divisions: {
       corinthian: { entryFee: 0, prizeMoney: 0, fleetSize: 24, paceTarget: 1.3 },
@@ -1197,7 +1197,7 @@ export const RACES: Race[] = [
     location: 'The Solent, Isle of Wight',
     description:
       'East-about among the moored ships: Norris to Mother Bank, back up the Ryde Middle, and a Bramble crossing with the flood under you — or against you.',
-    distanceNm: 16,
+    distanceNm: 15,
     difficulty: 'Inshore',
     recordTimeHours: 2.2,
     corinthianRating: 5,
@@ -1209,16 +1209,16 @@ export const RACES: Race[] = [
     season: 'August',
     tide: {
       floodDeg: 90,
-      peakRateKn: 1.5,
-      gates: [{ waypoint: 'Bramble Bank', gain: 0.6, radiusNm: 3 }],
+      peakRateKn: 0.9,
+      gates: [{ waypoint: 'Bramble Bank', gain: 0.35, radiusNm: 2 }],
     },
     waypoints: [
-      { name: 'RYS Line (Start)', lat: 50.7646, lon: -1.3005, type: 'start' },
+      { name: 'RYS Line (Start)', lat: 50.7946, lon: -1.2835, type: 'start' },
       { name: 'Norris', lat: 50.7705, lon: -1.257, type: 'mark' },
       { name: 'Mother Bank', lat: 50.769, lon: -1.155, type: 'mark' },
       { name: 'Ryde Middle', lat: 50.7625, lon: -1.1316, type: 'mark' },
       { name: 'Bramble Bank', lat: 50.7933, lon: -1.3183, type: 'mark' },
-      { name: 'RYS Line (Finish)', lat: 50.7646, lon: -1.3005, type: 'finish' },
+      { name: 'RYS Line (Finish)', lat: 50.7946, lon: -1.2835, type: 'finish' },
     ],
     divisions: {
       corinthian: { entryFee: 0, prizeMoney: 0, fleetSize: 24, paceTarget: 1.3 },
@@ -1232,7 +1232,7 @@ export const RACES: Race[] = [
     location: 'The Solent, Isle of Wight',
     description:
       'A classic committee special: Bramble first in fresh company, the long fetch to Hill Head, then Gurnard against whatever the tide is doing to the island shore.',
-    distanceNm: 16,
+    distanceNm: 17,
     difficulty: 'Inshore',
     recordTimeHours: 1.9,
     corinthianRating: 5,
@@ -1244,15 +1244,15 @@ export const RACES: Race[] = [
     season: 'August',
     tide: {
       floodDeg: 90,
-      peakRateKn: 1.5,
-      gates: [{ waypoint: 'Bramble Bank', gain: 0.6, radiusNm: 3 }],
+      peakRateKn: 0.9,
+      gates: [{ waypoint: 'Bramble Bank', gain: 0.35, radiusNm: 2 }],
     },
     waypoints: [
-      { name: 'RYS Line (Start)', lat: 50.7646, lon: -1.3005, type: 'start' },
+      { name: 'RYS Line (Start)', lat: 50.7946, lon: -1.2835, type: 'start' },
       { name: 'Bramble Bank', lat: 50.7933, lon: -1.3183, type: 'mark' },
       { name: 'Hill Head', lat: 50.8095, lon: -1.243, type: 'mark' },
       { name: 'Gurnard Ledge', lat: 50.7525, lon: -1.4024, type: 'mark' },
-      { name: 'RYS Line (Finish)', lat: 50.7646, lon: -1.3005, type: 'finish' },
+      { name: 'RYS Line (Finish)', lat: 50.7946, lon: -1.2835, type: 'finish' },
     ],
     divisions: {
       corinthian: { entryFee: 0, prizeMoney: 0, fleetSize: 24, paceTarget: 1.3 },
@@ -1266,7 +1266,7 @@ export const RACES: Race[] = [
     location: 'The Solent, Isle of Wight',
     description:
       'Everything still to play for: the full Solent tour — Gurnard, the Bramble, the Ryde Middle bank and Norris — with the week\'s silverware decided at the Squadron line.',
-    distanceNm: 22,
+    distanceNm: 23,
     difficulty: 'Inshore',
     recordTimeHours: 2.6,
     corinthianRating: 5,
@@ -1278,16 +1278,16 @@ export const RACES: Race[] = [
     season: 'August',
     tide: {
       floodDeg: 90,
-      peakRateKn: 1.5,
-      gates: [{ waypoint: 'Bramble Bank', gain: 0.6, radiusNm: 3 }],
+      peakRateKn: 0.9,
+      gates: [{ waypoint: 'Bramble Bank', gain: 0.35, radiusNm: 2 }],
     },
     waypoints: [
-      { name: 'RYS Line (Start)', lat: 50.7646, lon: -1.3005, type: 'start' },
+      { name: 'RYS Line (Start)', lat: 50.7946, lon: -1.2835, type: 'start' },
       { name: 'Gurnard Ledge', lat: 50.7525, lon: -1.4024, type: 'mark' },
       { name: 'Bramble Bank', lat: 50.7933, lon: -1.3183, type: 'mark' },
       { name: 'Ryde Middle', lat: 50.7625, lon: -1.1316, type: 'mark' },
       { name: 'Norris', lat: 50.7705, lon: -1.257, type: 'mark' },
-      { name: 'RYS Line (Finish)', lat: 50.7646, lon: -1.3005, type: 'finish' },
+      { name: 'RYS Line (Finish)', lat: 50.7946, lon: -1.2835, type: 'finish' },
     ],
     divisions: {
       corinthian: { entryFee: 0, prizeMoney: 0, fleetSize: 24, paceTarget: 1.3 },

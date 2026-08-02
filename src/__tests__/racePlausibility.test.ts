@@ -175,3 +175,85 @@ describe('race plausibility — structural guardrail for every race', () => {
     expect(failures).toEqual([]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Made-good efficiency — the lived-run guard for SHORT courses. The Cowes Week
+// Day 1 balloon (13h42m sailed vs a ~2h optimal) came from three compounding
+// routing defects a route-only check can't see: the sub-2nm rhumb-into-the-no-go
+// shortcut, the no-go crawl at the speed floor, and the reroute lockout on a
+// losing board. A real headless run is cheap at this scale (~30 ticks), so every
+// short course must FINISH a seeded cruise within a sane multiple of its record.
+// Offshore courses are excluded purely on cost — the physics is shared, and the
+// goldens pin it there.
+// ---------------------------------------------------------------------------
+import { cleanRunHours, defaultStepNm, initialProgress, stepRace } from '../engine/gameEngine';
+import { createTidalField } from '../engine/current';
+import { GameState, StepResult } from '../types';
+
+const SHORT_COURSE_NM = 30;
+const LIVED_RECORD_MAX = 4; // lived cruise ≤ 4× the outright record
+const LIVED_SEEDS = [1, 2];
+
+describe('made-good efficiency (short courses)', () => {
+  const shorts = RACES.filter((r) => r.distanceNm <= SHORT_COURSE_NM);
+  it('found the short courses this guard exists for', () => {
+    expect(shorts.length).toBeGreaterThan(0);
+  });
+  shorts.forEach((race) => {
+    it(`${race.id}: a seeded cruise finishes within ${LIVED_RECORD_MAX}x the record`, () => {
+      const boat = getBoatById('boat-corsair')!;
+      for (const seed of LIVED_SEEDS) {
+        setRng(mulberry32(seed));
+        const field = createWindField(race);
+        const tidalField = createTidalField(race);
+        let state: GameState = {
+          funds: 0,
+          selectedRaceId: race.id,
+          selectedDivision: 'corinthian',
+          selectedBoatId: boat.id,
+          ownedBoatIds: [],
+          selectedCrewIds: [],
+          provisions: [],
+          strategy: { bias: 0, effort: 'cruise' },
+          profile: { fleet: [] },
+          condition: { hullIntegrity: 100, crewStamina: 100, crewMorale: 100 },
+          windField: field,
+          tidalField,
+          fleet: [],
+          progress: initialProgress(race, boat, 'corinthian', field),
+          history: [],
+          eventLog: [],
+        };
+        const stepNm = defaultStepNm(race);
+        let finished = false;
+        for (let i = 0; i < 1500; i += 1) {
+          const outcome: StepResult = stepRace(state, stepNm);
+          state = {
+            ...state,
+            progress: outcome.progress,
+            condition: outcome.condition,
+            weather: outcome.weather,
+            fleet: outcome.fleet,
+          };
+          // Decisions cannot fire (no eventLog draws matter here) — but if one
+          // does, take the safe first choice path by simply ignoring it: the
+          // sim holds nothing headlessly and the tick loop continues.
+          if (outcome.finished) {
+            finished = true;
+            break;
+          }
+          if (outcome.retired) break;
+        }
+        resetRng();
+        expect(finished).toBe(true);
+        const lived = state.progress!.elapsedHours;
+        expect(lived).toBeLessThanOrEqual(race.recordTimeHours * LIVED_RECORD_MAX);
+        // And the tide-free clean run agrees the course is sane at gameplay step.
+        setRng(mulberry32(seed));
+        const clean = cleanRunHours(race, boat, createWindField(race));
+        resetRng();
+        expect(clean).toBeLessThanOrEqual(race.recordTimeHours * LIVED_RECORD_MAX);
+      }
+    });
+  });
+});

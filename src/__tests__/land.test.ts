@@ -191,3 +191,22 @@ describe('the post-race debrief track stays off land', () => {
     }
   });
 });
+
+// Every waypoint must sit in NAVIGABLE WATER at the coastline's resolution — a
+// mark inside the land polygon starves the isochrone router (no node can ever
+// "fetch" a destination whose approach crosses land), which surfaces as a
+// wandering fallback route and a race that takes many times its record. The
+// Cowes Week RYS line authored on the Squadron's waterfront was exactly this;
+// place lines a few hundred metres into the fairway.
+describe('waypoints sit in navigable water (all races)', () => {
+  RACES.forEach((race) => {
+    it(`${race.name} anchors every mark in the water`, () => {
+      const land = LANDMASSES[race.id];
+      if (!land || land.length === 0) return; // open-ocean course
+      const aground = race.waypoints
+        .filter((w) => pointInLand(land, w.lat, w.lon))
+        .map((w) => w.name);
+      expect(aground).toEqual([]);
+    });
+  });
+});

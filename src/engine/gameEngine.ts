@@ -146,7 +146,14 @@ export function defaultStepNm(race: Race): number {
 // fleet is already tuned around). Dropping to 1× is a sound follow-up to land WITH
 // a fleet-pacing re-tune of its own. Plumbed through `cleanRunHours` as a one-line
 // parameter.
-const CLEAN_RUN_STEP_SCALE = 3;
+// Dropped from 3× to 1× with the no-go/routing physics fix: the coarse chunk's
+// documented upwind over-timing (+65% on a short beat) had been absorbed into
+// the fleet's tuning, and once the lived loop stopped crawling the no-go zone
+// even RECKLESS play beat the still-inflated benchmark (fleetTightness'
+// Fastnet case). At 1× the benchmark is the same physics the player sails;
+// FLEET_FRICTION alone pads par. Setup cost ~3× but still bounded (~100–300
+// ticks per race).
+const CLEAN_RUN_STEP_SCALE = 1;
 
 export function raceDivision(race: Race, division: DivisionKey): RaceDivision {
   return race.divisions[division];
@@ -555,13 +562,35 @@ export function cleanRunHours(
   let routePlannedAtNm = 0;
   for (let i = 0; i < 8000; i += 1) {
     const wind = sampleWind(field, pos.lat, pos.lon, elapsed);
+    // The same no-go rescue the live tick applies (see stepRace): a shift that
+    // pins the planned heading inside the no-go zone replans at once instead of
+    // crawling the speed floor — the benchmark must sail the same physics as
+    // the player or the fleet is paced to a defect.
+    if (
+      nextMarkIndex < marks.length &&
+      polarSpeed(boat, angularDelta(heading, wind.fromDeg), wind.speedKn) <= 0.2
+    ) {
+      const replan = planRoute(boat, field, pos, marks, nextMarkIndex, elapsed, 0, land, undefined, heading);
+      if (replan.length > 1) {
+        const h = brg(replan[0], replan[1]);
+        if (polarSpeed(boat, angularDelta(h, wind.fromDeg), wind.speedKn) > 0.2) {
+          route = replan;
+          heading = h;
+          routeWindDir = wind.fromDeg;
+          routePlannedAtNm = distanceCoveredNm;
+        }
+      }
+    }
     const speed = boatSpeedFor(boat, condition, heading, wind, effortMul, skillMul);
     const adv = advanceAlongRoute(route, step);
     pos = adv.pos;
     let rounded = false;
     if (nextMarkIndex < marks.length) {
       const m = marks[nextMarkIndex];
-      if (haversineNm(pos.lat, pos.lon, m.lat, m.lon) < Math.max(step, 1.5)) {
+      // Course-scaled radius, same rule as stepRace — the benchmark must round
+      // where the player rounds or the fleet sails a different course.
+      const radius = Math.max(step, Math.min(1.5, total * 0.03));
+      if (haversineNm(pos.lat, pos.lon, m.lat, m.lon) < radius) {
         nextMarkIndex += 1;
         rounded = true;
       }
@@ -580,7 +609,9 @@ export function cleanRunHours(
     if (nextMarkIndex >= marks.length || remaining < 0.5) break;
 
     route = adv.route;
-    const movedSincePlan = distanceCoveredNm - routePlannedAtNm;
+    // |Either way| — a losing board drops covered distance below the plan
+    // origin and the one-sided difference locked out the reroute (see stepRace).
+    const movedSincePlan = Math.abs(distanceCoveredNm - routePlannedAtNm);
     const shifted = angularDelta(wind.fromDeg, routeWindDir) > REROUTE_SHIFT_DEG;
     const wantReroute =
       rounded ||
@@ -588,7 +619,7 @@ export function cleanRunHours(
       (shifted && movedSincePlan > total * 0.03) ||
       movedSincePlan > total * 0.1;
     if (wantReroute) {
-      route = planRoute(boat, field, pos, marks, nextMarkIndex, elapsed, 0, land);
+      route = planRoute(boat, field, pos, marks, nextMarkIndex, elapsed, 0, land, undefined, heading);
       routeWindDir = wind.fromDeg;
       routePlannedAtNm = distanceCoveredNm;
     }
@@ -1437,14 +1468,24 @@ function advanceAlongRoute(route: GeoPoint[], distNm: number): Advance {
   return { pos: pts[0], heading, route: pts, passed };
 }
 
-function appendTrail(trail: GeoPoint[], points: GeoPoint[]): GeoPoint[] {
+// Land-aware decimation: the naive every-other-point halving drew chords
+// between formerly non-adjacent vertices, and in channel-threading water
+// (Van Isle's Sabine Channel) a chord can cut straight across an island the
+// sailed track carefully rounded. Keep the dropped midpoint whenever its
+// removal would put the drawn trail over land.
+function appendTrail(trail: GeoPoint[], points: GeoPoint[], land?: LandPolygon[]): GeoPoint[] {
   const next = [...trail, ...points];
-  if (next.length > TRAIL_CAP) {
-    const downsampled: GeoPoint[] = [];
-    for (let i = 0; i < next.length; i += 2) downsampled.push(next[i]);
-    return downsampled;
+  if (next.length <= TRAIL_CAP) return next;
+  const out: GeoPoint[] = [next[0]];
+  for (let i = 2; i < next.length; i += 2) {
+    if (land && segmentCrossesLand(land, out[out.length - 1], next[i])) {
+      out.push(next[i - 1]);
+    }
+    out.push(next[i]);
   }
-  return next;
+  const last = next[next.length - 1];
+  if (out[out.length - 1] !== last) out.push(last);
+  return out;
 }
 
 // Advance the boat one tick along its weather-routed track, re-routing as the
@@ -1496,19 +1537,46 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
 
   const wind = sampleWind(field, prev.lat, prev.lon, prev.elapsedHours);
   const skillMul = crewSkillFactor(crewSkillAverage(state.selectedCrewIds));
+  // No-go rescue: a live shift can leave the planned heading pinned inside the
+  // no-go zone — polar speed 0, the 0.4 kn floor, hours per half-mile (the
+  // reroute throttle below is too slow to save it). A real crew tacks off at
+  // once, so replan NOW and sail the new first board this very tick. The
+  // planner never emits an unsailable board, so the replan frees the bow; if it
+  // somehow doesn't (boxed geometry), fall through to the old crawl. Draw-free
+  // (the router is pure), so the RNG stream is untouched.
+  let liveRoute = prev.route;
+  let liveHeading = prev.heading;
+  let rescueReplanned = false;
+  if (
+    prev.nextMarkIndex < marks.length &&
+    polarSpeed(boat, angularDelta(prev.heading, wind.fromDeg), wind.speedKn) <= 0.2
+  ) {
+    const replan = planRoute(
+      boat, field, { lat: prev.lat, lon: prev.lon }, marks, prev.nextMarkIndex,
+      prev.elapsedHours, strategy.bias, LANDMASSES[race.id], undefined, prev.heading
+    );
+    if (replan.length > 1) {
+      const h = brg(replan[0], replan[1]);
+      if (polarSpeed(boat, angularDelta(h, wind.fromDeg), wind.speedKn) > 0.2) {
+        liveRoute = replan;
+        liveHeading = h;
+        rescueReplanned = true;
+      }
+    }
+  }
   // The flown sail's live multiplier — computed off the same heading/wind the
   // polar reads. With no specialist up it is exactly 1, and the speed maths is
   // byte-identical to the pre-wardrobe engine. Speed starts from the BASE
   // polar (`speedBoatFor`) — the rigged planner's boat would count the sail
   // twice.
   const flown = flownSpecialist(prev);
-  const twaNow = angularDelta(prev.heading, wind.fromDeg);
+  const twaNow = angularDelta(liveHeading, wind.fromDeg);
   const sailMul = flownSailMul(flown, twaNow, wind.speedKn);
   const speedBoat = speedBoatFor(state) ?? boat;
   const baseSpeed = boatSpeedFor(
     speedBoat,
     src.condition,
-    prev.heading,
+    liveHeading,
     wind,
     EFFORT_SPEED[strategy.effort],
     skillMul,
@@ -1528,7 +1596,7 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
   // it onto the coast (the recurring over-land bug).
   const dtBase = stepNm / Math.max(speed, 0.3);
 
-  const adv = advanceAlongRoute(prev.route, stepNm);
+  const adv = advanceAlongRoute(liveRoute, stepNm);
   // Fool-proof land guard: the boat advances along its planned route, but if that
   // route (or its detour corners) would trace a segment across land — a clip the
   // weather router occasionally leaves on an intricate coast — replace this step
@@ -1562,12 +1630,16 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
     adv.pos.lon = safe.lon;
   }
 
-  // Mark rounding.
+  // Mark rounding. The radius scales with the course: the flat 1.5 nm was sized
+  // for offshore legs and swallowed ~40% of a 16 nm Solent day (six marks each
+  // "rounded" a mile and a half early) — capped at 3% of the course it is
+  // byte-identical for every course of 50 nm and up.
   let nextMarkIndex = prev.nextMarkIndex;
   let rounded = false;
   if (nextMarkIndex < marks.length) {
     const m = marks[nextMarkIndex];
-    if (haversineNm(adv.pos.lat, adv.pos.lon, m.lat, m.lon) < Math.max(stepNm, 1.5)) {
+    const radius = Math.max(stepNm, Math.min(1.5, total * 0.03));
+    if (haversineNm(adv.pos.lat, adv.pos.lon, m.lat, m.lon) < radius) {
       nextMarkIndex += 1;
       rounded = true;
     }
@@ -1632,10 +1704,16 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
   // when the wind has shifted AND we've sailed far enough to be worth it, plus
   // a periodic refresh. This throttling keeps each tick cheap on-device.
   let route = adv.route;
-  let routeWindDir = prev.routeWindDir;
-  let routePlannedAtNm = prev.routePlannedAtNm;
+  // A rescue replan above is a real plan: stamp its wind and origin so the
+  // throttle below measures from it, not from the stale pre-rescue plan.
+  let routeWindDir = rescueReplanned ? wind.fromDeg : prev.routeWindDir;
+  let routePlannedAtNm = rescueReplanned ? prev.distanceCoveredNm : prev.routePlannedAtNm;
   let routeBias = prev.routeBias;
-  const movedSincePlan = distanceCoveredNm - prev.routePlannedAtNm;
+  // Distance is measured |either way|: on a losing board the covered distance
+  // DROPS below the plan origin, and the one-sided difference locked out every
+  // reroute trigger — the boat then sailed a stale route away from the mark
+  // for tick after tick (the Day 1 finish-leg wander).
+  const movedSincePlan = Math.abs(distanceCoveredNm - routePlannedAtNm);
   const shifted = angularDelta(wind.fromDeg, prev.routeWindDir) > REROUTE_SHIFT_DEG;
   const biasChanged = strategy.bias !== prev.routeBias;
   const wantReroute =
@@ -1646,7 +1724,7 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
     (shifted && movedSincePlan > total * 0.03) ||
     movedSincePlan > total * 0.1;
   if (!finished && !retired && nextMarkIndex < marks.length && wantReroute) {
-    route = planRoute(boat, field, adv.pos, marks, nextMarkIndex, elapsedHours, strategy.bias, LANDMASSES[race.id]);
+    route = planRoute(boat, field, adv.pos, marks, nextMarkIndex, elapsedHours, strategy.bias, LANDMASSES[race.id], undefined, liveHeading);
     routeWindDir = wind.fromDeg;
     routePlannedAtNm = distanceCoveredNm;
     routeBias = strategy.bias;
@@ -1664,7 +1742,7 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
     heading,
     nextMarkIndex,
     route,
-    trail: appendTrail(prev.trail, [...adv.passed, adv.pos]),
+    trail: appendTrail(prev.trail, [...adv.passed, adv.pos], landMass),
     routeWindDir,
     routePlannedAtNm,
     routeBias,

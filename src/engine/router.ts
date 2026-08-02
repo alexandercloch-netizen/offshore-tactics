@@ -1,6 +1,6 @@
 import { Boat, GeoPoint, RoutingBias, Waypoint, WindField, WindSample } from '../types';
 import { angularDelta, bearing, haversineNm, movePoint } from './geo';
-import { polarSpeed } from './polar';
+import { bestVmgAngles, polarSpeed } from './polar';
 import { sampleWind } from './wind';
 import { LandPolygon } from '../data/landmasses';
 import { pointInLand, segmentCrossesLand } from './land';
@@ -66,6 +66,63 @@ function backtrack(node: RNode, to: GeoPoint): GeoPoint[] {
 // Time-optimal route for a single leg using the isochrone method. The boat
 // cannot sail inside its no-go zone, so legs to windward emerge as tacks; the
 // evolving wind field bends the route and forces extra tacks on a shift.
+// A short leg whose rhumb line sits inside the no-go zone gets one clean tack:
+// the two best-VMG boards from the polar, joined at the windward corner where
+// they intersect. Solved in local east/north nm; null when the geometry
+// degenerates or a board would cross land — the caller falls back to the rhumb.
+function shortBeat(
+  boat: Boat,
+  wind: WindSample,
+  from: GeoPoint,
+  to: GeoPoint,
+  direct: number,
+  brgDest: number,
+  land?: LandPolygon[],
+  prevHeading?: number
+): GeoPoint[] | null {
+  const { upAngle } = bestVmgAngles(boat, wind.speedKn);
+  const rad = (d: number): number => (d * Math.PI) / 180;
+  const boards = [
+    (wind.fromDeg + upAngle) % 360,
+    (wind.fromDeg - upAngle + 360) % 360,
+  ];
+  // Board commitment: stay on the tack the boat is already sailing (a header
+  // means falling off, not flipping) — an oscillating shift otherwise re-picks
+  // the board every replan and the boat tacks itself into a random walk. With
+  // no heading to hold, sail the board closer to the mark first (the long tack).
+  if (prevHeading != null) {
+    boards.sort((a, b) => angularDelta(a, prevHeading) - angularDelta(b, prevHeading));
+  } else {
+    boards.sort((a, b) => angularDelta(a, brgDest) - angularDelta(b, brgDest));
+  }
+  const bx = Math.sin(rad(brgDest)) * direct;
+  const by = Math.cos(rad(brgDest)) * direct;
+  for (const first of [0, 1]) {
+    const h1 = boards[first];
+    const h2 = boards[1 - first];
+    const u1x = Math.sin(rad(h1));
+    const u1y = Math.cos(rad(h1));
+    const u2x = Math.sin(rad(h2));
+    const u2y = Math.cos(rad(h2));
+    const det = u1x * u2y - u1y * u2x;
+    if (Math.abs(det) < 1e-6) return null;
+    const a = (bx * u2y - by * u2x) / det; // nm on the first board
+    const b = (u1x * by - u1y * bx) / det; // nm on the second
+    if (a < 0.05 || b < 0.05) continue; // mark not between these boards
+    const corner = movePoint(from.lat, from.lon, h1, a);
+    if (
+      land &&
+      (pointInLand(land, corner.lat, corner.lon) ||
+        segmentCrossesLand(land, from, corner) ||
+        segmentCrossesLand(land, corner, to))
+    ) {
+      continue;
+    }
+    return [from, { lat: corner.lat, lon: corner.lon }, to];
+  }
+  return null;
+}
+
 export function isochroneLeg(
   boat: Boat,
   field: WindField,
@@ -73,10 +130,22 @@ export function isochroneLeg(
   to: GeoPoint,
   startHours: number,
   land?: LandPolygon[],
-  sample: WindSampler = sampleWind
+  sample: WindSampler = sampleWind,
+  prevHeading?: number
 ): GeoPoint[] {
   const direct = haversineNm(from.lat, from.lon, to.lat, to.lon);
-  if (direct < 2) return [from, to];
+  if (direct < 2) {
+    // The short-hop shortcut is fine when the rhumb is sailable — but a leg to
+    // windward would come back as a straight line INTO the no-go zone, and the
+    // sim would crawl it at the speed floor for hours (the Cowes Week Day 1
+    // balloon). Beat it properly instead; the sailable case stays byte-identical.
+    const wind = sample(field, from.lat, from.lon, startHours);
+    const brgDest = bearing(from.lat, from.lon, to.lat, to.lon);
+    if (polarSpeed(boat, angularDelta(brgDest, wind.fromDeg), wind.speedKn) > 0.2) {
+      return [from, to];
+    }
+    return shortBeat(boat, wind, from, to, direct, brgDest, land, prevHeading) ?? [from, to];
+  }
 
   const dt = Math.max(0.05, Math.min(4, direct / boat.baseSpeed / 22));
   let frontier: RNode[] = [{ lat: from.lat, lon: from.lon, parent: null }];
@@ -106,16 +175,32 @@ export function isochroneLeg(
 
     frontier = pruneFrontier(next, from, to);
 
-    // Can any frontier node fetch the mark within the next step?
+    // Can any frontier node fetch the mark within the next step? All fetchers
+    // sit on the same isochrone (equal sailing time), so with a board to hold
+    // (`prevHeading`) prefer the path whose FIRST hop stays on the current tack
+    // — an oscillating shift otherwise flips the ladder's opening board every
+    // replan and the boat tacks itself into a random walk. Without a board to
+    // hold, the first fetcher wins exactly as before.
+    let fetcher: RNode | null = null;
+    let fetcherDelta = Infinity;
     for (const node of frontier) {
       const d = haversineNm(node.lat, node.lon, to.lat, to.lon);
       const wind = sample(field, node.lat, node.lon, startHours);
       const brg = bearing(node.lat, node.lon, to.lat, to.lon);
       const sp = polarSpeed(boat, angularDelta(brg, wind.fromDeg), wind.speedKn);
       if (sp > 0.2 && d <= sp * dt * 1.1 && !segmentCrossesLand(land, node, to)) {
-        return backtrack(node, to);
+        if (prevHeading == null) return backtrack(node, to);
+        let first: RNode = node;
+        while (first.parent && first.parent.parent) first = first.parent;
+        const firstBrg = bearing(from.lat, from.lon, first.lat, first.lon);
+        const delta = angularDelta(firstBrg, prevHeading);
+        if (delta < fetcherDelta) {
+          fetcher = node;
+          fetcherDelta = delta;
+        }
       }
     }
+    if (fetcher) return backtrack(fetcher, to);
   }
 
   // Fallback: take whichever node ended up closest to the mark.
@@ -212,7 +297,8 @@ function activeLeg(
   startHours: number,
   bias: RoutingBias,
   land?: LandPolygon[],
-  sample: WindSampler = sampleWind
+  sample: WindSampler = sampleWind,
+  prevHeading?: number
 ): GeoPoint[] {
   let strategic: GeoPoint | null = null;
   if (bias !== 0) {
@@ -229,8 +315,8 @@ function activeLeg(
       }
     }
   }
-  if (!strategic) return isochroneLeg(boat, field, from, dest, startHours, land, sample);
-  const toStrategic = isochroneLeg(boat, field, from, strategic, startHours, land, sample);
+  if (!strategic) return isochroneLeg(boat, field, from, dest, startHours, land, sample, prevHeading);
+  const toStrategic = isochroneLeg(boat, field, from, strategic, startHours, land, sample, prevHeading);
   const toMark = isochroneLeg(boat, field, strategic, dest, startHours, land, sample);
   return [...toStrategic, ...toMark.slice(1)];
 }
@@ -251,13 +337,16 @@ export function planRoute(
   startHours: number,
   bias: RoutingBias = 0,
   land?: LandPolygon[],
-  sample: WindSampler = sampleWind
+  sample: WindSampler = sampleWind,
+  // The board the boat is currently sailing — replans that respect it fall off
+  // on a header instead of flip-flopping tacks under an oscillating shift.
+  prevHeading?: number
 ): GeoPoint[] {
   if (nextMarkIndex >= marks.length) return [from];
   const next = marks[nextMarkIndex];
   const dest = { lat: next.lat, lon: next.lon };
 
-  const pts = activeLeg(boat, field, from, dest, startHours, bias, land, sample);
+  const pts = activeLeg(boat, field, from, dest, startHours, bias, land, sample, prevHeading);
 
   // Onward legs are a land-aware preview (cheap), refined to a full isochrone
   // when the boat actually rounds into them.

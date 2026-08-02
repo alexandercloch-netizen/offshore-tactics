@@ -88,7 +88,11 @@ const LEVERAGE_CAP_NM = 30;
 // any future race for free. A finer per-source friction model, and damping the
 // seed-to-seed side-lottery that still swings a good race between 1st and last,
 // are framework follow-ups; this is the honest first cut — tune it here.
-const FLEET_FRICTION: { pro: number; corinthian: number } = { pro: 1.1, corinthian: 1.0 };
+// Pro dropped 1.1 → 1.0 with the routing-physics fix: the 10% pad was tuned
+// when the lived loop bled hours to no-go crawls and reroute lockouts the
+// benchmark never saw. With that friction gone from the player's race, the pad
+// made the whole pro fleet beatable even on reckless play (fleetTightness).
+const FLEET_FRICTION: { pro: number; corinthian: number } = { pro: 1.0, corinthian: 1.0 };
 
 // Build the AI fleet (everyone but the player). Each boat is paced to a target
 // finish time built from the race benchmark (a clean run of the player's own
