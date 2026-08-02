@@ -1,5 +1,5 @@
 import { isochroneLeg, planRoute } from '../engine/router';
-import { haversineNm } from '../engine/geo';
+import { bearing, haversineNm } from '../engine/geo';
 import { getBoatById, getRaceById } from '../data';
 import { GeoPoint, WindField } from '../types';
 
@@ -56,10 +56,30 @@ describe('isochroneLeg', () => {
     expect(haversineNm(end.lat, end.lon, to.lat, to.lon)).toBeLessThan(2);
   });
 
-  it('returns a trivial path for a very short leg', () => {
+  it('returns a trivial path for a very short SAILABLE leg', () => {
     const from: GeoPoint = { lat: 0, lon: 0 };
     const to: GeoPoint = { lat: 0.01, lon: 0 };
-    expect(isochroneLeg(boat, steady(0, 14), from, to, 0)).toEqual([from, to]);
+    // Wind from the east: the 0.6 nm hop due north is a beam reach — the
+    // shortcut stays a plain rhumb, byte-identical to the old contract.
+    expect(isochroneLeg(boat, steady(90, 14), from, to, 0)).toEqual([from, to]);
+  });
+
+  it('beats a very short leg that lies in the no-go zone', () => {
+    const from: GeoPoint = { lat: 0, lon: 0 };
+    const to: GeoPoint = { lat: 0.01, lon: 0 };
+    // Wind FROM north: the rhumb is dead upwind. The old shortcut returned it
+    // anyway and the sim crawled the speed floor for hours (the Cowes Day 1
+    // balloon); now the leg comes back as one clean tack via the VMG corner.
+    const path = isochroneLeg(boat, steady(0, 14), from, to, 0);
+    expect(path.length).toBe(3);
+    expect(path[0]).toEqual(from);
+    expect(path[path.length - 1]).toEqual(to);
+    // Both boards are sailable — neither segment points into the no-go zone.
+    for (let i = 1; i < path.length; i += 1) {
+      const brg = bearing(path[i - 1].lat, path[i - 1].lon, path[i].lat, path[i].lon);
+      const twa = Math.min(Math.abs(brg - 0), 360 - Math.abs(brg - 0));
+      expect(twa).toBeGreaterThanOrEqual(30);
+    }
   });
 });
 

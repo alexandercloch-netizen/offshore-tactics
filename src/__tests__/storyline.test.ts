@@ -218,7 +218,15 @@ describe('pinned signature firing (engine)', () => {
       expect(result.signatureOutcome).toBe('bold');
       const story = storylineForRace(raceId)!;
       const beat = story.beats.find((b) => b.kind === 'debrief' && b.outcome === 'bold');
-      expect(result.storyDebrief).toBe(beat!.body);
+      // The bold debrief must be the variant the FIELD actually earned: the
+      // paid-off body when the gamble came good, the honest bust variant when
+      // it didn't (signaturePaidOff is resolved against the real wind, so a
+      // physics change can legitimately flip which one this seed selects).
+      const expected =
+        state.progress!.signaturePaidOff === false && beat!.bustBody
+          ? beat!.bustBody
+          : beat!.body;
+      expect(result.storyDebrief).toBe(expected);
     } else {
       // If a bold run retired, the choice was still recorded on progress.
       expect(state.progress!.signatureChoiceId).toBe(bold.id);
