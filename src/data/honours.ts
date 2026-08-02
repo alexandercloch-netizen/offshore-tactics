@@ -142,6 +142,18 @@ const conquestHonours: Honour[] = CONQUEST_COURSES.map((course) => ({
   progress: (c) => ({ have: won(c).includes(course.raceId) ? 1 : 0, need: 1 }),
 }));
 
+const seriesHonours: Honour[] = [
+  {
+    id: 'cowes-week-trophy',
+    name: 'Cowes Week Overall',
+    blurb: 'A week of Solent racing mastered — the regatta\'s overall trophy on your shelf.',
+    hint: 'Win Cowes Week overall — five days, one discard, lowest points.',
+    tier: 'cup',
+    group: 'conquest',
+    progress: (c) => ({ have: (c.seriesWins ?? []).includes('series-cowes-week') ? 1 : 0, need: 1 }),
+  },
+];
+
 export const HONOURS: Honour[] = [
   // ---- First Light: the opening rites of a campaign ----
   {
@@ -184,6 +196,7 @@ export const HONOURS: Honour[] = [
   // ---- Conquest: a named trophy per marquee course ----
   ...conquestHonours,
   ...classicHonours,
+  ...seriesHonours,
 
   // ---- Seamanship: how well the boat was sailed, not just where it placed ----
   {

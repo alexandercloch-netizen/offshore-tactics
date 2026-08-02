@@ -8,6 +8,7 @@ import {
   hazardEventForRace,
   pickEventForRace,
 } from '../data/events';
+import { SERIES_LITE_MEMBER_IDS } from '../data/series';
 import { STORYLINES } from '../data/storylines';
 import { RACES } from '../data/races';
 import { mulberry32, resetRng, setRng } from '../engine/rng';
@@ -54,7 +55,9 @@ function regionFitting(raceId: string): GameEvent[] {
 
 describe('content depth — every race carries its full kit', () => {
   it('every race has a storyline (count pinned here too, not just in storyline.test)', () => {
-    expect(STORYLINES).toHaveLength(RACES.length);
+    // Lite series members (mid-week regatta days) carry no storyline by design —
+    // the week's narrative lives in its bookend days (see data/series.ts).
+    expect(STORYLINES).toHaveLength(RACES.length - SERIES_LITE_MEMBER_IDS.size);
   });
 
   it("every race's signature decision opens an act-two situation with a real follow-on", () => {

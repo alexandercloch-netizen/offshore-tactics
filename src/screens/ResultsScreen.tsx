@@ -18,6 +18,8 @@ import RouteMap, { clampChartToCoverage } from '../components/RouteMap';
 import EmptyState from '../components/EmptyState';
 import HonourMedal from '../components/profile/HonourMedal';
 import { divisionName } from '../lib/labels';
+import { seriesForRace } from '../data/series';
+import { seriesStandings } from '../engine/series';
 
 // A corrected gap this tight (seconds) is a photo finish — rare by design — and
 // earns the extra suspense beat before the corrected result is shown.
@@ -98,6 +100,10 @@ export const ResultsScreen: React.FC<Props> = ({ navigation }) => {
   const race = getRaceById(result.raceId);
   const entryFee =
     race && result.division ? race.divisions[result.division]?.entryFee ?? null : null;
+
+  // Regatta member day: the series table is the result that matters most.
+  const series = seriesForRace(result.raceId);
+  const seriesRows = series ? seriesStandings(series, state.history).slice(0, 8) : [];
 
   const podium = result.finished && result.position <= 3;
   const won = result.finished && result.position === 1;
@@ -206,6 +212,21 @@ export const ResultsScreen: React.FC<Props> = ({ navigation }) => {
         <View style={styles.summaryCard} testID="results-debrief">
           <Text style={styles.storyTitle}>The Story of the Race</Text>
           <Text style={styles.summary}>{result.storyDebrief}</Text>
+        </View>
+      ) : null}
+
+      {series && seriesRows.length > 0 ? (
+        <View style={styles.summaryCard} testID="results-series-standings">
+          <Text style={styles.storyTitle}>{series.name} — Standings</Text>
+          {seriesRows.map((r) => (
+            <View key={r.name} style={styles.seriesRow}>
+              <Text style={[styles.seriesRank, r.isPlayer && styles.seriesPlayer]}>{r.rank}</Text>
+              <Text style={[styles.seriesName, r.isPlayer && styles.seriesPlayer]} numberOfLines={1}>
+                {r.name}
+              </Text>
+              <Text style={[styles.seriesPts, r.isPlayer && styles.seriesPlayer]}>{r.points} pts</Text>
+            </View>
+          ))}
         </View>
       ) : null}
 
@@ -742,6 +763,11 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     lineHeight: 20,
   },
+  seriesRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 3 },
+  seriesRank: { color: colors.mist, width: 24, fontSize: fontSize.sm, fontVariant: ['tabular-nums'] },
+  seriesName: { color: colors.foam, flex: 1, fontSize: fontSize.sm },
+  seriesPts: { color: colors.mist, fontSize: fontSize.sm, fontVariant: ['tabular-nums'] },
+  seriesPlayer: { color: colors.brassLight, fontWeight: fontWeight.bold },
   revealOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: colors.abyss,

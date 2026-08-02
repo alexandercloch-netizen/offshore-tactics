@@ -45,7 +45,8 @@ export function recommendedRace(
   player: PlayerProfile | undefined,
   history: RaceResult[]
 ): Race | undefined {
-  const unlocked = RACES.filter((r) => isRaceUnlocked(r, history));
+  // Series member days are entered via their regatta hub, never recommended solo.
+  const unlocked = RACES.filter((r) => !r.seriesId && isRaceUnlocked(r, history));
   if (unlocked.length === 0) return undefined;
   const won = finishedRaceIds(history);
   const freshUnlocked = unlocked.filter((r) => !won.has(r.id));
@@ -85,6 +86,8 @@ export function weekIndex(nowMs: number): number {
 // week (the week index is supplied), so it's trivially testable and identical on
 // every device in the same week.
 export function raceOfTheWeek(week: number, races: Race[] = RACES): Race | undefined {
+  // Member days live behind their regatta hub — never the weekly spotlight.
+  races = races.filter((r) => !r.seriesId);
   if (races.length === 0) return undefined;
   const i = ((week % races.length) + races.length) % races.length;
   return races[i];

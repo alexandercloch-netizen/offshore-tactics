@@ -22,6 +22,8 @@ import {
   WindField,
 } from '../types';
 import { STARTING_FUNDS, applyStipend, getBoatById, getRaceById } from '../data';
+import { getSeriesById, seriesForRace } from '../data/series';
+import { playerSeriesRank } from '../engine/series';
 import { DEFAULT_STRATEGY, seedStartGrid } from '../engine/gameEngine';
 import { applyRaceToCareer, hydrateCareer } from '../engine/career';
 import { applyReseed, ReseedPayload } from './reseed';
@@ -77,6 +79,8 @@ export type Action =
   | { type: 'SET_TUTORIAL_SEEN' }
   | { type: 'SET_SCORING_SEEN' }
   | { type: 'SET_FREE_SAILING'; payload: boolean }
+  | { type: 'ENTER_SERIES'; payload: string }
+  | { type: 'ABANDON_SERIES' }
   | { type: 'MARK_HONOURS_SEEN'; payload: string[] }
   | { type: 'ADD_FLEET_BOAT'; payload: { boat: FleetBoat; cost: number } }
   | { type: 'REMOVE_FLEET_BOAT'; payload: string }
@@ -209,6 +213,25 @@ export function reducer(state: GameState, action: Action): GameState {
     // untouched, the moment it's off.
     case 'SET_FREE_SAILING':
       return { ...state, freeSailing: action.payload };
+
+    // Enter a regatta: the ONE series charge (Campaign mode; Free Sailing
+    // no-ops the money, as everywhere). Re-entering the active series is a
+    // no-op; entering a different one abandons the old week (its sailed
+    // results stay in history — standings derive, nothing is lost).
+    case 'ENTER_SERIES': {
+      const series = getSeriesById(action.payload);
+      if (!series) return state;
+      if (state.seriesProgress?.seriesId === series.id) return state;
+      if (!state.freeSailing && series.entryFee > state.funds) return state;
+      return {
+        ...state,
+        funds: state.freeSailing ? state.funds : state.funds - series.entryFee,
+        seriesProgress: { seriesId: series.id, sailedRaceIds: [] },
+      };
+    }
+
+    case 'ABANDON_SERIES':
+      return { ...state, seriesProgress: undefined };
 
     // Union the shown honours in (display-only, like tutorialSeen) so an
     // earn-moment fires exactly once.
@@ -343,14 +366,38 @@ export function reducer(state: GameState, action: Action): GameState {
           : state.eventLog,
       };
 
-    case 'FINISH_RACE':
+    case 'FINISH_RACE': {
+      // The regatta fold: if this finish is the active series' member day, mark
+      // the day sailed; when it completes the week, settle the series — the
+      // overall winner's purse (Campaign only) and the one career mark
+      // (seriesWins). Standings derive from stored results (engine/series.ts),
+      // so the fold needs the NEW history including this result.
+      const series = getSeriesById(state.seriesProgress?.seriesId);
+      const isMemberDay =
+        series != null && seriesForRace(action.payload.result.raceId)?.id === series.id;
+      const sailedRaceIds = isMemberDay
+        ? [...new Set([...state.seriesProgress!.sailedRaceIds, action.payload.result.raceId])]
+        : state.seriesProgress?.sailedRaceIds;
+      const seriesComplete =
+        isMemberDay && sailedRaceIds!.length === series!.memberRaceIds.length;
+      const newHistory = [action.payload.result, ...state.history].slice(0, 50);
+      const seriesRank = seriesComplete ? playerSeriesRank(series!, newHistory) : undefined;
+      const seriesWon = seriesComplete && seriesRank === 1;
       return {
         ...state,
+        seriesProgress:
+          isMemberDay && !seriesComplete
+            ? { seriesId: series!.id, sailedRaceIds: sailedRaceIds! }
+            : isMemberDay
+              ? undefined // the week is over; the trophy (or not) is in the career
+              : state.seriesProgress,
         // Free Sailing: no purse — the result still counts (history, career,
         // honours all fold as normal); only the money is switched off.
         funds: state.freeSailing
           ? state.funds
-          : state.funds + action.payload.result.prizeMoney,
+          : state.funds +
+            action.payload.result.prizeMoney +
+            (seriesWon ? series!.prizeMoney : 0),
         lastResult: action.payload.result,
         history: [action.payload.result, ...state.history].slice(0, 50),
         // Fold this finish into the lifetime record (never truncates, unlike the
@@ -360,10 +407,15 @@ export function reducer(state: GameState, action: Action): GameState {
         // history when there's no record yet), and `applyRaceToCareer` folds the
         // new result exactly once — the new result is only prepended to `history`
         // in the same return, so it is never double-counted.
-        career: applyRaceToCareer(
-          hydrateCareer(state.career, state.history),
-          action.payload.result
-        ),
+        career: (() => {
+          const folded = applyRaceToCareer(
+            hydrateCareer(state.career, state.history),
+            action.payload.result
+          );
+          return seriesWon
+            ? { ...folded, seriesWins: [...new Set([...(folded.seriesWins ?? []), series!.id])] }
+            : folded;
+        })(),
         progress: undefined,
         weather: undefined,
         windField: undefined,
@@ -371,6 +423,7 @@ export function reducer(state: GameState, action: Action): GameState {
         fleet: undefined,
         scenario: undefined,
       };
+    }
 
     case 'PREPARE_NEXT_RACE':
       return {

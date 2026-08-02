@@ -1,10 +1,11 @@
 import React from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DivisionKey, Race, RootStackParamList } from '../types';
 import { colors, fontSize, fontWeight, radius, spacing, status, surface } from '../theme';
 import { RACES, getRaceById } from '../data';
+import { SERIES } from '../data/series';
 import { useGame } from '../store/GameContext';
 import { formatDuration, isRaceUnlocked } from '../engine/gameEngine';
 import { raceOfTheWeek, weekIndex } from '../engine/recommend';
@@ -53,7 +54,28 @@ export const RaceSelectScreen: React.FC<Props> = ({ navigation }) => {
           ? 'Free Sailing — no fees, no purse, just the racing.'
           : `Funds available: ${money(state.funds)}`}
       </Text>
-      {RACES.map((race) => {
+      {SERIES.map((series) => (
+        <Pressable
+          key={series.id}
+          onPress={() => navigation.navigate('SeriesHub', { seriesId: series.id })}
+          style={[styles.card, styles.seriesCard]}
+          accessibilityRole="button"
+          testID={`series-card-${series.id}`}
+        >
+          <View style={styles.cardHeader}>
+            <Text style={styles.raceName}>{series.name}</Text>
+            <View style={[styles.badge, { borderColor: colors.brassLight }]}>
+              <Text style={[styles.badgeText, { color: colors.brassLight }]}>Regatta</Text>
+            </View>
+          </View>
+          <Text style={styles.location}>
+            {series.location} • {series.season} • {series.memberRaceIds.length} races, one week
+          </Text>
+          <Text style={styles.description}>{series.description}</Text>
+          <Text style={styles.seriesGo}>Open the week →</Text>
+        </Pressable>
+      ))}
+      {RACES.filter((r) => !r.seriesId).map((race) => {
         const unlocked = isRaceUnlocked(race, state.history);
         const lockRace = getRaceById(race.unlockAfter);
         const featured = race.id === featuredId;
@@ -195,6 +217,15 @@ const styles = StyleSheet.create({
   },
   cardLocked: {
     opacity: 0.6,
+  },
+  seriesCard: {
+    borderColor: colors.brassLight,
+  },
+  seriesGo: {
+    color: colors.brassLight,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.bold,
+    marginTop: spacing.sm,
   },
   cardFeatured: {
     borderColor: colors.brassLight,

@@ -1042,6 +1042,78 @@ export const STORYLINES: Storyline[] = [
       },
     ],
   },
+  {
+    raceId: 'race-cowes-day1',
+    theme: 'The week opens — and the Bramble deals the first hand.',
+    stakes:
+      'Five days of Solent racing decide the week, and day one sets the tone. The Bramble Bank sits mid-course with four metres of water and half the tide over it: shave it and the fleet is behind you by the first mark; touch it and the whole regatta watches you stop.',
+    coached:
+      'Navigator: the Bramble is the short line and I have the height of tide worked to the minute. We carry enough water — just — on the top third of the bank. Over it and we lead at Hill Head; round it and we join the queue. Your call, skipper.',
+    beats: [
+      {
+        kind: 'briefing',
+        body: 'Cowes on the first morning of the week: a hundred flags, a thousand crews, and the Squadron cannons waiting. Beyond the line the Solent is already striped with wind lanes and tide, and the Bramble sits mid-stream like a dealt card, face down until the fleet arrives.',
+      },
+      {
+        kind: 'beat',
+        pinnedWaypoint: 'Bramble Bank',
+        body: 'The fleet converges on the bank in one breathing pack — depth alarms, shouted water calls, and the short line over the shallows opening for whoever trusts their tide sum.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'bold',
+        body: 'You took the short line over the Bramble with the sounder singing and came off the bank clear ahead — the queue still rounding the deep-water mark astern as you stretched for Hill Head. The week opened with your bow in front, and the dock knew it by lunchtime.',
+        bustBody:
+          'You took the short line over the Bramble and the tide sum was a boat-length optimistic — a soft touch, a heart-stopping graunch, and the fleet streaming past while you worked her off the bank. The week opened with a story about you, and not the one you wanted.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'hedge',
+        body: 'You skirted the bank\'s edge with a boat-length of margin — most of the shortcut, none of the drama, and a top-third rounding at Hill Head. A seamanlike opening to a long week.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'safe',
+        body: 'You rounded the deep-water mark with the procession and kept the keel where the water was. Points banked, boat whole — the week is long, and the Bramble will still be there on Friday.',
+      },
+    ],
+  },
+  {
+    raceId: 'race-cowes-day5',
+    theme: 'The Decider — the week comes down to one last beat.',
+    stakes:
+      'Four days of scores are on the table and the discard is spent. Whatever the week has been, it ends here: one more Solent lap, one rival within reach of the silverware, and a choice between covering them home and sailing your own race for the gun.',
+    coached:
+      'Navigator: the table says it\'s us and one other boat for the week. Match-race them and we guarantee beating THEM — but the fleet decides the day, and the day still counts. Split and sail our own water and we race for the win. Points or glory, skipper — pick before the Bramble.',
+    beats: [
+      {
+        kind: 'briefing',
+        body: 'The last morning of the week, and the arithmetic is done on every boat: who needs what, who covers whom, who is safe and who must gamble. The Squadron line is the same as Monday. Nothing else is.',
+      },
+      {
+        kind: 'beat',
+        pinnedWaypoint: 'Bramble Bank',
+        body: 'The rival is two lengths back, sailing in your shadow, and the Bramble is where the week\'s last big choice gets made — break the cover, or carry it all the way home.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'bold',
+        body: 'You broke the cover at the Bramble and bet the week on your own water — and the Solent paid. Around the last mark clear ahead, the rival\'s challenge dissolved astern, and the cannon that ended the race ended the argument.',
+        bustBody:
+          'You broke the cover at the Bramble and the Solent kept the change — the shift you split for never came, and the rival sailed the ladder past you with the week in their pocket. Bold was right for the day you needed; the fleet just didn\'t vote your way.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'hedge',
+        body: 'You covered loosely — between the rival and the mark without living in their tacks — and sailed the last beat like a points accountant with a poet\'s finish. The week ended the way good weeks do: undramatically, in front.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'safe',
+        body: 'You matched them tack for tack to the line, the week\'s maths riding every cross. It cost you the day and saved the story — sometimes the trophy is won by the boat that refused to lose it.',
+      },
+    ],
+  },
 ];
 
 // Lookup: the storyline authored for a race, or undefined for an un-storied one.

@@ -223,6 +223,28 @@ test('a full race can be played from start to finish in the cockpit', async ({ p
   await expect(page.getByText('Free Sailing', { exact: true })).toHaveCount(2);
   await page.getByText('Campaign', { exact: true }).first().click();
   await expect(page.getByText('Free Sailing', { exact: true })).toHaveCount(1);
+  // --- The regatta layer: Cowes Week is one card, a hub, and a week ---------
+  // Back out to the race list: the series card opens the hub; entering the week
+  // arms Day 1, whose "Sail" button drops into the ordinary setup funnel.
+  await page.getByText('Race', { exact: true }).first().click();
+  await page.getByRole('button', { name: 'Browse All Races' }).click();
+  await page.getByTestId('series-card-series-cowes-week').click();
+  await expect(page.getByTestId('series-hub')).toBeVisible();
+  await page.getByRole('button', { name: /Enter the Week/ }).click();
+  await page.getByRole('button', { name: /Sail Day 1/ }).click();
+  await expect(page.getByRole('button', { name: 'Continue to Crew' })).toBeVisible();
+
+  // Pop the funnel back off the stack (BoatSelect → hub → race list → tabs):
+  // a pushed screen would otherwise sit over the tab bar and hide the Profile
+  // tab the trophy case lives under.
+  for (let i = 0; i < 3; i += 1) {
+    await page.getByLabel(/back$/i).last().click();
+  }
+  // The tab bar renders as links on web — the bare text would also match the
+  // (now-mounted, hidden) Profile screen's header title.
+  await page.getByRole('link', { name: 'Profile' }).click();
+  await expect(page.getByTestId('profile-honours-strip')).toBeVisible({ timeout: 10_000 });
+
   await page.getByTestId('view-trophy-case').click();
   await expect(page.getByTestId('trophy-case')).toBeVisible({ timeout: 10_000 });
   // First Blood is earned, so its tile shows without expanding the locked goals.
