@@ -45,20 +45,26 @@ The simulation is a **pure, deterministic engine** with a thin React UI on top.
     (`forecastConfidence`/`sampleForecast`) blurs the *displayed* forecast away
     from the true field as you look further ahead — a sharp Navigator
     (`navigatorSkill`) keeps it trustworthy longer; the race still sails the true
-    field, so it stays fair and deterministic. **KNOWN ISSUE — a few long courses
-    finish unrealistically slowly** (notably the Middle Sea Race). The old note
-    here blamed a "light field" and prescribed tempering `speedMul` / a mean-neutral
-    front; a headless `stepRace`+tide probe across the long courses **disproved
-    that**: the seeded field means are healthy (Fastnet ~15 kn, Transpac ~12 kn,
-    Middle Sea ~8 kn — all near or above their baked baselines), yet the boat makes
-    good only a fraction of its potential speed. The lever is therefore MADE-GOOD
-    EFFICIENCY (deep downwind VMG angles, and `med_fickle`'s ±34° shift whipping the
-    router into endless re-tacks), NOT field magnitude — so tempering `speedMul`
-    would windier-up an already-healthy field without touching the loss, and would
-    re-open the dead-angle balloon. Note too that some long finishes are simply
-    REALISTIC for a cruising boat (a Transpac cruiser is genuinely 14–21 days; the
-    130 h record is a maxi surfing the trades) — the true outlier to chase is Middle
-    Sea (~26 days), a per-race routing subtlety, not a global constant.
+    field, so it stays fair and deterministic. **RESOLVED (routing-physics fix) —
+    "long courses finish unrealistically slowly."** The old note blamed a light
+    field, then made-good efficiency; the Cowes Week Day 1 balloon (13h42m lived
+    vs a ~2h optimal on 16 nm) made it reproducible and the instrumented probe
+    found FOUR concrete defects, none of them wind magnitude: (1) `stepRace`
+    held a planned heading INSIDE the no-go zone after a shift and crawled the
+    0.4 kn speed floor for hours (the golden Fastnet carried ~33 h of this);
+    (2) the reroute throttle measured progress one-sidedly, so a boat LOSING
+    ground could never trigger a replan and sailed a stale route away from the
+    mark; (3) each replan re-picked the "best" board from scratch, so ±30°+
+    oscillating shifts tacked the boat into a random walk; (4) marks authored
+    on land (harbourfront start/finish lines) starve the isochrone — no node
+    can ever fetch a destination whose approach crosses land — leaving a
+    wandering 48-step fallback route. Fixes: the no-go rescue + |movedSincePlan|
+    in `stepRace`/`cleanRunHours`, board commitment (`prevHeading`) through
+    `planRoute`→`isochroneLeg`/`shortBeat`, the sub-2 nm shortcut beats to
+    windward instead of rhumb-lining the no-go, and the marks-in-water guard in
+    `land.test.ts`. Middle Sea fell ~26 days → 4–5 days; Fastnet's golden run
+    136.5 h → 103.5 h. Long cruiser finishes that remain multi-day are REALISTIC
+    (a Transpac cruiser is genuinely 14–21 days against a 130 h maxi record).
     **FIXED (this pass) — the tide-balloon half.** The foul-tide made-good floor
     was RELATIVE for the player (20 % of its own tide-free speed) but ABSOLUTE for
     the fleet (0.2 kn), so in light air the player could crawl far below the fleet
@@ -67,11 +73,13 @@ The simulation is a **pure, deterministic engine** with a thin React UI on top.
     (`TIDE_FLOOR_KN` in `engine/current.ts`; see the tide block in `gameEngine.ts`
     and `advanceFleet` in `fleet.ts`). Probe: ballooned Fastnet seeds fell 290 h →
     131 h with nothing else regressing; the goldens re-blessed once (offshore only —
-    see `goldenRace.test.ts`). The remaining made-good/routing work is a dedicated
-    follow-up that MUST be validated against the full `stepRace` loop with tide (the
-    tide-free `cleanRunHours` can't see it). `racePlausibility.test.ts` guards the
-    STRUCTURAL inputs (distance, dead-calm floor, honest start read, fleet spread);
-    it gains a made-good-efficiency assertion when that work lands stably.
+    see `goldenRace.test.ts`). The made-good/routing follow-up that note promised
+    has since LANDED (the routing-physics fix above — no-go rescue, reroute
+    unlock, board commitment, marks-in-water; all three goldens consciously
+    re-blessed with it, and the fleet re-paced: `CLEAN_RUN_STEP_SCALE` 3 → 1,
+    `FLEET_FRICTION.pro` 1.1 → 1.0). `racePlausibility.test.ts` guards the
+    STRUCTURAL inputs (distance, dead-calm floor, honest start read, fleet
+    spread) AND the lived made-good-efficiency of every short course.
   - `polar.ts` / `polarTable.ts` / `polarImport.ts` — boat speed from polar
     diagrams (parametric for catalogue boats, real tables for custom boats).
   - `sails.ts` — the wardrobe: `effectivePolar` (base lifted by every owned
@@ -261,9 +269,12 @@ signature hazard is a set-piece tied to its mark (`Race.hazardWaypoint`).
   matches the waypoint geometry (±10%), the seeded field is never a dead calm, and
   the fleet is paced to a bounded spread. Cheap and deterministic (no headless race
   per course). It catches the RORC-600-class distance bug (600 authored vs 461
-  sailed → "finished" at 77% progress). The stronger field-mean-vs-baseline
-  assertion is deferred with the wind-lightness fix (see `wind.ts` above). Add a
-  race → it must pass here (see "Adding content").
+  sailed → "finished" at 77% progress). It also carries the **made-good
+  efficiency guard**: every SHORT course (≤30 nm) gets a real seeded headless
+  `stepRace` cruise that must FINISH within 4× the record — the class of
+  routing defect behind the Cowes Day 1 balloon fails loudly here (offshore
+  courses are excluded purely on runtime cost; the goldens pin the shared
+  physics there). Add a race → it must pass here (see "Adding content").
 - Cockpit **render tests** (`*.test.tsx`) run under the same node jest against
   the lightweight react-native mock in `src/testing/` (mapped via
   `jest.config.js` moduleNameMapper) — they assert the TREE (no Modal
@@ -300,6 +311,14 @@ tests** in `src/__tests__/engine.test.ts` and by the **type system**, so a
 missing piece fails loudly — `npm run tsc` and `npm test` are your checklist.
 
 **Add a race** — append a `Race` to `src/data/races.ts`:
+- **Every waypoint must sit in NAVIGABLE WATER at the coastline's resolution**
+  (`land.test.ts` "waypoints sit in navigable water" enforces it). A start or
+  finish authored on the harbourfront — the natural instinct for a real venue —
+  puts the mark inside the land polygon, and the isochrone router can then NEVER
+  "fetch" it (every approach segment crosses land): the symptom is a wandering
+  route and a race taking many times its record, not an error. Place lines a few
+  hundred metres out in the fairway (the Cowes RYS line, Saint-Tropez, Victoria
+  Harbour, Ensenada and Marion all hit this).
 - Real `waypoints` (first `type: 'start'`, last `'finish'`), `prevailingWind`,
   `distanceNm`/`recordTimeHours` (gameplay-tuned), `corinthianRating` (1–5),
   both `divisions`, a `season`, and an optional `unlockAfter` (an existing race

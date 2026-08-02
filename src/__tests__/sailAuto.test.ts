@@ -410,4 +410,7 @@ describe('replay determinism — a seeded auto race is exactly reproducible', ()
 });
 
 // Captured from the engine — byte-exact for the Balanced auto race above.
-const AUTO_BALANCED_PINS = { changes: 6, elapsedH: 11.3005, draws: 49 };
+// elapsedH re-blessed with the routing-physics fix (the no-go rescue re-times a
+// tick on this course); changes and draws held exactly — the auto-helm's
+// decision stream is untouched.
+const AUTO_BALANCED_PINS = { changes: 6, elapsedH: 11.31466, draws: 49 };

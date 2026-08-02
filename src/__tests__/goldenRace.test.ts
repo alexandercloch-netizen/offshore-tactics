@@ -310,16 +310,29 @@ describe('golden races — the determinism contract', () => {
 // isn't provably isolated to fleet lifetime.
 // ---------------------------------------------------------------------------
 
+// RE-BLESSED (4th) for the routing-physics fix — a DELIBERATE physics change,
+// user-approved, that moves all three cases (see the PR "Inshore routing"):
+//   • stepRace/cleanRunHours no-go rescue (a shift that pins the planned heading
+//     inside the no-go zone replans at once instead of crawling the 0.4 kn floor
+//     — this seed's Round the Island carried real crawl hours: elapsedH
+//     12.611846 → 12.116153, and the last event beat re-timed to a different
+//     draw, evt-windshift → evt-headland).
+//   • Reroute-lockout fix (|movedSincePlan|) + router board commitment.
+//   • CLEAN_RUN_STEP_SCALE 3 → 1 and FLEET_FRICTION.pro 1.1 → 1.0: the fleet is
+//     now paced by the same honest physics — a lazy cruise auto-run (this
+//     harness) no longer beats a whole fleet that was calibrated against the
+//     crawl (position 1 → 23). Difficulty now comes from sailing well;
+//     fleetTightness proves sensible play still contends.
 const GOLDEN_INSHORE: GoldenSummary = {
   ticks: 110,
   decisions: 10,
-  rngDraws: 10670,
+  rngDraws: 10385,
   finished: true,
   retired: false,
-  elapsedH: 12.611846,
+  elapsedH: 12.116153,
   distanceNm: 60.228444,
-  position: 1,
-  correctedPos: 1,
+  position: 23,
+  correctedPos: 26,
   hull: 63.491532,
   stamina: 0,
   eventIds: [
@@ -332,57 +345,52 @@ const GOLDEN_INSHORE: GoldenSummary = {
     'evt-squall',
     'evt-gear',
     'evt-fo-jury',
-    'evt-windshift',
+    'evt-headland',
   ],
-  fleetTop3: ['Mistral II', 'Northern Child', 'Lucky'],
+  fleetTop3: ['Rán', 'Leopard', 'Wild Oats'],
 };
-// NB: the inshore case is byte-identical to the pre-change engine — the golden
-// crew's faithful benchmark lands on the same fleet pace here, so nothing moved.
 
+// RE-BLESSED (4th) with the routing-physics fix: this seed's Fastnet carried
+// ~33 HOURS of no-go crawl (136.5 h → 103.5 h) — the trajectory genuinely
+// changed (different headings → different weather beats → different events and
+// draws). The whole case is a new, honest baseline; see the inshore note above.
 const GOLDEN_OFFSHORE: GoldenSummary = {
-  ticks: 99,
-  decisions: 8,
-  // RE-BLESSED (3rd) for the absolute tide floor: the player's clock moved ~3 h
-  // (see the note above), which re-times the player-clock-driven fleet — different
-  // time-scaled retirement rolls draw a different total (12002 → 11608). NOT a
-  // player-stream break: the player's GEOMETRY (ticks/distanceNm) is byte-identical.
-  rngDraws: 11608,
+  ticks: 109,
+  decisions: 7,
+  rngDraws: 12415,
   finished: true,
   retired: false,
-  // +3.4 h from the absolute floor (this seed's Fastnet was never ballooned, so the
-  // floor is marginally less generous here than the old relative one — the balloon
-  // relief shows on the lightly-becalmed seeds, not this one). Geometry unchanged.
-  elapsedH: 136.47589,
+  elapsedH: 103.454375,
   distanceNm: 688.221188,
-  // The tighter Pro fleet, re-timed off the player's shifted clock, reshuffles hard
-  // around this boat (a tight pack amplifies a small time delta) — a downstream
-  // effect of the time change, not a geometry change.
-  position: 25,
-  correctedPos: 28,
-  hull: 72.047121,
-  stamina: 16.017148,
+  position: 38,
+  correctedPos: 38,
+  hull: 74.03775,
+  stamina: 13.003794,
   eventIds: [
     'evt-headland',
-    'evt-morale-meal',
-    'evt-front',
+    'evt-kelp',
+    'evt-kelpline',
     'evt-hz-celtic',
-    'evt-mob',
     'evt-injury',
     'evt-fo-hand',
-    'evt-kelpline',
+    'evt-fatigue',
   ],
   fleetTop3: ['Rán', 'Comanche', 'Leopard'],
 };
 
+// RE-BLESSED (4th) with the routing-physics fix: the synthetic gale's steady
+// veer briefly pinned a board mid-race — the rescue re-tacks it (+0.4 h; a gale
+// beat is where tacking off a header costs real distance). rngDraws moved only
+// with the fleet's re-paced lifetime (4669 → 4603); the draw structure held.
 const GOLDEN_GALE: GoldenSummary = {
   ticks: 100,
   decisions: 8,
-  rngDraws: 4669,
+  rngDraws: 4603,
   finished: true,
   retired: false,
-  elapsedH: 77.129527,
+  elapsedH: 77.526419,
   distanceNm: 627.070448,
-  position: 15,
+  position: 16,
   correctedPos: 16,
   hull: 69.261013,
   stamina: 10.996943,
