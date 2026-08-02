@@ -212,6 +212,12 @@ export interface TidalField {
 
 export interface Race {
   id: string;
+  // Set when this race is a member day of a regatta/series (see data/series.ts).
+  // Member races are ordinary races to the ENGINE (sailed by the normal
+  // lifecycle, one at a time); the series layer lives entirely in data + the
+  // pure reducer. Members are hidden from the open race list — the series hub
+  // is their front door.
+  seriesId?: string;
   name: string;
   location: string;
   description: string;
@@ -520,6 +526,30 @@ export interface GameEvent {
   choices: TacticalChoice[];
 }
 
+// ---- Regattas / series ----
+
+// A multi-day regatta: an ordered set of member day-races scored as one event
+// (low-point: day rank = points, retirement/absence = entrants + 1, one discard
+// once every day is sailed). The engine never reads this — each member day is an
+// ordinary Race; the series is data + reducer + display.
+export interface Series {
+  id: string;
+  name: string;
+  location: string;
+  description: string;
+  memberRaceIds: string[]; // in sailing order (day 1 first)
+  entryFee: number; // charged ONCE at series entry (Campaign mode; free mode no-ops)
+  prizeMoney: number; // the overall winner's purse, paid on completion
+  season: string;
+}
+
+// Persistent progress through a series — deliberately tiny: standings are
+// derived from the stored member RaceResults, never duplicated here.
+export interface SeriesProgress {
+  seriesId: string;
+  sailedRaceIds: string[];
+}
+
 // ---- Race storylines ----
 
 // How a signature choice is categorised for the debrief: the bold (field-
@@ -766,6 +796,11 @@ export interface RaceResult {
   scenario?: WeatherScenarioStamp;
   // ---- Sail-handling debrief (quality, not just frequency). Optional and
   // back-compatible: absent on old saves and on races sailed before wardrobes.
+  // Series member days only: the full corrected-time finish order (AI boat
+  // names; the player slots in at `position`). Captured at the line so series
+  // standings can be scored from stored results alone — display/scoring data,
+  // absent everywhere else.
+  correctedOrder?: string[];
   sailChanges?: number;
   sailChangesAuto?: number; // how many changes the auto-helm made (for "N changes, M auto")
   sailChangesFumbled?: number;
@@ -803,6 +838,7 @@ export interface CareerRecord {
   finishedRaceIds?: string[]; // distinct raceIds finished (drives "sailed this course / hazard")
   corinthianOffshoreWins?: number; // wins in the Corinthian division of an Offshore/Ocean race
   historicEditions?: string[]; // distinct historic-edition keys finished ('<raceId>:<year>')
+  seriesWins?: string[]; // distinct series ids won overall (the regatta layer's one career mark)
 }
 
 export interface GameState {
@@ -828,6 +864,10 @@ export interface GameState {
   eventLog: string[];
   tutorialSeen?: boolean; // whether the player has seen the race how-to-play
   scoringSeen?: boolean; // whether the corrected-time (handicap) primer has been shown (display-only, like tutorialSeen)
+  // The regatta layer: which series is being campaigned and which member days
+  // are sailed. Folded ONLY in the pure reducer (the career pattern); standings
+  // derive from stored results, so this stays minimal and resumable.
+  seriesProgress?: SeriesProgress;
   // Free Sailing: the budget layer switched off — no fees, prices, wages or
   // prizes; every boat and sailor is available and funds are frozen. A PREFERENCE
   // (two-way, newest save wins in reconcile — unlike the one-way "seen" flags).
@@ -907,6 +947,7 @@ export type RootStackParamList = {
   RaceMap: undefined;
   Results: undefined;
   TrophyCase: undefined;
+  SeriesHub: { seriesId: string };
   BoatBuilder: undefined;
   SailLocker: { boatId: string };
   NoticeBoard: { fromRoute?: string } | undefined; // the feedback "message to the Race Committee"

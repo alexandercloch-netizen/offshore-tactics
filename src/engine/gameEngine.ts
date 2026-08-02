@@ -2477,6 +2477,7 @@ export function buildResult(state: GameState, outcome: StepResult): RaceResult {
   let nearestRivalName: string | undefined;
   let nearestRivalAhead: boolean | undefined;
   let correctedWinnerName: string | undefined;
+  let correctedOrder: string[] | undefined;
   if (finished && !retired) {
     const standings = correctedStandings(
       state.fleet ?? [],
@@ -2499,6 +2500,11 @@ export function buildResult(state: GameState, outcome: StepResult): RaceResult {
       });
       nearestRivalName = best?.name;
       nearestRivalAhead = best?.ahead;
+    }
+    // Series member days record the AI corrected order so the regatta table can
+    // be scored from stored results alone (the player slots in at `position`).
+    if (race.seriesId) {
+      correctedOrder = standings.filter((s) => !s.isPlayer).map((s) => s.name);
     }
   }
 
@@ -2529,6 +2535,7 @@ export function buildResult(state: GameState, outcome: StepResult): RaceResult {
     nearestRivalName,
     nearestRivalAhead,
     correctedWinnerName,
+    correctedOrder,
     // Sail-handling debrief: quality, not just frequency — how many changes,
     // how many fumbled, what fraction of the race was under the best canvas
     // aboard (only once enough of the race has been measured to be honest),

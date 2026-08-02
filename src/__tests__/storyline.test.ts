@@ -19,13 +19,16 @@ import {
   signatureOutcomeFor,
   storylineForRace,
 } from '../data';
+import { SERIES_LITE_MEMBER_IDS } from '../data/series';
 import { GameState, StepResult, TacticalChoice } from '../types';
 
 const healthy = { hullIntegrity: 100, crewStamina: 100, crewMorale: 100 };
 
 // After PR2 every race is storied — the framework now covers the whole roster
 // (the original nine plus the eight home-port classics).
-const STORIED_RACE_IDS = RACES.map((r) => r.id);
+// Lite series members (mid-week regatta days) are exempt from the storied bar —
+// the week's narrative lives in its bookend days (see data/series.ts).
+const STORIED_RACE_IDS = RACES.filter((r) => !SERIES_LITE_MEMBER_IDS.has(r.id)).map((r) => r.id);
 
 // Build a race-ready state mirroring the engine suite's harness.
 function baseState(overrides: Partial<GameState> = {}): GameState {
@@ -102,9 +105,9 @@ const safest = (event: { choices: TacticalChoice[] }): TacticalChoice =>
   event.choices.reduce((a, b) => (b.risk < a.risk ? b : a), event.choices[0]);
 
 describe('storyline content', () => {
-  it('covers every race after PR2 (the whole roster storied)', () => {
+  it('covers every race after PR2 (the whole roster storied; lite series days exempt)', () => {
     expect(STORYLINES.map((s) => s.raceId).sort()).toEqual([...STORIED_RACE_IDS].sort());
-    expect(STORYLINES).toHaveLength(RACES.length);
+    expect(STORYLINES).toHaveLength(RACES.length - SERIES_LITE_MEMBER_IDS.size);
   });
 
   it("each storyline's pinned beat names a real waypoint on its race", () => {
@@ -239,6 +242,7 @@ describe('the whole roster is storied (PR2)', () => {
     // PR2 brought the full roster up to the storied bar — no un-storied races
     // remain, and every hazard event pins its signature decision to a real mark.
     for (const race of RACES) {
+      if (SERIES_LITE_MEMBER_IDS.has(race.id)) continue; // lite regatta days: no storyline by design
       const story = storylineForRace(race.id);
       expect(story).toBeDefined();
       const pin = hazardEventForRace(race).pinToWaypoint;
