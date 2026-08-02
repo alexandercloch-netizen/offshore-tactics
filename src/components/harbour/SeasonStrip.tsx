@@ -25,7 +25,8 @@ const MONTH_LABELS = [
 
 export const SeasonStrip: React.FC<SeasonStripProps> = ({ now, onEnterRace, isUnlocked }) => {
   const month = new Date(now).getMonth();
-  const inSeason: Race[] = RACES.filter((r) => isInSeason(r.season, month));
+  // Series member days live behind their regatta hub, not the open calendar.
+  const inSeason: Race[] = RACES.filter((r) => !r.seriesId && isInSeason(r.season, month));
 
   return (
     <View style={styles.section} testID="harbour-season">

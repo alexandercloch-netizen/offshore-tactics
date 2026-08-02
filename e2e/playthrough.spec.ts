@@ -232,7 +232,18 @@ test('a full race can be played from start to finish in the cockpit', async ({ p
   await expect(page.getByTestId('series-hub')).toBeVisible();
   await page.getByRole('button', { name: /Enter the Week/ }).click();
   await page.getByRole('button', { name: /Sail Day 1/ }).click();
-  await page.getByRole('button', { name: 'Continue to Crew' }).isVisible();
+  await expect(page.getByRole('button', { name: 'Continue to Crew' })).toBeVisible();
+
+  // Pop the funnel back off the stack (BoatSelect → hub → race list → tabs):
+  // a pushed screen would otherwise sit over the tab bar and hide the Profile
+  // tab the trophy case lives under.
+  for (let i = 0; i < 3; i += 1) {
+    await page.getByLabel(/back$/i).last().click();
+  }
+  // The tab bar renders as links on web — the bare text would also match the
+  // (now-mounted, hidden) Profile screen's header title.
+  await page.getByRole('link', { name: 'Profile' }).click();
+  await expect(page.getByTestId('profile-honours-strip')).toBeVisible({ timeout: 10_000 });
 
   await page.getByTestId('view-trophy-case').click();
   await expect(page.getByTestId('trophy-case')).toBeVisible({ timeout: 10_000 });

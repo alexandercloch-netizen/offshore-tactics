@@ -210,7 +210,8 @@ export function rankRaces(input: SailNowInput): SailNowScore[] {
 
   const scored: SailNowScore[] = [];
   for (const race of races) {
-    if (!isRaceUnlocked(race, history)) continue;
+    // Series member days are entered via their regatta hub, never the board.
+    if (race.seriesId || !isRaceUnlocked(race, history)) continue;
     const sample = conditions.samples[race.id] ?? { ...race.prevailingWind };
     const quality = breezeQuality(sample.speedKn);
     const inSeason = isInSeason(race.season, month);
