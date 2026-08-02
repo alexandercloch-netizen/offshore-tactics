@@ -496,11 +496,19 @@ describe('data integrity', () => {
       expect(race.recordTimeHours).toBeGreaterThan(0);
       expect(race.corinthianRating).toBeGreaterThanOrEqual(1);
       expect(race.corinthianRating).toBeLessThanOrEqual(5);
-      // Both divisions present and sane.
+      // Both divisions present and sane. Series member days carry NO money of
+      // their own — the regatta's single entry fee and overall purse live on
+      // the Series (charged via ENTER_SERIES), so their per-day fees/prizes
+      // must be exactly zero or the week double-charges.
       (['corinthian', 'pro'] as const).forEach((key) => {
         const d = race.divisions[key];
-        expect(d.entryFee).toBeGreaterThan(0);
-        expect(d.prizeMoney).toBeGreaterThan(0);
+        if (race.seriesId) {
+          expect(d.entryFee).toBe(0);
+          expect(d.prizeMoney).toBe(0);
+        } else {
+          expect(d.entryFee).toBeGreaterThan(0);
+          expect(d.prizeMoney).toBeGreaterThan(0);
+        }
         expect(d.fleetSize).toBeGreaterThanOrEqual(2);
         expect(d.paceTarget).toBeGreaterThan(1);
       });

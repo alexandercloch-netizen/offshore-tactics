@@ -10,14 +10,18 @@ import { RACES } from '../data/races';
 import { PlayerProfile, Race, RaceResult, SailingRegion } from '../types';
 
 describe('raceOfTheWeek', () => {
-  const races = RACES;
+  // Series member days live behind their regatta hub, so the weekly spotlight
+  // rotates over the standalone catalogue only.
+  const races = RACES.filter((r) => !r.seriesId);
   it('is stable within a week and rotates across weeks', () => {
     const w = 12345;
     expect(raceOfTheWeek(w)?.id).toBe(raceOfTheWeek(w)?.id); // same week → same race
-    // Over a full cycle of weeks, every race is featured exactly once.
+    // Over a full cycle of weeks, every standalone race is featured exactly once
+    // — and no member day ever is.
     const seen = new Set<string>();
     for (let k = 0; k < races.length; k += 1) seen.add(raceOfTheWeek(w + k)!.id);
     expect(seen.size).toBe(races.length);
+    seen.forEach((id) => expect(RACES.find((r) => r.id === id)?.seriesId).toBeUndefined());
   });
 
   it('wraps safely for any week index and never returns undefined for a non-empty catalogue', () => {
