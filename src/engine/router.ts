@@ -306,8 +306,15 @@ function activeLeg(
     const courseBearing = bearing(from.lat, from.lon, dest.lat, dest.lon);
     const midLat = from.lat + (dest.lat - from.lat) * 0.45;
     const midLon = from.lon + (dest.lon - from.lon) * 0.45;
-    const maxOffset = Math.max(5, Math.min(legDist * 0.18, 60));
-    for (let off = maxOffset; off >= 5; off -= maxOffset / 4) {
+    // The strategic offset must SCALE WITH THE LEG. The old floor was a flat
+    // 5 nm whatever the leg length, so on a 3 nm inshore leg "bank right" sailed
+    // the boat 5 nm sideways — measured at +196% elapsed on Round the Island and
+    // +111% on a Cowes day, i.e. a first-class control that destroyed the race.
+    // A side is a lean, not a detour: at most ~18% of the leg, never more than
+    // half of it, and the search floor scales down with the leg too.
+    const maxOffset = Math.min(Math.max(legDist * 0.18, legDist * 0.05), legDist * 0.5, 60);
+    const minOffset = Math.max(maxOffset * 0.25, 0.1);
+    for (let off = maxOffset; off >= minOffset; off -= maxOffset / 4) {
       const cand = movePoint(midLat, midLon, courseBearing + bias * 90, off);
       if (!pointInLand(land, cand.lat, cand.lon) && !segmentCrossesLand(land, { lat: midLat, lon: midLon }, cand)) {
         strategic = cand;

@@ -4,7 +4,11 @@ import { defineConfig, devices } from '@playwright/test';
 // Build it first with `npm run build:web`.
 export default defineConfig({
   testDir: './e2e',
-  timeout: 180_000,
+  // 300s: the full-race playthrough sails a real Round-the-Island in real time,
+  // and the fleet-friction calibration made that race a genuine contest rather
+  // than a procession — more decisions actually dock, and each one holds the sim
+  // until the spec answers it. The race itself is unchanged in length.
+  timeout: 300_000,
   expect: { timeout: 15_000 },
   fullyParallel: false,
   retries: process.env.CI ? 1 : 0,

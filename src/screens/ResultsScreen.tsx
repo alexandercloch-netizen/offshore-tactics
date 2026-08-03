@@ -495,11 +495,79 @@ const Debrief: React.FC<{ result: NonNullable<ReturnType<typeof useGame>['state'
             : 'you matched the optimal line'}
         </Text>
       ) : null}
+      {result.legSplits && result.legSplits.length > 1 ? (
+        <View style={styles.splitBox} testID="leg-splits">
+          <Text style={styles.splitTitle}>Where it went</Text>
+          {result.legSplits.map((leg, i) => {
+            const lost = leg.parHours != null ? leg.hours - leg.parHours : null;
+            const worst =
+              lost != null &&
+              lost ===
+                Math.max(
+                  ...result.legSplits!.map((l) =>
+                    l.parHours != null ? l.hours - l.parHours : -Infinity
+                  )
+                ) &&
+              lost > 0.02;
+            return (
+              <View key={`${leg.toMark}-${i}`} style={styles.splitRow}>
+                <Text style={[styles.splitLeg, worst && styles.splitWorst]} numberOfLines={1}>
+                  {leg.fromMark} → {leg.toMark}
+                </Text>
+                <Text style={styles.splitNm}>{leg.distanceNm} nm</Text>
+                <Text style={[styles.splitTime, worst && styles.splitWorst]}>
+                  {formatDuration(leg.hours)}
+                </Text>
+                <Text
+                  style={[
+                    styles.splitDelta,
+                    lost != null && lost > 0.02 ? styles.splitBad : styles.splitGood,
+                    worst && styles.splitWorst,
+                  ]}
+                >
+                  {lost == null
+                    ? '—'
+                    : lost > 0.02
+                      ? `+${formatDuration(lost)}`
+                      : `-${formatDuration(Math.abs(lost))}`}
+                </Text>
+              </View>
+            );
+          })}
+          <Text style={styles.splitNote}>
+            Time against each leg's share of the optimal line. The highlighted leg is where
+            the race was lost.
+          </Text>
+        </View>
+      ) : null}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
+  splitBox: {
+    marginTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.hull,
+    paddingTop: spacing.sm,
+  },
+  splitTitle: {
+    color: colors.brassLight,
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.bold,
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
+    marginBottom: spacing.xs,
+  },
+  splitRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 3, gap: spacing.sm },
+  splitLeg: { color: colors.foam, fontSize: fontSize.xs, flex: 1 },
+  splitNm: { color: colors.slate, fontSize: fontSize.xs, width: 52, textAlign: 'right', fontVariant: ['tabular-nums'] },
+  splitTime: { color: colors.mist, fontSize: fontSize.xs, width: 60, textAlign: 'right', fontVariant: ['tabular-nums'] },
+  splitDelta: { fontSize: fontSize.xs, width: 62, textAlign: 'right', fontVariant: ['tabular-nums'] },
+  splitBad: { color: colors.warning },
+  splitGood: { color: colors.signalGreen },
+  splitWorst: { fontWeight: fontWeight.bold },
+  splitNote: { color: colors.slate, fontSize: fontSize.xs, lineHeight: 15, marginTop: spacing.xs },
   screen: {
     flex: 1,
     backgroundColor: colors.abyss,

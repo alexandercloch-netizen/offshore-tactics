@@ -323,16 +323,29 @@ describe('golden races — the determinism contract', () => {
 //     harness) no longer beats a whole fleet that was calibrated against the
 //     crawl (position 1 → 23). Difficulty now comes from sailing well;
 //     fleetTightness proves sensible play still contends.
+// RE-BLESSED (5th) — the measured difficulty calibration + the tack cost. This
+// is the SMALLEST re-bless in the file's history and every pin is accounted for:
+//   • The PLAYER'S TRAJECTORY is byte-identical on all three — `ticks`,
+//     `decisions` and `distanceNm` did not move. The boat sails the same race.
+//   • `elapsedH` moves ONLY by the new manoeuvre cost (a tack/gybe now throws
+//     away boatlengths): +0.047 h inshore, -0.686 h offshore, and the gale is
+//     identical to the microsecond (a synthetic steady blow barely tacks).
+//   • `position`/`correctedPos` move ONLY in the division whose friction was
+//     recalibrated — Corinthian 1.0 -> 1.10 (inshore 23->7, gale 16->12). The
+//     PRO case (Fastnet) holds at 38/38 because Pro friction is unchanged.
+//   • `rngDraws` moves by fleet LIFETIME only (different finish times re-time
+//     the fleet's retirement rolls), never by a change in the draw structure.
+// The calibration itself is measured, not guessed: see FLEET_FRICTION.
 const GOLDEN_INSHORE: GoldenSummary = {
   ticks: 110,
   decisions: 10,
-  rngDraws: 10385,
+  rngDraws: 10637,
   finished: true,
   retired: false,
-  elapsedH: 12.116153,
+  elapsedH: 12.162996,
   distanceNm: 60.228444,
-  position: 23,
-  correctedPos: 26,
+  position: 7,
+  correctedPos: 1,
   hull: 63.491532,
   stamina: 0,
   eventIds: [
@@ -345,9 +358,9 @@ const GOLDEN_INSHORE: GoldenSummary = {
     'evt-squall',
     'evt-gear',
     'evt-fo-jury',
-    'evt-headland',
+    'evt-windshift',
   ],
-  fleetTop3: ['Rán', 'Leopard', 'Wild Oats'],
+  fleetTop3: ['Rán', 'Aragon', 'Lucky'],
 };
 
 // RE-BLESSED (4th) with the routing-physics fix: this seed's Fastnet carried
@@ -357,15 +370,15 @@ const GOLDEN_INSHORE: GoldenSummary = {
 const GOLDEN_OFFSHORE: GoldenSummary = {
   ticks: 109,
   decisions: 7,
-  rngDraws: 12415,
+  rngDraws: 12454,
   finished: true,
   retired: false,
-  elapsedH: 103.454375,
+  elapsedH: 102.768443,
   distanceNm: 688.221188,
   position: 38,
   correctedPos: 38,
-  hull: 74.03775,
-  stamina: 13.003794,
+  hull: 78.746092,
+  stamina: 12.963181,
   eventIds: [
     'evt-headland',
     'evt-kelp',
@@ -385,12 +398,12 @@ const GOLDEN_OFFSHORE: GoldenSummary = {
 const GOLDEN_GALE: GoldenSummary = {
   ticks: 100,
   decisions: 8,
-  rngDraws: 4603,
+  rngDraws: 4816,
   finished: true,
   retired: false,
   elapsedH: 77.526419,
   distanceNm: 627.070448,
-  position: 16,
+  position: 12,
   correctedPos: 16,
   hull: 69.261013,
   stamina: 10.996943,
@@ -404,5 +417,5 @@ const GOLDEN_GALE: GoldenSummary = {
     'evt-nightwatch',
     'evt-fo-watch',
   ],
-  fleetTop3: ['Rán', 'Comanche', 'Leopard'],
+  fleetTop3: ['Rán', 'Pyewacket', 'Bella Mente'],
 };

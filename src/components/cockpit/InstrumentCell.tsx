@@ -40,7 +40,7 @@ const InstrumentCell: React.FC<{ cell: CellSpec; reducedMotion?: boolean }> = ({
         {cell.badge ? (
           <Animated.Text
             style={[styles.badge, { transform: [{ scale: pop }] }]}
-            testID="sail-change-count"
+            testID={cell.id === 'sail' ? 'sail-change-count' : `badge-${cell.id}`}
           >
             {cell.badge}
           </Animated.Text>

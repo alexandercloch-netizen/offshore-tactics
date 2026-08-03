@@ -70,29 +70,34 @@ const REF_BOAT: Boat =
 const LEVERAGE_FRACTION = 0.05;
 const LEVERAGE_CAP_NM = 30;
 
-// The racing-friction allowance on the fleet's pace. The benchmark (`cleanRunHours`)
-// sails a clean CRUISE with wear but pays NONE of the friction a real race forces
-// on the player: time lost to tactical decisions/events, the cost of every sail
-// change, the extra wear of pushing. The AI, in turn, is advanced on a smooth
-// made-good line (`advanceFleet`) that never fires an event, never changes a sail
-// and never wears from effort. Paced to a *frictionless* benchmark, the tight Pro
-// fleet was uncatchable even sailing a flawless race — reproduced back-third to
-// last on Chicago-Mac (Pro) despite the right sail up 93% of the time, ~6–21% of
-// race time adrift. This allowance restores the missing tax so "par" is a clean
-// run *in an actual race*: a well-sailed Pro race lands mid-fleet and sharp play
-// (effort + calls + sail work) fights for the podium. It is division-keyed on
-// purpose — the loose, slower Corinthian fleet (mean 0.95, spread 0.14) already
-// absorbs the friction and races fair at 1.0 (the Round-Island and Sydney–Hobart
-// goldens confirm it), so only the tight Pro fleet needs the lift. Multiplies each
-// course's own benchmark, so it self-calibrates per race/boat/crew and carries to
-// any future race for free. A finer per-source friction model, and damping the
-// seed-to-seed side-lottery that still swings a good race between 1st and last,
-// are framework follow-ups; this is the honest first cut — tune it here.
-// Pro dropped 1.1 → 1.0 with the routing-physics fix: the 10% pad was tuned
-// when the lived loop bled hours to no-go crawls and reroute lockouts the
-// benchmark never saw. With that friction gone from the player's race, the pad
-// made the whole pro fleet beatable even on reckless play (fleetTightness).
-const FLEET_FRICTION: { pro: number; corinthian: number } = { pro: 1.0, corinthian: 1.0 };
+// The racing-friction allowance on the fleet's pace. Par (`cleanRunHours`) is a
+// tide-free, decision-free clean cruise — but the player's lived race is none of
+// those things: they pay the tide, the time cost of every call, the manoeuvre
+// cost of every tack, and the slow bleed of wear, while the AI fleet is
+// frictionless by construction (`advanceFleet` carries no condition at all).
+// This allowance is that missing tax, so "par" means a clean run *in an actual
+// race* and the podium is won by sailing well rather than by the fleet being
+// mis-paced. It multiplies each course's own benchmark, so it self-calibrates
+// per race, boat and crew, and carries to any new race for free.
+//
+// MEASURED, not guessed: a catalogue-wide survey (32 races × 3 seeds, cruise,
+// full crew, provisioned) put the lived finish at a median ~1.25× the tide-free,
+// decision-free benchmark — which is why, at 1.0, a cleanly-sailed default race
+// was finishing 80th–100th percentile, dead last on several courses every seed.
+// Padding by that FULL gap over-corrects hard (at 1.22 the same survey had the
+// player winning nearly everywhere, ~10th percentile), so the value below is the
+// calibrated middle: a clean default race lands mid-fleet with real seed-to-seed
+// spread, which is what "you sailed it properly — now go and out-think them"
+// should feel like.
+//
+// The two divisions genuinely need DIFFERENT values, and the measurements are
+// the only reason to believe it. Corinthian at 1.0 put a clean race at the 82nd
+// percentile (dead last on several courses); at 1.10 it lands at the 46th — the
+// target. The Pro fleet needs no pad at all since the routing-physics fix made
+// the player's lived race honest: at 1.10 even RECKLESS play averaged 2nd of 20
+// on Chicago-Mac (fleetTightness), so the mistakes-cost-places invariant broke.
+// Do not "tidy" these into one number — re-measure if you change them.
+const FLEET_FRICTION: { pro: number; corinthian: number } = { pro: 1.0, corinthian: 1.10 };
 
 // Build the AI fleet (everyone but the player). Each boat is paced to a target
 // finish time built from the race benchmark (a clean run of the player's own

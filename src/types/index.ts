@@ -435,6 +435,9 @@ export type PointOfSail = 'Upwind' | 'Reach' | 'Downwind';
 
 // Player-controlled tactics, adjustable mid-race.
 export type RoutingBias = -1 | 0 | 1; // favour left of course / optimal / right
+
+// The tactical board call: hold this tack, or let the router choose.
+export type BoardCall = 'auto' | 'port' | 'starboard';
 export type EffortMode = 'conserve' | 'cruise' | 'push';
 // The sail auto-helm dial: `manual` leaves every change to the picker (the
 // engine default, so a manual race is byte-identical to the pre-auto game); the
@@ -449,6 +452,11 @@ export interface PlayerStrategy {
   // (old saves and the engine's DEFAULT_STRATEGY), so the golden stream is
   // untouched. Players begin a race on `balanced` (seeded in BEGIN_RACE).
   sailMode?: SailMode;
+  // The board the crew is committed to. 'auto' (or absent) lets the router pick
+  // the tack, exactly as before; 'port'/'starboard' is the player holding a tack
+  // until they call the next one. Only bites on a beat — off the wind there is
+  // no board to hold — so the control is self-limiting.
+  board?: BoardCall;
 }
 
 export interface WeatherCondition {
@@ -628,6 +636,10 @@ export interface RaceProgress {
   routeWindDir: number; // wind direction the current route was planned for
   routePlannedAtNm: number; // distance covered when the route was last planned
   routeBias: RoutingBias; // the routing bias the current route was planned with
+  // Rolling mean wind direction at the boat, for the shift instrument: the
+  // player needs to know whether THIS wind is a lift or a header relative to
+  // what the leg has been averaging, which is the whole game upwind.
+  windMeanDir?: number;
   windDir: number; // local wind direction FROM at the boat
   windSpeedKn: number; // local wind speed at the boat
   // Internal scheduling, hidden from the UI:
@@ -670,6 +682,9 @@ export interface RaceProgress {
   // sample). Pure bookkeeping — a draw-free Math.max updated each tick — so it
   // never touches the RNG stream or a golden pin.
   peakWindKn?: number;
+  // Elapsed clock at each mark rounding, in order — the debrief's per-leg split
+  // ("you lost it on the second beat"). Display-only; the engine never reads it.
+  markSplits?: { markIndex: number; atHours: number }[];
   sailChanges?: number; // committed distinct changes this race (the ⇄N counter)
   sailChangesAuto?: number; // how many of those the auto-helm made (engine-inert)
   sailChangesFumbled?: number; // how many of those the crew bungled
@@ -759,6 +774,17 @@ export interface BoatCondition {
   crewMorale: number; // 0-100 (fleet average)
 }
 
+// One mark-to-mark leg of a finished race, for the debrief's "where did it go"
+// split: what the leg took, and the share of the optimal line's time its
+// geometry deserved.
+export interface LegSplit {
+  fromMark: string;
+  toMark: string;
+  distanceNm: number;
+  hours: number;
+  parHours?: number;
+}
+
 export interface RaceResult {
   raceId: string;
   raceName: string;
@@ -778,6 +804,7 @@ export interface RaceResult {
   trail?: GeoPoint[]; // the track actually sailed
   optimalRoute?: GeoPoint[]; // the weather-optimal line for contrast
   optimalHours?: number; // ETA a clean run on the optimal line would have made
+  legSplits?: LegSplit[]; // per-leg time vs the optimal line's par (debrief only)
   peakWindKn?: number; // peak true wind (kn) the boat saw this race — drives the gale-finish tally
   // Storyline debrief (storied races only): which signature choice was made and
   // the matching debrief beat text, captured at finish for the results screen.
