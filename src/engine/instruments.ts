@@ -33,6 +33,10 @@ export interface InstrumentReport {
     // starboard side, negative = port. Unsigned TWA is tack-blind — the band
     // shows "52°S", not just "52°".
     twaDeg: number;
+    // Signed shift of the CURRENT wind against the leg's rolling mean: + veered
+    // (a lift on port, a header on starboard), - backed. The number a tactician
+    // actually steers by; undefined until the mean has settled.
+    shiftDeg?: number;
     pointOfSail: PointOfSail;
     position: number;
     fleetSize: number;
@@ -86,6 +90,10 @@ export function buildInstrumentReport(
     windDir: progress.windDir,
     windSpeedKn: progress.windSpeedKn,
     twaDeg: signedShift(progress.heading, progress.windDir),
+    shiftDeg:
+      progress.windMeanDir !== undefined
+        ? signedShift(progress.windMeanDir, progress.windDir)
+        : undefined,
     pointOfSail: progress.pointOfSail,
     position: progress.position,
     fleetSize,

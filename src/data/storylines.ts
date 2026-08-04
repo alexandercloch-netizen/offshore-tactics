@@ -1114,6 +1114,78 @@ export const STORYLINES: Storyline[] = [
       },
     ],
   },
+  {
+    raceId: 'race-beercan-wk1',
+    theme: 'Opening night on the lakefront - and the sky going green over the Loop.',
+    stakes:
+      'The first Wednesday of the summer off the Monroe line. Half this crew has not been on a boat since September and one of them has never set a kite at all. That is the whole point of beer cans - but the radar has a line of cells walking off the plains toward the lakefront, and they do not care that this is meant to be the friendly one.',
+    coached:
+      'Navigator: that line is fifteen minutes out, maybe twenty. We can round the crib ahead of it and reach home in the new breeze - fast, and hard on a crew still finding the winches. Or we get the kite down early and take it on a white sail. Or we go in, and nobody on the Aft Deck asks. Your call, skipper.',
+    beats: [
+      {
+        kind: 'briefing',
+        body: 'Monroe Harbor on a June Wednesday: thirty boats milling behind the line, a committee boat full of volunteers, and the city stacked up gold behind the fleet. Somebody hands the new hand a winch handle and tells them which end goes in.',
+      },
+      {
+        kind: 'beat',
+        pinnedWaypoint: 'Four Mile Crib',
+        body: 'Two miles out, the skyline turns the colour of a bruise. The crib is dead ahead, the kite is full, and the leading edge of the squall is a hard grey line on the water behind the fleet.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'bold',
+        body: 'You carried it, rounded the crib with the line still astern, and came home reaching in the first of the new breeze while the fleet wrestled kites behind you. The new hand did not let go of anything they were not supposed to. First Wednesday of the summer, and the Aft Deck heard about it twice.',
+        bustBody:
+          'You carried it a minute too long. The front arrived with the kite still up and a crew who had never taken one down in thirty knots - a shrimped sail, a broach, and a long wet reach home at the back of the fleet. Everybody was fine, and everybody was going to hear about it all summer.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'hedge',
+        body: 'You got the kite down while there was still time to do it tidily, and took the front on a white sail with the boat upright and the new hand watching how it is meant to go. Mid-fleet, dry, and a crew that will come back next Wednesday.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'safe',
+        body: 'You turned for the harbour mouth and watched the squall walk over the fleet from the safety of the fairway. It is a Wednesday in June. The beer is the same temperature either way.',
+      },
+    ],
+  },
+  {
+    raceId: 'race-beercan-wk6',
+    theme: 'The last Wednesday - the series, the dying breeze, and the nine o clock fireworks.',
+    stakes:
+      'Six Wednesdays comes down to this one, and to the boat two lengths to leeward that has been beating you all summer. The shore band is dying with the sun. There is still pressure out east, but it is a long way off the direct line, and the discard is already spent.',
+    coached:
+      'Navigator: the dark water is out there, I can see it - but it is a proper commitment and they will not follow us. Or we forget the racecourse and sail THEM, which wins the series and nothing else. Or we sit in the shore band and trust it to hold the last mile. Points or pressure, skipper.',
+    beats: [
+      {
+        kind: 'briefing',
+        body: 'The last Wednesday of the series. The whole lakefront in one lap, the standings tight enough that the Aft Deck has been arguing about them since Monday, and the sun already low enough to be in the helmsman eyes on port tack.',
+      },
+      {
+        kind: 'beat',
+        pinnedWaypoint: 'Four Mile Crib',
+        body: 'At the crib the fleet parts: the offshore boats reaching out toward the dark line on the water, the shore boats tucking in under the buildings, and the summer resting on which band holds through sunset.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'bold',
+        body: 'You went out for the pressure, found it honest, and came in over the top of the whole shore band with the last of the breeze. The rival never followed and never recovered. The fireworks went up off the pier as you crossed - a summer decided by one call at the crib.',
+        bustBody:
+          'You went out for the pressure and the dark water turned out to be the last of it. The band closed behind you, the shore boats ghosted home in a breeze you could see and not reach, and the series went to the boat that did not gamble. The fireworks were lovely from where you were parked.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'hedge',
+        body: 'You forgot the racecourse and sailed the rival - covered them from the crib to the line and beat them by a length that never felt safe. The day went to somebody else entirely and the series came home in your pocket.',
+      },
+      {
+        kind: 'debrief',
+        outcome: 'safe',
+        body: 'You stayed in the shore band and it held, just, all the way to the line. Not the finish that wins a summer, but a clean sail on a warm night with the city going by - which is what the Wednesdays were always for.',
+      },
+    ],
+  },
 ];
 
 // Lookup: the storyline authored for a race, or undefined for an un-storied one.

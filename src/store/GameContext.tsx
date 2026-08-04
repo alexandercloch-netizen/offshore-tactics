@@ -575,6 +575,17 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({
     const race = getRaceById(current.selectedRaceId);
     const outcome = stepRace(current, race ? defaultStepNm(race) : 1);
     applyOutcome(outcome);
+    // A board call belongs to the leg it was made on: rounding a mark hands the
+    // helm back to the autopilot, so a "hold port" from the first beat can't
+    // silently force the wrong tack up the last one. (The engine already
+    // ignores the board off the wind; this stops the stale-dial trap.)
+    if (
+      current.progress &&
+      outcome.progress.nextMarkIndex > current.progress.nextMarkIndex &&
+      (current.strategy?.board ?? 'auto') !== 'auto'
+    ) {
+      dispatch({ type: 'SET_STRATEGY', payload: { board: 'auto' } });
+    }
     return outcome;
   }, [applyOutcome]);
 

@@ -40,6 +40,23 @@ export function sailTint(isWorking: boolean, coverage: number): string | undefin
   return status.bad;
 }
 
+// Lift or header? A veer (+) lifts the starboard tack and heads port; a back (-)
+// does the reverse. Same sign as TWA (which is + on starboard) = lifted. This is
+// the one number a tactician steers by upwind, so it rides on the TWA cell as a
+// tinted badge rather than costing a seventh cell.
+export function shiftBadge(shiftDeg: number | undefined, twaDeg: number): { text: string; tint?: string } | undefined {
+  if (shiftDeg === undefined) return undefined;
+  const mag = Math.round(Math.abs(shiftDeg));
+  if (mag < 3) return { text: 'STDY' }; // steady — no phase worth calling
+  const lifted = Math.sign(shiftDeg) === Math.sign(twaDeg);
+  // Only a BEAT has lifts and headers; off the wind just report the swing.
+  const beating = Math.abs(twaDeg) < 70;
+  return {
+    text: `${shiftDeg > 0 ? '+' : '-'}${mag}\u00b0`,
+    tint: beating ? (lifted ? status.good : status.warn) : undefined,
+  };
+}
+
 // Signed TWA with the tack suffix: positive = wind over the starboard side.
 export function formatTwa(twaDeg: number): string {
   const mag = Math.round(Math.abs(twaDeg));
@@ -102,15 +119,27 @@ export function buildPrimaryCells(
       a11y: `${pct} percent of target speed, ${pctTargetA11y(pct)}`,
       minWidth: 40,
     },
-    {
-      id: 'twa',
-      label: 'TWA',
-      value: formatTwa(now.twaDeg),
-      a11y: `True wind angle ${Math.round(Math.abs(now.twaDeg))} degrees ${
-        now.twaDeg > 0 ? 'starboard' : 'port'
-      }`,
-      minWidth: 52,
-    },
+    (() => {
+      const badge = shiftBadge(now.shiftDeg, now.twaDeg);
+      const beating = Math.abs(now.twaDeg) < 70;
+      const phase =
+        badge && badge.text !== 'STDY' && beating
+          ? Math.sign(now.shiftDeg!) === Math.sign(now.twaDeg)
+            ? `, lifted ${badge.text.replace('-', 'minus ')}`
+            : `, headed ${badge.text.replace('-', 'minus ')}`
+          : '';
+      return {
+        id: 'twa' as const,
+        label: 'TWA',
+        value: formatTwa(now.twaDeg),
+        tint: badge?.tint,
+        a11y: `True wind angle ${Math.round(Math.abs(now.twaDeg))} degrees ${
+          now.twaDeg > 0 ? 'starboard' : 'port'
+        }${phase}`,
+        minWidth: 52,
+        badge: badge?.text,
+      };
+    })(),
     {
       id: 'tws',
       label: 'TWS',

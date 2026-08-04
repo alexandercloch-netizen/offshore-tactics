@@ -109,8 +109,16 @@ The simulation is a **pure, deterministic engine** with a thin React UI on top.
     fleet's handicap is centred on the player's boat rating backed out by that
     edge, so **corrected (handicap) time is boat-neutral** — you win it by sailing
     above your rating (crew, effort, calls), not by buying speed. Course-side bias
-    + variance shuffle the standings, and `FLEET_FRICTION` (pro 1.10, corinthian
-    1.0) pads par so it's a clean run *in a real race*, not a frictionless cruise.
+    + variance shuffle the standings, and `FLEET_FRICTION` (pro 1.0, corinthian
+    1.10) pads par so it's a clean run *in a real race*, not a frictionless
+    cruise. Those pads are **measured, per division, and must be RE-MEASURED if
+    you touch them** — never "tidied" into one number. A catalogue survey (32
+    races × 3 seeds, cruise, full crew, provisioned) found the lived finish runs
+    a median ~1.25× the tide-free, decision-free benchmark, so at corinthian 1.0
+    a cleanly-sailed default race finished at the **82nd percentile** — dead
+    last on several courses, every seed. Corinthian 1.10 lands it at the 46th.
+    Pro needs no pad at all since the routing fix: at 1.10 even RECKLESS play
+    averaged 2nd of 20 on Chicago-Mac and `fleetTightness` broke.
     **The fleet advance is FRICTIONLESS** — a competitor has no condition at all
     (`advanceFleet` carries a constant `paceScale`, no wear/effort/sail/decision
     time), so it never fades. The player DOES wear, so effort and wear are the
@@ -118,6 +126,21 @@ The simulation is a **pure, deterministic engine** with a thin React UI on top.
     can crater `conditionFactor` and turn a first-half lead into a back-half collapse
     against a fleet that holds pace. Handicap ratings are ORC-style, derived from the
     boat's polar (`engine/orc.ts`; authored `Boat.ratingTcc` is an override).
+  - **Manoeuvre cost & the board call** (`gameEngine.ts`): a tack/gybe throws
+    away distance-through-water (`TACK_COST_NM`/`GYBE_COST_NM`, eased by crew
+    skill), so over-tacking is finally a mistake — boards were free before, and
+    the router could thrash them for nothing. The player commands the BOARD
+    (`PlayerStrategy.board`: `auto` | `port` | `starboard`), which the engine
+    honours by forcing the router's `prevHeading` commitment — but ONLY on a
+    beat (the rhumb to the mark inside the no-go), so the dial can never drag
+    the boat off a reaching leg. `auto` is byte-identical to the old behaviour.
+    `GameContext.tick` resets the board to `auto` at each mark rounding, so a
+    call belongs to the leg it was made on.
+  - **The shift instrument**: `RaceProgress.windMeanDir` is an exponential
+    rolling mean of the true wind direction; `InstrumentReport.now.shiftDeg` is
+    the live wind against it, and the TWA cell carries it as a tinted badge
+    (green = lifted, amber = headed, on a beat only). Draw-free arithmetic on a
+    new field — it cannot move a pinned stream.
   - `geo.ts` — projections, bearings, distances. `rng.ts` — seedable RNG.
   - `recommend.ts` — home-screen race recommendation from the player profile.
   - `start.ts` — the race start: the start-line geometry (`startLineGeo`), the
@@ -417,6 +440,29 @@ local events only) by listing them in `SERIES_LITE_MEMBER_IDS` — contentDepth
 and storyline tests exempt exactly that set. Tag series-local events with the
 member race ids (never a golden region key). Bake coastlines/climatology for the
 new ids with the byte-for-byte restore of every existing entry, as always.
+
+**Sub-15 nm courses are a distinct regime.** The Chicago Beer Can Series (Columbia
+YC, Monroe Harbor — 10–14 nm Wednesday evenings) is the worked example, and two
+engine constants had to learn about it. Both are gated on `LEGACY_MIN_COURSE_NM`
+(15 nm — the shortest course that shipped before), so **every pre-existing race
+and every golden is byte-identical** and the guard is provable rather than
+hopeful:
+- `defaultStepNm`'s flat 0.5 nm floor was sized when nothing was shorter than
+  15 nm. Below that it binds hard: a 6 nm race ran **twelve ticks end to end**,
+  and the mark-rounding radius (which tracks the step) swallowed a third of every
+  leg. Short courses now get a proportional floor — ~30 ticks at any length.
+- `realisedDecisionHours`' ±0.5 h cap is a rounding error on a 130 h Fastnet and
+  the WHOLE RACE on a one-hour beer can; measured, it turned every Wednesday into
+  a coin toss (the same course finishing 1st or 30th on adjacent seeds, nothing
+  between). Short courses cap at a fraction of their own record instead
+  (`decisionTimeCapFor`).
+Even so, a very short course is intrinsically high-variance: the fleet's spread
+is a small number of ABSOLUTE minutes, so a modest swing spans the whole fleet.
+The beer-can courses were deliberately authored at 10–14 nm rather than the 6–8 nm
+first tried, which is also truer to a real Wednesday. **A residual per-course bias
+remains** (some geometries finish consistently ahead of or behind par — the coarse
+`cleanRunHours` under-times beat-heavy courses); that is a known follow-up, not a
+mystery.
 
 **Add a boat** — append a `Boat` to `src/data/boats.ts` with a non-zero
 `crewCapacity` (or the crew screen blocks signing), a price, `baseSpeed`, and

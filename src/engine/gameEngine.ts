@@ -22,6 +22,7 @@ import {
   Race,
   RaceDivision,
   RaceProgress,
+  LegSplit,
   RaceResult,
   RoutingBias,
   Sail,
@@ -110,6 +111,12 @@ const SITUATION_WINDOW_FRACTION = 0.35;
 const DECISION_STRETCH = 1 / 12;
 // Re-route when the local wind has shifted this much from the planned route.
 const REROUTE_SHIFT_DEG = 12;
+// What a manoeuvre costs, as distance-through-water thrown away. A tack on a
+// 40-footer costs roughly two to three boatlengths of run; a gybe rather less.
+// These are the only knobs that make over-tacking a mistake.
+const TACK_COST_NM = 0.045;
+const GYBE_COST_NM = 0.025;
+
 const TRAIL_CAP = 400;
 
 export const DEFAULT_STRATEGY: PlayerStrategy = { bias: 0, effort: 'cruise' };
@@ -131,8 +138,19 @@ function strategyOf(state: GameState): PlayerStrategy {
   return state.strategy ?? DEFAULT_STRATEGY;
 }
 
+// The shortest course that shipped before the beer-can series. At and above it
+// the step floor below is the historic flat 0.5 nm, so every pre-existing course
+// — and every golden — is byte-identical.
+const LEGACY_MIN_COURSE_NM = 15;
+
 export function defaultStepNm(race: Race): number {
-  return Math.max(race.distanceNm * STEP_FRACTION, 0.5);
+  // A fraction of the course, floored so a long passage doesn't become a million
+  // ticks. That flat 0.5 nm floor was sized when the shortest course was 15 nm,
+  // and it binds hard below that: a 6 nm beer-can race would be TWELVE ticks end
+  // to end, and the mark-rounding radius (which tracks the step) would swallow a
+  // third of every leg. Short courses get a proportional floor instead.
+  const floor = race.distanceNm >= LEGACY_MIN_COURSE_NM ? 0.5 : race.distanceNm / 30;
+  return Math.max(race.distanceNm * STEP_FRACTION, floor);
 }
 
 // The fleet benchmark's clean run walks the course at a coarser step than
@@ -680,6 +698,15 @@ function geometricRemaining(
 }
 
 const brg = (a: GeoPoint, b: GeoPoint): number => bearing(a.lat, a.lon, b.lat, b.lon);
+
+// Exponential rolling mean of a COMPASS direction (naive averaging breaks across
+// north). Feeds the shift instrument: the boat needs a stable reference to call
+// the current wind a lift or a header against.
+function rollMeanDir(prevMean: number | undefined, sample: number, alpha: number): number {
+  if (prevMean === undefined) return sample;
+  const delta = ((sample - prevMean + 540) % 360) - 180;
+  return (prevMean + alpha * delta + 360) % 360;
+}
 
 export function initialProgress(
   race: Race,
@@ -1287,8 +1314,22 @@ export function tacticalRead(state: GameState): TacticalRead {
 // projects the realised economy.
 const DECISION_TIME_SCALE = 0.65;
 const DECISION_TIME_CAP_H = 0.5; // absolute: one call swings ~30 min on the water at most
-export function realisedDecisionHours(extraHours: number): number {
-  return Math.max(-DECISION_TIME_CAP_H, Math.min(extraHours * DECISION_TIME_SCALE, DECISION_TIME_CAP_H));
+
+// The cap has to mean something RELATIVE to the race being sailed. Half an hour
+// is a rounding error on a 130-hour Fastnet and the whole race on a one-hour
+// beer can — where it turned every Wednesday into a coin toss (measured: the
+// same course finishing 1st or 30th on adjacent seeds, nothing in between).
+// Courses shorter than the pre-beer-can minimum get a cap proportional to their
+// own record instead; everything that shipped before is >= that length, so this
+// is byte-identical for every existing race and every golden.
+export function decisionTimeCapFor(race?: Race): number {
+  if (!race || race.distanceNm >= LEGACY_MIN_COURSE_NM) return DECISION_TIME_CAP_H;
+  return Math.min(DECISION_TIME_CAP_H, race.recordTimeHours * 0.18);
+}
+
+export function realisedDecisionHours(extraHours: number, race?: Race): number {
+  const cap = decisionTimeCapFor(race);
+  return Math.max(-cap, Math.min(extraHours * DECISION_TIME_SCALE, cap));
 }
 
 // The Tactician's forgiveness on a committed bold call that the field didn't
@@ -1328,6 +1369,7 @@ function downsideSoftCost(choice: TacticalChoice): string | null {
 }
 
 export function choiceDownside(state: GameState, choice: TacticalChoice): string {
+  const dsRace = getRaceById(state.selectedRaceId);
   const riskMod = state.weather?.riskModifier ?? 0;
   const forgive = choice.field ? misreadForgiveness(state.selectedCrewIds) : 0;
   const bungleRaw = choice.risk > 0.02 ? 0.3 + riskMod * 0.5 : 0;
@@ -1335,7 +1377,7 @@ export function choiceDownside(state: GameState, choice: TacticalChoice): string
     ? resolveFieldDelta(choice, MISREAD_EDGE) * (1 - forgive) + bungleRaw
     : Math.max(choice.timeDelta, 0) + bungleRaw;
   const rightRaw = choice.field ? 0 : Math.max(choice.timeDelta, 0);
-  const hours = Math.max(0, realisedDecisionHours(wrongRaw) - realisedDecisionHours(rightRaw));
+  const hours = Math.max(0, realisedDecisionHours(wrongRaw, dsRace) - realisedDecisionHours(rightRaw, dsRace));
   const soft = downsideSoftCost(choice);
   if (hours < 0.05 && !soft) return 'Little to go wrong.';
   const time = hours >= 0.05 ? `~+${hours.toFixed(1)}h` : 'a few minutes';
@@ -1371,7 +1413,7 @@ export function vmgPreview(state: GameState, event: GameEvent): VmgPreview {
         // when the read is good), and the Tactician's forgiveness eases a COST
         // only — it never scales a gain, so the band brackets the realised swing.
         const raw = resolveFieldDelta(choice, Math.max(-1, Math.min(1, edge)));
-        const extra = realisedDecisionHours(raw > 0 ? raw * (1 - forgive) : raw);
+        const extra = realisedDecisionHours(raw > 0 ? raw * (1 - forgive) : raw, race);
         return stretchNm / Math.max(baseHours + extra, 0.2);
       };
       const hw = edgeHalfWidth(read.reliable);
@@ -1564,6 +1606,39 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
       }
     }
   }
+  // The board call: the player holding a tack. Only bites on a BEAT (the rhumb
+  // to the mark lies inside the no-go), because off the wind there is no board
+  // to hold — so the control can never drag the boat away from a reaching mark.
+  // Implemented as the router's `prevHeading` commitment: force the leg to be
+  // planned as if already sailing that tack, and the fetch/short-beat logic
+  // holds it. 'auto' (or absent) is byte-identical to the old behaviour.
+  const boardCall = strategy.board ?? 'auto';
+  if (boardCall !== 'auto' && prev.nextMarkIndex < marks.length) {
+    const markNow = marks[prev.nextMarkIndex];
+    const brgToMark = bearing(prev.lat, prev.lon, markNow.lat, markNow.lon);
+    const beating = polarSpeed(boat, angularDelta(brgToMark, wind.fromDeg), wind.speedKn) <= 0.2;
+    if (beating) {
+      const { upAngle } = bestVmgAngles(boat, wind.speedKn);
+      // Starboard tack = wind over the starboard side = heading is upAngle to
+      // the LEFT of the wind's eye (bearing = windFrom - upAngle).
+      const want =
+        boardCall === 'starboard'
+          ? (wind.fromDeg - upAngle + 360) % 360
+          : (wind.fromDeg + upAngle) % 360;
+      const held = planRoute(
+        boat, field, { lat: prev.lat, lon: prev.lon }, marks, prev.nextMarkIndex,
+        prev.elapsedHours, strategy.bias, LANDMASSES[race.id], undefined, want
+      );
+      if (held.length > 1) {
+        const h = brg(held[0], held[1]);
+        if (polarSpeed(boat, angularDelta(h, wind.fromDeg), wind.speedKn) > 0.2) {
+          liveRoute = held;
+          liveHeading = h;
+          rescueReplanned = true;
+        }
+      }
+    }
+  }
   // The flown sail's live multiplier — computed off the same heading/wind the
   // polar reads. With no specialist up it is exactly 1, and the speed maths is
   // byte-identical to the pre-wardrobe engine. Speed starts from the BASE
@@ -1590,11 +1665,30 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
       ? prev.startSpeedMul + (1 - prev.startSpeedMul) * clamp(prev.distanceCoveredNm / prev.startFadeNm, 0, 1)
       : 1;
   const speed = baseSpeed * startMul;
+  // The cost of a tack (or gybe): a real manoeuvre stops the boat and costs
+  // boatlengths. Before this, boards were free — the router could thrash tacks
+  // for nothing and a player could never be punished for over-tacking, which is
+  // half of what makes a beat a game. Charged as lost distance-through-water on
+  // the tick the boat crosses the wind, scaled by crew skill (a slick crew loses
+  // less) and by how far through the wind it swings. Off the wind a gybe is
+  // cheaper than a tack. Draw-free — pure arithmetic on the headings.
+  const twaPrev = angularDelta(prev.heading, prev.windDir);
+  const twaNow2 = angularDelta(liveHeading, wind.fromDeg);
+  const prevSide = Math.sign(((prev.windDir - prev.heading + 540) % 360) - 180);
+  const nowSide = Math.sign(((wind.fromDeg - liveHeading + 540) % 360) - 180);
+  let manoeuvreNm = 0;
+  if (prevSide !== 0 && nowSide !== 0 && prevSide !== nowSide) {
+    const throughWind = twaPrev < 90 && twaNow2 < 90; // a tack, not a gybe
+    const base = throughWind ? TACK_COST_NM : GYBE_COST_NM;
+    // A sharp crew loses less; skillMul runs ~0.9–1.1, so invert it around 1.
+    manoeuvreNm = base * (2 - Math.min(Math.max(skillMul, 0.8), 1.2));
+  }
+
   // Through-water time for this step: the boat sails `stepNm` along its route at
   // its polar speed. Tide is folded in below as a made-good rate, NOT as a 2-D
   // drift — so the boat never leaves its land-routed track and a stream can't push
   // it onto the coast (the recurring over-land bug).
-  const dtBase = stepNm / Math.max(speed, 0.3);
+  const dtBase = (stepNm + manoeuvreNm) / Math.max(speed, 0.3);
 
   const adv = advanceAlongRoute(liveRoute, stepNm);
   // Fool-proof land guard: the boat advances along its planned route, but if that
@@ -1752,6 +1846,16 @@ export function stepRace(state: GameState, stepNm: number): StepResult {
     // chance branch), writing a brand-new field absent from the golden summary,
     // so it cannot move a pinned stream.
     peakWindKn: Math.max(prev.peakWindKn ?? 0, wind.speedKn),
+    // The clock at each mark rounded — the debrief's per-leg split. A pure
+    // append of a brand-new field (no draws, no branch on chance), so the
+    // pinned streams cannot see it.
+    markSplits: rounded
+      ? [...(prev.markSplits ?? []), { markIndex: prev.nextMarkIndex, atHours: elapsedHours }]
+      : prev.markSplits,
+    // Rolling mean wind direction (exponential, ~20 ticks) — the reference the
+    // shift instrument reads a lift or a header against. Draw-free arithmetic on
+    // a brand-new field, so it cannot move a pinned stream.
+    windMeanDir: rollMeanDir(prev.windMeanDir, wind.fromDeg, 0.08),
     nextDecisionAtNm: prev.nextDecisionAtNm,
     decisionsTaken: prev.decisionsTaken,
     shownEventIds: prev.shownEventIds ?? [],
@@ -2069,7 +2173,7 @@ export function applyDecision(state: GameState, choice: TacticalChoice): StepRes
     hullIntegrity: clamp(hull),
   };
 
-  const lostHours = realisedDecisionHours(extraHours);
+  const lostHours = realisedDecisionHours(extraHours, race);
   // If this decision was the storied race's signature set-piece, record which
   // choice was taken so the debrief can pick its matching beat. Detected by the
   // choice belonging to the race's pinned hazard event — purely from the choice,
@@ -2439,6 +2543,45 @@ const DIVISION_LABEL: Record<DivisionKey, string> = {
   pro: 'Pro',
 };
 
+// The debrief's per-leg split: how long each leg between marks actually took,
+// and how that compares with the share of the optimal-line time that leg's
+// geometry deserves. "11h43m left on the table" tells a sailor nothing; "you
+// lost 41m on the second beat" tells them where to look. Display-only.
+function buildLegSplits(
+  race: Race,
+  progress: RaceProgress,
+  optimalHours: number | undefined
+): LegSplit[] | undefined {
+  const splits = progress.markSplits ?? [];
+  if (splits.length === 0) return undefined;
+  const marks = race.waypoints;
+  // Leg i runs from mark i-1 to mark i; the final leg ends at the finish.
+  const stamps = [{ markIndex: 0, atHours: 0 }, ...splits];
+  if (stamps[stamps.length - 1].markIndex < marks.length - 1) {
+    stamps.push({ markIndex: marks.length - 1, atHours: progress.elapsedHours });
+  }
+  const total = courseLengthNm(marks);
+  const out: LegSplit[] = [];
+  for (let i = 1; i < stamps.length; i += 1) {
+    const from = marks[stamps[i - 1].markIndex];
+    const to = marks[stamps[i].markIndex];
+    if (!from || !to) continue;
+    const nm = haversineNm(from.lat, from.lon, to.lat, to.lon);
+    const hours = Math.max(stamps[i].atHours - stamps[i - 1].atHours, 0);
+    // The optimal line's time apportioned by this leg's share of the course —
+    // a fair yardstick without re-routing every leg.
+    const par = optimalHours != null && total > 0 ? optimalHours * (nm / total) : undefined;
+    out.push({
+      fromMark: from.name,
+      toMark: to.name,
+      distanceNm: Number(nm.toFixed(1)),
+      hours: Number(hours.toFixed(4)),
+      parHours: par != null ? Number(par.toFixed(4)) : undefined,
+    });
+  }
+  return out.length > 0 ? out : undefined;
+}
+
 export function buildResult(state: GameState, outcome: StepResult): RaceResult {
   const race = getRaceById(state.selectedRaceId);
   if (!race) {
@@ -2604,6 +2747,7 @@ export function buildResult(state: GameState, outcome: StepResult): RaceResult {
     trail,
     optimalRoute,
     optimalHours,
+    legSplits: buildLegSplits(race, outcome.progress, optimalHours),
     // Peak true wind seen this race, carried onto the result for the career fold
     // (absent on the finished progress → undefined).
     peakWindKn: outcome.progress.peakWindKn,

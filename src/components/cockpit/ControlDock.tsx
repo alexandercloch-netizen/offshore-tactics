@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, fontSize, fontWeight, radius, spacing } from '../../theme';
-import { EffortMode, PlayerStrategy, RoutingBias, SailMode } from '../../types';
+import { BoardCall, EffortMode, PlayerStrategy, RoutingBias, SailMode } from '../../types';
 import NauticalButton from '../NauticalButton';
 
 // The bottom control console — the thumb zone. Everything a racing hand needs
@@ -96,6 +96,21 @@ const ControlDock: React.FC<ControlDockProps> = ({
       </Pressable>
     </View>
     <View style={styles.dialRow}>
+      <View style={{ flex: 1 }}>
+        {/* The board: hold a tack, or let the autopilot choose. Only bites on a
+            beat, so it is safe to leave set. */}
+        <Text style={styles.dialLabel}>Board</Text>
+        <Segmented<BoardCall>
+          testID="board-control"
+          value={strategy.board ?? 'auto'}
+          options={[
+            { value: 'port', label: 'Port' },
+            { value: 'auto', label: 'Auto' },
+            { value: 'starboard', label: 'Stbd' },
+          ]}
+          onSelect={(board) => onStrategy({ board })}
+        />
+      </View>
       <View style={{ flex: 1 }}>
         <Text style={styles.dialLabel}>Effort</Text>
         <Segmented<EffortMode>

@@ -23,6 +23,24 @@ export const SERIES: Series[] = [
     prizeMoney: 15000,
     season: 'August',
   },
+  {
+    id: 'series-chicago-beercan',
+    name: 'Chicago Beer Can Series',
+    location: 'Monroe Harbor, Chicago',
+    description:
+      "Columbia Yacht Club has run Wednesday nights off Monroe Harbor since the 1950s, and the point of it has never been the silverware. Anything over twenty feet, rotate the crew through the jobs, sail the lakefront until the breeze gives out, then raft up on Columbia's Aft Deck for the Navy Pier fireworks. Six Wednesdays, one discard, and the last of the summer light.",
+    memberRaceIds: [
+      'race-beercan-wk1',
+      'race-beercan-wk2',
+      'race-beercan-wk3',
+      'race-beercan-wk4',
+      'race-beercan-wk5',
+      'race-beercan-wk6',
+    ],
+    entryFee: 400,
+    prizeMoney: 3000,
+    season: 'July',
+  },
 ];
 
 export function getSeriesById(id?: string): Series | undefined {
@@ -42,4 +60,10 @@ export const SERIES_LITE_MEMBER_IDS: Set<string> = new Set([
   'race-cowes-day2',
   'race-cowes-day3',
   'race-cowes-day4',
+  // The mid-summer Wednesdays: the beer cans' narrative lives in opening night
+  // and the last Wednesday, exactly as Cowes' does in its bookends.
+  'race-beercan-wk2',
+  'race-beercan-wk3',
+  'race-beercan-wk4',
+  'race-beercan-wk5',
 ]);

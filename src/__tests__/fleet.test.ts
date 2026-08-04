@@ -64,7 +64,7 @@ describe('createFleet', () => {
     expect(fleet.every((c) => c.bias! >= -1 && c.bias! <= 1)).toBe(true);
   });
 
-  it('applies no racing-friction padding in either division (Pro 1.0, Corinthian 1.0)', () => {
+  it('pads both fleets by the measured racing-friction allowance (Pro 1.0, Corinthian 1.10)', () => {
     // With no player boat the on-water edge is 1, so pacedBench = bench × friction,
     // and pacedBench === targetHours × speedMul for every boat — an exact, RNG-free
     // invariant that pins the division-keyed friction values. The Pro pad (1.10)
@@ -79,7 +79,7 @@ describe('createFleet', () => {
     setRng(mulberry32(7));
     const cor = createFleet(race, race.divisions.corinthian, bench);
     pro.forEach((c) => expect(c.targetHours * c.speedMul).toBeCloseTo(100, 6));
-    cor.forEach((c) => expect(c.targetHours * c.speedMul).toBeCloseTo(100, 6));
+    cor.forEach((c) => expect(c.targetHours * c.speedMul).toBeCloseTo(110, 6));
   });
 });
 
