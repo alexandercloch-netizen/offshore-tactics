@@ -138,8 +138,19 @@ function strategyOf(state: GameState): PlayerStrategy {
   return state.strategy ?? DEFAULT_STRATEGY;
 }
 
+// The shortest course that shipped before the beer-can series. At and above it
+// the step floor below is the historic flat 0.5 nm, so every pre-existing course
+// — and every golden — is byte-identical.
+const LEGACY_MIN_COURSE_NM = 15;
+
 export function defaultStepNm(race: Race): number {
-  return Math.max(race.distanceNm * STEP_FRACTION, 0.5);
+  // A fraction of the course, floored so a long passage doesn't become a million
+  // ticks. That flat 0.5 nm floor was sized when the shortest course was 15 nm,
+  // and it binds hard below that: a 6 nm beer-can race would be TWELVE ticks end
+  // to end, and the mark-rounding radius (which tracks the step) would swallow a
+  // third of every leg. Short courses get a proportional floor instead.
+  const floor = race.distanceNm >= LEGACY_MIN_COURSE_NM ? 0.5 : race.distanceNm / 30;
+  return Math.max(race.distanceNm * STEP_FRACTION, floor);
 }
 
 // The fleet benchmark's clean run walks the course at a coarser step than
@@ -1303,8 +1314,22 @@ export function tacticalRead(state: GameState): TacticalRead {
 // projects the realised economy.
 const DECISION_TIME_SCALE = 0.65;
 const DECISION_TIME_CAP_H = 0.5; // absolute: one call swings ~30 min on the water at most
-export function realisedDecisionHours(extraHours: number): number {
-  return Math.max(-DECISION_TIME_CAP_H, Math.min(extraHours * DECISION_TIME_SCALE, DECISION_TIME_CAP_H));
+
+// The cap has to mean something RELATIVE to the race being sailed. Half an hour
+// is a rounding error on a 130-hour Fastnet and the whole race on a one-hour
+// beer can — where it turned every Wednesday into a coin toss (measured: the
+// same course finishing 1st or 30th on adjacent seeds, nothing in between).
+// Courses shorter than the pre-beer-can minimum get a cap proportional to their
+// own record instead; everything that shipped before is >= that length, so this
+// is byte-identical for every existing race and every golden.
+export function decisionTimeCapFor(race?: Race): number {
+  if (!race || race.distanceNm >= LEGACY_MIN_COURSE_NM) return DECISION_TIME_CAP_H;
+  return Math.min(DECISION_TIME_CAP_H, race.recordTimeHours * 0.18);
+}
+
+export function realisedDecisionHours(extraHours: number, race?: Race): number {
+  const cap = decisionTimeCapFor(race);
+  return Math.max(-cap, Math.min(extraHours * DECISION_TIME_SCALE, cap));
 }
 
 // The Tactician's forgiveness on a committed bold call that the field didn't
@@ -1344,6 +1369,7 @@ function downsideSoftCost(choice: TacticalChoice): string | null {
 }
 
 export function choiceDownside(state: GameState, choice: TacticalChoice): string {
+  const dsRace = getRaceById(state.selectedRaceId);
   const riskMod = state.weather?.riskModifier ?? 0;
   const forgive = choice.field ? misreadForgiveness(state.selectedCrewIds) : 0;
   const bungleRaw = choice.risk > 0.02 ? 0.3 + riskMod * 0.5 : 0;
@@ -1351,7 +1377,7 @@ export function choiceDownside(state: GameState, choice: TacticalChoice): string
     ? resolveFieldDelta(choice, MISREAD_EDGE) * (1 - forgive) + bungleRaw
     : Math.max(choice.timeDelta, 0) + bungleRaw;
   const rightRaw = choice.field ? 0 : Math.max(choice.timeDelta, 0);
-  const hours = Math.max(0, realisedDecisionHours(wrongRaw) - realisedDecisionHours(rightRaw));
+  const hours = Math.max(0, realisedDecisionHours(wrongRaw, dsRace) - realisedDecisionHours(rightRaw, dsRace));
   const soft = downsideSoftCost(choice);
   if (hours < 0.05 && !soft) return 'Little to go wrong.';
   const time = hours >= 0.05 ? `~+${hours.toFixed(1)}h` : 'a few minutes';
@@ -1387,7 +1413,7 @@ export function vmgPreview(state: GameState, event: GameEvent): VmgPreview {
         // when the read is good), and the Tactician's forgiveness eases a COST
         // only — it never scales a gain, so the band brackets the realised swing.
         const raw = resolveFieldDelta(choice, Math.max(-1, Math.min(1, edge)));
-        const extra = realisedDecisionHours(raw > 0 ? raw * (1 - forgive) : raw);
+        const extra = realisedDecisionHours(raw > 0 ? raw * (1 - forgive) : raw, race);
         return stretchNm / Math.max(baseHours + extra, 0.2);
       };
       const hw = edgeHalfWidth(read.reliable);
@@ -2147,7 +2173,7 @@ export function applyDecision(state: GameState, choice: TacticalChoice): StepRes
     hullIntegrity: clamp(hull),
   };
 
-  const lostHours = realisedDecisionHours(extraHours);
+  const lostHours = realisedDecisionHours(extraHours, race);
   // If this decision was the storied race's signature set-piece, record which
   // choice was taken so the debrief can pick its matching beat. Detected by the
   // choice belonging to the race's pinned hazard event — purely from the choice,

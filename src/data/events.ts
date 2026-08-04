@@ -14,6 +14,129 @@ import { rnd, rndPick } from '../engine/rng';
 // ---------------------------------------------------------------------------
 export const GENERIC_EVENTS: GameEvent[] = [
   {
+    id: 'evt-rg-beercan-ferry',
+    title: 'Water Taxi on Starboard',
+    prompt:
+      'A tour boat comes out of the harbour mouth at speed with three hundred people waving at you, straight through the middle of the fleet.',
+    kind: 'tactical',
+    regions: ['race-beercan-wk1', 'race-beercan-wk2', 'race-beercan-wk3', 'race-beercan-wk4', 'race-beercan-wk5', 'race-beercan-wk6'],
+    choices: [
+      {
+        id: 'evt-rg-beercan-ferry-duck',
+        label: 'Duck the stern and wave back',
+        description: 'Lose a boat length, keep everybody in one piece, get on the postcard.',
+        timeDelta: 0.08,
+        staminaDelta: 0,
+        moraleDelta: 2,
+        hullDelta: 0,
+        risk: 0.03,
+      },
+      {
+        id: 'evt-rg-beercan-ferry-hold',
+        label: 'Hold your lane and make him move',
+        description: 'You are the stand-on vessel and the rules are the rules.',
+        timeDelta: -0.05,
+        staminaDelta: -1,
+        moraleDelta: 0,
+        hullDelta: 0,
+        risk: 0.16,
+      },
+    ],
+  },
+  {
+    id: 'evt-rg-beercan-newhand',
+    title: 'The New Hand on the Foredeck',
+    prompt:
+      'The whole point of Wednesdays is rotating people through the jobs. Tonight that means someone who has never set a kite is standing on the bow looking at the pole, and the mark is coming up fast.',
+    kind: 'tactical',
+    regions: ['race-beercan-wk1', 'race-beercan-wk2', 'race-beercan-wk3', 'race-beercan-wk4', 'race-beercan-wk5', 'race-beercan-wk6'],
+    choices: [
+      {
+        id: 'evt-rg-beercan-newhand-teach',
+        label: 'Talk them through it',
+        description: 'Slow the rounding down and let them do it. This is what the series is for.',
+        timeDelta: 0.15,
+        staminaDelta: -1,
+        moraleDelta: 6,
+        hullDelta: 0,
+        risk: 0.05,
+        crewSkill: 'Bowman',
+      },
+      {
+        id: 'evt-rg-beercan-newhand-swap',
+        label: 'Send the bowman forward instead',
+        description: 'Get the hoist right, and give them the next one.',
+        timeDelta: -0.1,
+        staminaDelta: -2,
+        moraleDelta: -2,
+        hullDelta: 0,
+        risk: 0.04,
+      },
+    ],
+  },
+  {
+    id: 'evt-rg-beercan-shorefade',
+    title: 'The Shore Band Dies',
+    prompt:
+      'The sun is behind the buildings and the breeze along the beach is going with it. Out east there is still a dark line on the water; inshore the fleet is starting to flop.',
+    kind: 'weather',
+    regions: ['race-beercan-wk1', 'race-beercan-wk2', 'race-beercan-wk3', 'race-beercan-wk4', 'race-beercan-wk5', 'race-beercan-wk6'],
+    choices: [
+      {
+        id: 'evt-rg-beercan-shorefade-out',
+        label: 'Get out to the dark water',
+        description: 'Reach off toward the pressure and pay the distance to keep the boat moving.',
+        timeDelta: -0.2,
+        staminaDelta: -2,
+        moraleDelta: 1,
+        hullDelta: 0,
+        risk: 0.17,
+        field: true,
+        crewSkill: 'Navigator',
+      },
+      {
+        id: 'evt-rg-beercan-shorefade-hold',
+        label: 'Sit in the shore band and be patient',
+        description: 'It has filled back in every Wednesday this month. Keep the boat still and wait.',
+        timeDelta: 0.2,
+        staminaDelta: 0,
+        moraleDelta: -1,
+        hullDelta: 0,
+        risk: 0.1,
+      },
+    ],
+  },
+  {
+    id: 'evt-rg-beercan-fireworks',
+    title: "Nine O'Clock Off Navy Pier",
+    prompt:
+      'The first shells go up off the end of the pier and light the whole fleet green and gold. Half the crew has stopped trimming to watch. There is still a mile to the line.',
+    kind: 'tactical',
+    regions: ['race-beercan-wk1', 'race-beercan-wk2', 'race-beercan-wk3', 'race-beercan-wk4', 'race-beercan-wk5', 'race-beercan-wk6'],
+    choices: [
+      {
+        id: 'evt-rg-beercan-fireworks-watch',
+        label: 'Let them watch',
+        description: 'Thirty seconds. This is why anyone does Wednesdays at all.',
+        timeDelta: 0.12,
+        staminaDelta: 1,
+        moraleDelta: 7,
+        hullDelta: 0,
+        risk: 0.02,
+      },
+      {
+        id: 'evt-rg-beercan-fireworks-race',
+        label: 'Keep their heads in the boat',
+        description: 'The fireworks will still be there after the gun.',
+        timeDelta: -0.12,
+        staminaDelta: -1,
+        moraleDelta: -3,
+        hullDelta: 0,
+        risk: 0.03,
+      },
+    ],
+  },
+  {
     id: 'evt-windshift',
     title: 'Wind Shift Ahead',
     prompt:
@@ -2554,6 +2677,102 @@ export const WEATHER_EVENTS: GameEvent[] = [
 // ---------------------------------------------------------------------------
 export const FOLLOWON_EVENTS: GameEvent[] = [
   {
+    id: 'evt-fo2-lake-threaded',
+    title: 'Between the Cells',
+    prompt:
+      'You are in the corridor between two squall lines: flat water, steady air, and a wall of dark moving up on either hand. It will not stay open for long.',
+    kind: 'tactical',
+    followsFrom: 'lake-threaded',
+    choices: [
+      {
+        id: 'evt-fo2-lake-threaded-run',
+        label: 'Run the corridor while it holds',
+        description: 'Push hard down the lane and get through before the cells close on you.',
+        timeDelta: -0.3,
+        staminaDelta: -3,
+        moraleDelta: 2,
+        hullDelta: -1,
+        risk: 0.19,
+        field: true,
+        crewSkill: 'Tactician',
+      },
+      {
+        id: 'evt-fo2-lake-threaded-edge',
+        label: 'Work to the clear edge',
+        description: 'Give up the free miles and get out to where the sky is honest.',
+        timeDelta: 0.15,
+        staminaDelta: -2,
+        moraleDelta: 0,
+        hullDelta: 0,
+        risk: 0.06,
+      },
+    ],
+  },
+  {
+    id: 'evt-fo2-beercan-ahead',
+    title: 'Out in Front of It',
+    prompt:
+      'You rounded the crib with the squall line still a mile astern and the new breeze arriving under it. The whole fleet is behind you in the old wind, and the front is about to hand you thirty knots from a new direction.',
+    kind: 'tactical',
+    followsFrom: 'beercan-ahead-of-it',
+    choices: [
+      {
+        id: 'evt-fo2-beercan-ahead-ride',
+        label: 'Set up for the shift and ride it home',
+        description: 'Get the boat on the new tack before the front arrives and let it push you at the line.',
+        timeDelta: -0.4,
+        staminaDelta: -3,
+        moraleDelta: 3,
+        hullDelta: -1,
+        risk: 0.2,
+        field: true,
+        crewSkill: 'Trimmer',
+      },
+      {
+        id: 'evt-fo2-beercan-ahead-shorten',
+        label: 'Shorten down and protect the lead',
+        description: 'A reef and a smaller headsail. Nobody behind you is catching up in this.',
+        timeDelta: 0.1,
+        staminaDelta: -2,
+        moraleDelta: 1,
+        hullDelta: 0,
+        risk: 0.06,
+      },
+    ],
+  },
+  {
+    id: 'evt-fo2-beercan-out',
+    title: 'A Long Way From the Beach',
+    prompt:
+      'You went out for the pressure and found it — along with a two-mile gap to the shoreline and a rival who did not follow. The breeze is honest out here. The question is whether it lasts the run home.',
+    kind: 'tactical',
+    followsFrom: 'beercan-went-out',
+    choices: [
+      {
+        id: 'evt-fo2-beercan-out-hold',
+        label: 'Hold the offshore lane all the way in',
+        description: 'You are committed. Sail your own race and take the gain or the loss whole.',
+        timeDelta: -0.35,
+        staminaDelta: -3,
+        moraleDelta: 3,
+        hullDelta: 0,
+        risk: 0.22,
+        field: true,
+        crewSkill: 'Navigator',
+      },
+      {
+        id: 'evt-fo2-beercan-out-converge',
+        label: 'Start converging early',
+        description: 'Give some of the leverage back and get across before the shore band shuts the door.',
+        timeDelta: 0,
+        staminaDelta: -2,
+        moraleDelta: 1,
+        hullDelta: 0,
+        risk: 0.09,
+      },
+    ],
+  },
+  {
     id: 'evt-fo-shakeout',
     title: 'Shake Out the Reef?',
     prompt:
@@ -4378,6 +4597,11 @@ export const HAZARD_EVENTS: Record<HazardKey, GameEvent> = {
         hullDelta: -1,
         risk: 0.2,
         crewSkill: 'Tactician',
+        // Opens the shared lake act-two. Safe to add: every lake race that
+        // shipped before this carries its OWN HAZARD_RACE_EVENTS override, so
+        // this bare event is reached only by courses added alongside the key
+        // (the beer-can mid-week Wednesdays) — no existing draw can see it.
+        sets: 'lake-threaded',
       },
       {
         id: 'evt-hz-lakesquall-reef',
@@ -4496,6 +4720,101 @@ export const HAZARD_EVENTS: Record<HazardKey, GameEvent> = {
 // byte-identical to before.
 // ---------------------------------------------------------------------------
 export const HAZARD_RACE_EVENTS: Record<string, GameEvent> = {
+  // Chicago Beer Can — opening night. `lake_squall` is shared with the Macs, so
+  // this override pins the signature to THIS course's own mark.
+  'race-beercan-wk1': {
+    id: 'evt-hz-beercan-opener',
+    title: 'Green Over the Loop',
+    prompt:
+      'Halfway to the crib the skyline goes the colour of a bruise. Nobody on this boat has sailed together since September and the new hand is still learning where the halyards live. The squall line is maybe fifteen minutes away.',
+    kind: 'hazard',
+    hazard: 'lake_squall',
+    pinToWaypoint: 'Four Mile Crib',
+    storyBeat: 'race-beercan-wk1',
+    choices: [
+      {
+        id: 'evt-hz-beercan-carry',
+        label: 'Carry the kite and beat it to the crib',
+        description: 'Fifteen minutes is fifteen minutes. Round ahead of the front and reach home in the new breeze.',
+        timeDelta: -0.5,
+        staminaDelta: -5,
+        moraleDelta: 5,
+        hullDelta: -4,
+        risk: 0.36,
+        field: true,
+        crewSkill: 'Bowman',
+        sets: 'beercan-ahead-of-it',
+      },
+      {
+        id: 'evt-hz-beercan-douse',
+        label: 'Douse early and sail it clean',
+        description: 'Get the kite down while there is still time to do it tidily, and take the front on a white sail.',
+        timeDelta: 0.1,
+        staminaDelta: -2,
+        moraleDelta: 2,
+        hullDelta: 0,
+        risk: 0.12,
+        crewSkill: 'Bowman',
+      },
+      {
+        id: 'evt-hz-beercan-bail',
+        label: 'Head for the harbour mouth',
+        description: 'It is a Wednesday in June. Nobody on the Aft Deck asks what your finishing position was.',
+        timeDelta: 0.6,
+        staminaDelta: 0,
+        moraleDelta: -2,
+        hullDelta: 0,
+        risk: 0.04,
+      },
+    ],
+  },
+  // Chicago Beer Can — the last Wednesday. The series decider.
+  'race-beercan-wk6': {
+    id: 'evt-hz-beercan-finale',
+    title: 'The Last Crib of the Summer',
+    prompt:
+      'The whole series comes down to the boat two lengths to leeward. The shore band is dying with the sun; the offshore pressure is still there but it is a long way out of your way. Somebody on the rail says the fireworks start at nine.',
+    kind: 'hazard',
+    hazard: 'lake_squall',
+    pinToWaypoint: 'Four Mile Crib',
+    storyBeat: 'race-beercan-wk6',
+    choices: [
+      {
+        id: 'evt-hz-beercan-offshore',
+        label: 'Go offshore for the pressure',
+        description: 'Give up the inside and bet the summer on the breeze still being out there.',
+        timeDelta: -0.6,
+        staminaDelta: -4,
+        moraleDelta: 4,
+        hullDelta: 0,
+        risk: 0.33,
+        field: true,
+        crewSkill: 'Navigator',
+        sets: 'beercan-went-out',
+      },
+      {
+        id: 'evt-hz-beercan-cover',
+        label: 'Cover the boat to leeward',
+        description: 'Forget the racecourse. Sail the rival, and let the series look after itself.',
+        timeDelta: 0.1,
+        staminaDelta: -2,
+        moraleDelta: 2,
+        hullDelta: 0,
+        risk: 0.14,
+        crewSkill: 'Tactician',
+      },
+      {
+        id: 'evt-hz-beercan-shore',
+        label: 'Hug the shore band',
+        description: 'Stay in the dying shore breeze and hope it holds the last mile.',
+        timeDelta: 0.4,
+        staminaDelta: -1,
+        moraleDelta: 0,
+        hullDelta: 0,
+        risk: 0.08,
+      },
+    ],
+  },
   // Cowes–Dinard–St Malo: the tidal gate is the Alderney Race, not the Needles.
   'race-cowes-dinard': {
     id: 'evt-hz-alderney',
